@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'data/onboarding.dart';
+import 'game/game_controller.dart';
 import 'theme/app_theme.dart';
 import 'ui/collection_screen.dart';
 import 'ui/discover_settings.dart';
 import 'ui/instapacks_screen.dart';
 import 'ui/market_screen.dart';
 import 'ui/onboarding_flow.dart';
+import 'widgets/pack_theater.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -83,47 +85,114 @@ class _RootState extends State<_Root> {
   }
 }
 
-class HomeShell extends StatefulWidget {
+class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
 
   @override
-  State<HomeShell> createState() => _HomeShellState();
+  ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends ConsumerState<HomeShell> {
   int _index = 3; // land on Instapacks like RC after collect choose
+  bool _lastRipPrompted = false;
+  final _kept = <int, Widget>{};
 
-  static const _pages = [
-    DiscoverScreen(),
-    CollectionScreen(),
-    MarketScreen(),
-    InstapacksScreen(),
-    SettingsScreen(),
-  ];
+  static Widget _create(int i) => switch (i) {
+        0 => const DiscoverScreen(),
+        1 => const CollectionScreen(),
+        2 => const MarketScreen(),
+        3 => const InstapacksScreen(),
+        4 => const SettingsScreen(),
+        _ => throw ArgumentError.value(i, 'i', 'Unknown tab index'),
+      };
+
+  Widget _pageFor(int i) {
+    if (i == 1 || i == 3) {
+      return _kept.putIfAbsent(i, () => _create(i));
+    }
+    return _create(i);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptLastRip());
+  }
+
+  void _maybePromptLastRip() {
+    if (!mounted || _lastRipPrompted) return;
+    final state = ref.read(gameProvider);
+    if (!state.ready) return;
+    _showLastRipDialogIfNeeded(state);
+  }
+
+  void _showLastRipDialogIfNeeded(GameState state) {
+    if (_lastRipPrompted) return;
+    _lastRipPrompted = true;
+    if (state.lastRip?.isNotEmpty != true) return;
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Unfinished rip'),
+        content: const Text('You still have cards from an open pack.'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref.read(gameProvider.notifier).finalizeRip(keepRemaining: true);
+            },
+            child: const Text('Keep all'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              showPackTheater(context, ref, alreadyOpened: true);
+            },
+            child: const Text('Resume'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final ready = ref.watch(gameProvider.select((s) => s.ready));
+    if (ready && !_lastRipPrompted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptLastRip());
+    }
+
+    // Active + any keep-alive tabs (1 Collection, 3 Instapacks).
+    final toShow = <int>{_index, ..._kept.keys};
+    if (_index == 1 || _index == 3) {
+      _pageFor(_index);
+    }
+    final ordered = toShow.toList()..sort();
+
+    final stackChildren = <Widget>[
+      for (final i in ordered)
+        IgnorePointer(
+          ignoring: _index != i,
+          child: AnimatedOpacity(
+            opacity: _index == i ? 1 : 0,
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
+            child: TickerMode(
+              enabled: _index == i,
+              child: _pageFor(i),
+            ),
+          ),
+        ),
+    ];
+
     return Scaffold(
       backgroundColor: CC.bg,
       body: SafeArea(
         bottom: false,
         child: Stack(
           fit: StackFit.expand,
-          children: [
-            for (var i = 0; i < _pages.length; i++)
-              IgnorePointer(
-                ignoring: _index != i,
-                child: AnimatedOpacity(
-                  opacity: _index == i ? 1 : 0,
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeOutCubic,
-                  child: TickerMode(
-                    enabled: _index == i,
-                    child: _pages[i],
-                  ),
-                ),
-              ),
-          ],
+          children: stackChildren,
         ),
       ),
       bottomNavigationBar: Container(

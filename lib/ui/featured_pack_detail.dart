@@ -10,6 +10,7 @@ import '../models/models.dart';
 import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import '../widgets/brand.dart';
+import '../widgets/fake_google_pay_sheet.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/pack_theater.dart';
 
@@ -38,6 +39,7 @@ class FeaturedPackDetailPage extends ConsumerStatefulWidget {
 class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
     with SingleTickerProviderStateMixin {
   late final AnimationController _spin;
+  bool _busy = false;
 
   FeaturedPackDef get pack => widget.pack;
 
@@ -48,6 +50,18 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
       vsync: this,
       duration: const Duration(seconds: 18),
     )..repeat();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    final active = route?.isCurrent ?? true;
+    if (active) {
+      if (!_spin.isAnimating) _spin.repeat();
+    } else {
+      _spin.stop();
+    }
   }
 
   @override
@@ -131,6 +145,9 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                         pack: pack,
                         hits: hits,
                         spin: _spin,
+                        franchiseId: ref.watch(
+                          gameProvider.select((s) => s.franchiseId),
+                        ),
                       ),
                       const SizedBox(height: 18),
                       Text(
@@ -283,7 +300,9 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton(
-                        onPressed: state.player.cash < pack.priceUsd
+                        onPressed: _busy ||
+                                notifier.isShopBusy ||
+                                state.player.cash < pack.priceUsd
                             ? null
                             : () => _buy(PaymentMethod.cash),
                         child: Text(
@@ -295,7 +314,9 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton(
-                        onPressed: state.player.candy < candy
+                        onPressed: _busy ||
+                                notifier.isShopBusy ||
+                                state.player.candy < candy
                             ? null
                             : () => _buy(PaymentMethod.candy),
                         style: OutlinedButton.styleFrom(
@@ -333,25 +354,35 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
   }
 
   Future<void> _buy(PaymentMethod method) async {
-    final notifier = ref.read(gameProvider.notifier);
-    final navContext = Navigator.of(context, rootNavigator: true).context;
-    final ok = await notifier.buyFeaturedPack(pack.id, payWith: method);
-    if (!mounted) return;
-    if (!ok) {
-      final msg = ref.read(gameProvider).message ?? 'Purchase failed.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-      return;
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final notifier = ref.read(gameProvider.notifier);
+      final navContext = Navigator.of(context, rootNavigator: true).context;
+      if (method == PaymentMethod.cash) {
+        final paid = await showFakeGooglePay(context, amount: pack.priceUsd);
+        if (!paid || !mounted) return;
+      }
+      final ok = await notifier.buyFeaturedPack(pack.id, payWith: method);
+      if (!mounted) return;
+      if (!ok) {
+        final msg = ref.read(gameProvider).message ?? 'Purchase failed.';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        return;
+      }
+      Navigator.pop(context);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!navContext.mounted) return;
+        showPackTheater(
+          navContext,
+          ref,
+          alreadyOpened: true,
+          packImageUrl: pack.assetPath,
+        );
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
-    Navigator.pop(context);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!navContext.mounted) return;
-      showPackTheater(
-        navContext,
-        ref,
-        alreadyOpened: true,
-        packImageUrl: pack.assetPath,
-      );
-    });
   }
 
   void _showAllCards(BuildContext context, GameNotifier notifier) {
@@ -469,11 +500,13 @@ class _HeroStage extends StatelessWidget {
     required this.pack,
     required this.hits,
     required this.spin,
+    required this.franchiseId,
   });
 
   final FeaturedPackDef pack;
   final List<CardDef> hits;
   final AnimationController spin;
+  final String franchiseId;
 
   @override
   Widget build(BuildContext context) {
@@ -540,6 +573,7 @@ class _HeroStage extends StatelessWidget {
               colors: pack.tier.bloomColors,
               width: 140,
               height: 200,
+              franchiseId: franchiseId,
             ),
           ),
         ],

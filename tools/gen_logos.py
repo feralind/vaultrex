@@ -42,33 +42,48 @@ def _save(im: Image.Image, name: str) -> None:
 
 
 def riftbound() -> None:
-    w = h = 256
+    """Clean wordmark + portal mark — same 512×180 footprint as sibling logos."""
+    w, h = 512, 180
     im = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
-    cx = cy = 128
-    outer = [
-        (cx + 0, cy - 100),
-        (cx + 87, cy - 50),
-        (cx + 87, cy + 50),
-        (cx + 0, cy + 100),
-        (cx - 87, cy + 50),
-        (cx - 87, cy - 50),
-    ]
-    d.polygon(outer, fill=(26, 42, 74, 90))
-    for i in range(len(outer)):
-        d.line([outer[i], outer[(i + 1) % len(outer)]], fill=(126, 182, 255, 255), width=5)
-    inner = [
-        (cx + 0, cy - 62),
-        (cx + 54, cy - 31),
-        (cx + 54, cy + 31),
-        (cx + 0, cy + 62),
-        (cx - 54, cy + 31),
-        (cx - 54, cy - 31),
-    ]
-    d.polygon(inner, fill=(91, 140, 255, 255))
-    bolt = [(128, 70), (108, 128), (124, 128), (112, 186), (152, 112), (132, 112), (148, 70)]
-    d.polygon(bolt, fill=(232, 240, 255, 255))
-    d.line([(128, 55), (128, 200)], fill=(167, 139, 250, 220), width=3)
+
+    # Portal mark (left): soft concentric rings + thin vertical rift slit.
+    cx, cy = 78, 90
+    for rx, ry, fill in (
+        (54, 68, (40, 70, 160, 70)),
+        (40, 50, (70, 130, 255, 110)),
+        (26, 32, (120, 200, 255, 160)),
+        (12, 14, (220, 240, 255, 230)),
+    ):
+        d.ellipse((cx - rx, cy - ry, cx + rx, cy + ry), fill=fill)
+    # Clean vertical portal slit (not a bolt)
+    d.rounded_rectangle(
+        (cx - 3, cy - 36, cx + 3, cy + 36),
+        radius=3,
+        fill=(236, 244, 255, 255),
+    )
+    d.line([(cx, cy - 34), (cx, cy + 34)], fill=(167, 139, 250, 200), width=2)
+
+    # Wordmark — same weight class as MAGIC / GUNDAM tiles
+    f = None
+    for path in (
+        r"C:\Windows\Fonts\arialbd.ttf",
+        r"C:\Windows\Fonts\segoeuib.ttf",
+        r"C:\Windows\Fonts\arial.ttf",
+    ):
+        if os.path.exists(path):
+            f = ImageFont.truetype(path, 52)
+            break
+    if f is None:
+        f = _font(52)
+
+    text = "RIFTBOUND"
+    tx, ty = 300, 92
+    for dx in range(-2, 3):
+        for dy in range(-2, 3):
+            if dx or dy:
+                d.text((tx + dx, ty + dy), text, font=f, fill=(56, 120, 255, 90), anchor="mm")
+    d.text((tx, ty), text, font=f, fill=(210, 230, 255, 255), anchor="mm")
     _save(im, "riftbound.png")
 
 
@@ -153,13 +168,20 @@ def gundam() -> None:
 
 
 def main() -> None:
+    import sys
+
     os.makedirs(OUT, exist_ok=True)
-    riftbound()
-    pokemon()
-    mtg()
-    onepiece()
-    lorcana()
-    gundam()
+    targets = {
+        "riftbound": riftbound,
+        "pokemon": pokemon,
+        "mtg": mtg,
+        "onepiece": onepiece,
+        "lorcana": lorcana,
+        "gundam": gundam,
+    }
+    names = sys.argv[1:] or list(targets)
+    for name in names:
+        targets[name]()
     print("done")
 
 

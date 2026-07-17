@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/enums.dart';
 import '../models/models.dart';
+import 'pokemon_featured_packs.dart';
 
 /// Featured Pack tiers (separate from Riftbound sealed).
 enum FeaturedPackTier {
@@ -374,8 +375,15 @@ List<FeaturedPackDef> get kFeaturedPacks => [
       ),
     ];
 
+/// Featured packs for the active franchise (`riftbound` | `pokemon`).
+List<FeaturedPackDef> featuredPacksFor(String gameId) =>
+    gameId == 'pokemon' ? kPokemonFeaturedPacks : kFeaturedPacks;
+
 FeaturedPackDef? featuredPackById(String id) {
   for (final p in kFeaturedPacks) {
+    if (p.id == id) return p;
+  }
+  for (final p in kPokemonFeaturedPacks) {
     if (p.id == id) return p;
   }
   return null;

@@ -9,6 +9,7 @@ import '../models/models.dart';
 import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import '../widgets/brand.dart';
+import '../widgets/cash_top_up_sheet.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/live_ambient.dart';
 import '../ui/featured_pack_detail.dart';
@@ -22,8 +23,25 @@ class InstapacksScreen extends ConsumerStatefulWidget {
   ConsumerState<InstapacksScreen> createState() => _InstapacksScreenState();
 }
 
-class _InstapacksScreenState extends ConsumerState<InstapacksScreen> {
-  String _game = 'riftbound';
+class _InstapacksScreenState extends ConsumerState<InstapacksScreen>
+    with SingleTickerProviderStateMixin {
+  String? _pendingGame;
+  late final AnimationController _sharedFloat;
+
+  @override
+  void initState() {
+    super.initState();
+    _sharedFloat = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2800),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _sharedFloat.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,12 +51,18 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen> {
       return const Center(child: CircularProgressIndicator(color: CC.accent));
     }
 
+    final active = _pendingGame ?? notifier.activeGameId;
     final listings = state.sealedListings.where((l) {
       final p = notifier.sealedById(l.sealedProductId);
       return p != null;
     }).toList();
 
     final candy = state.player.candy;
+    final cash = state.player.cash;
+    final isPokemon = active == 'pokemon';
+    final isRiftbound = active == 'riftbound';
+    final featuredPacks =
+        (isRiftbound || isPokemon) ? featuredPacksFor(active) : const <FeaturedPackDef>[];
 
     return LiveAmbientBackdrop(
       child: CustomScrollView(
@@ -46,6 +70,8 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen> {
         SliverToBoxAdapter(
           child: _InstapacksHero(
             candy: candy,
+            cash: cash,
+            onTopUp: () => showCashTopUp(context, ref),
           ),
         ),
         SliverToBoxAdapter(
@@ -65,12 +91,20 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen> {
                   itemBuilder: (context, i) {
                     final g = kGames[i];
                     return _GameIcon(
-                      selected: _game == g.id,
+                      selected: active == g.id,
                       logoAsset: g.logoAsset,
                       color: g.color,
                       locked: !g.enabled,
                       onTap: g.enabled
-                          ? () => setState(() => _game = g.id)
+                          ? () async {
+                              if (g.id == notifier.activeGameId) {
+                                setState(() => _pendingGame = g.id);
+                                return;
+                              }
+                              setState(() => _pendingGame = g.id);
+                              await notifier.switchFranchise(g.id);
+                              if (mounted) setState(() => _pendingGame = null);
+                            }
                           : null,
                     );
                   },
@@ -80,7 +114,7 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen> {
             ],
           ),
         ),
-        if (_game != 'riftbound')
+        if (!isRiftbound && !isPokemon)
           const SliverFillRemaining(
             hasScrollBody: false,
             child: Center(
@@ -88,46 +122,50 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen> {
             ),
           )
         else ...[
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-              child: Text(
-                'Featured Packs',
-                style: AppText.jakarta(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.3,
+          if (featuredPacks.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Text(
+                  'Featured Packs',
+                  style: AppText.jakarta(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
+                  ),
                 ),
               ),
             ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 14,
-                crossAxisSpacing: 12,
-                childAspectRatio: 0.68,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (context, i) {
-                  final pack = kFeaturedPacks[i];
-                  return _FeaturedTile(
-                    pack: pack,
-                    chaseArtUrls: _featuredChaseUrls(notifier, pack),
-                    onTap: () => showFeaturedPackDetail(context, ref, pack),
-                  );
-                },
-                childCount: kFeaturedPacks.length,
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 14,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 0.68,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, i) {
+                    final pack = featuredPacks[i];
+                    return _FeaturedTile(
+                      pack: pack,
+                      chaseArtUrls: _featuredChaseUrls(notifier, pack),
+                      float: _sharedFloat,
+                      franchiseId: active,
+                      onTap: () => showFeaturedPackDetail(context, ref, pack),
+                    );
+                  },
+                  childCount: featuredPacks.length,
+                ),
               ),
             ),
-          ),
+          ],
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: Text(
-                'Riftbound Sealed',
+                isPokemon ? 'Pokémon Sealed' : 'Riftbound Sealed',
                 style: AppText.jakarta(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
@@ -159,6 +197,8 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen> {
                       product.setCode,
                       count: 6,
                     ),
+                    float: _sharedFloat,
+                    franchiseId: active,
                     onBuy: soldOut
                         ? null
                         : () => showPackDetail(
@@ -182,9 +222,15 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen> {
 
 /// Vaultrex Instapacks header: title, blurb, half-fade pack fan.
 class _InstapacksHero extends StatefulWidget {
-  const _InstapacksHero({required this.candy});
+  const _InstapacksHero({
+    required this.candy,
+    required this.cash,
+    required this.onTopUp,
+  });
 
   final int candy;
+  final double cash;
+  final VoidCallback onTopUp;
 
   @override
   State<_InstapacksHero> createState() => _InstapacksHeroState();
@@ -257,7 +303,14 @@ class _InstapacksHeroState extends State<_InstapacksHero>
                   ],
                 ),
               ),
-              CandyBalance(widget.candy),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  CandyBalance(widget.candy),
+                  const SizedBox(height: 6),
+                  CashBalance(widget.cash, onTap: widget.onTopUp),
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -445,11 +498,15 @@ class _FeaturedTile extends StatefulWidget {
   const _FeaturedTile({
     required this.pack,
     required this.chaseArtUrls,
+    required this.float,
+    required this.franchiseId,
     this.onTap,
   });
 
   final FeaturedPackDef pack;
   final List<String> chaseArtUrls;
+  final Animation<double> float;
+  final String franchiseId;
   final VoidCallback? onTap;
 
   @override
@@ -457,8 +514,7 @@ class _FeaturedTile extends StatefulWidget {
 }
 
 class _FeaturedTileState extends State<_FeaturedTile>
-    with TickerProviderStateMixin {
-  late final AnimationController _float;
+    with SingleTickerProviderStateMixin {
   late final AnimationController _rotateHits;
   int _hitIndex = 0;
 
@@ -468,10 +524,6 @@ class _FeaturedTileState extends State<_FeaturedTile>
   @override
   void initState() {
     super.initState();
-    _float = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2800),
-    )..repeat(reverse: true);
     _rotateHits = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 4),
@@ -501,7 +553,6 @@ class _FeaturedTileState extends State<_FeaturedTile>
 
   @override
   void dispose() {
-    _float.dispose();
     _rotateHits.dispose();
     super.dispose();
   }
@@ -554,6 +605,7 @@ class _FeaturedTileState extends State<_FeaturedTile>
                               colors: pack.tier.bloomColors,
                               width: 110,
                               height: 160,
+                              franchiseId: widget.franchiseId,
                             ),
                           ),
                         ),
@@ -562,10 +614,10 @@ class _FeaturedTileState extends State<_FeaturedTile>
                         Align(
                           alignment: const Alignment(0.92, 0.35),
                           child: AnimatedBuilder(
-                            animation: _float,
+                            animation: widget.float,
                             builder: (context, child) {
-                              final dy =
-                                  Curves.easeInOut.transform(_float.value);
+                              final dy = Curves.easeInOut
+                                  .transform(widget.float.value);
                               return Transform.translate(
                                 offset: Offset(0, -6 * dy),
                                 child: child,
@@ -718,6 +770,8 @@ class _InstaTile extends StatefulWidget {
     required this.listing,
     required this.soldOut,
     required this.chaseArtUrls,
+    required this.float,
+    required this.franchiseId,
     this.onBuy,
   });
 
@@ -725,14 +779,16 @@ class _InstaTile extends StatefulWidget {
   final SealedListing listing;
   final bool soldOut;
   final List<String> chaseArtUrls;
+  final Animation<double> float;
+  final String franchiseId;
   final VoidCallback? onBuy;
 
   @override
   State<_InstaTile> createState() => _InstaTileState();
 }
 
-class _InstaTileState extends State<_InstaTile> with TickerProviderStateMixin {
-  late final AnimationController _float;
+class _InstaTileState extends State<_InstaTile>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _rotateHits;
   int _hitIndex = 0;
 
@@ -756,10 +812,6 @@ class _InstaTileState extends State<_InstaTile> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _float = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2800),
-    )..repeat(reverse: true);
     _rotateHits = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 4),
@@ -776,7 +828,6 @@ class _InstaTileState extends State<_InstaTile> with TickerProviderStateMixin {
 
   @override
   void dispose() {
-    _float.dispose();
     _rotateHits.dispose();
     super.dispose();
   }
@@ -842,6 +893,7 @@ class _InstaTileState extends State<_InstaTile> with TickerProviderStateMixin {
                                   colors: _packColors,
                                   width: w,
                                   height: h,
+                                  franchiseId: widget.franchiseId,
                                 ),
                               );
                             },
@@ -852,10 +904,10 @@ class _InstaTileState extends State<_InstaTile> with TickerProviderStateMixin {
                         Align(
                           alignment: const Alignment(0.92, 0.35),
                           child: AnimatedBuilder(
-                            animation: _float,
+                            animation: widget.float,
                             builder: (context, child) {
-                              final dy =
-                                  Curves.easeInOut.transform(_float.value);
+                              final dy = Curves.easeInOut
+                                  .transform(widget.float.value);
                               return Transform.translate(
                                 offset: Offset(0, -6 * dy),
                                 child: child,

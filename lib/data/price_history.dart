@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/models.dart';
 
@@ -12,11 +13,12 @@ class PricePoint {
   final double price;
 }
 
-/// Spot + optional daily history from [assets/data/price_history.json].
+/// Spot + optional daily history from asset + local prefs appends.
 ///
-/// Spot values come from TCGCSV / TCGPlayer (category 89). Free historical
-/// series are not published by TCGPlayer, so missing history is synthesized
-/// as mean-reverting daily closes around the researched spot (±realistic vol).
+/// Spot values come from TCGCSV / TCGPlayer. Free historical series are not
+/// published by TCGplayer, so missing history is synthesized as mean-reverting
+/// daily closes around the researched spot (±realistic vol). Successful online
+/// refreshes append today's close into SharedPreferences.
 class PriceHistoryStore {
   PriceHistoryStore._(this._byId, this.attribution);
 
@@ -24,12 +26,13 @@ class PriceHistoryStore {
   final String attribution;
 
   static PriceHistoryStore? _instance;
+  static const _localKey = 'vaultrex_price_history_local_v1';
 
   static Future<PriceHistoryStore> load() async {
     if (_instance != null) return _instance!;
     final byId = <String, List<PricePoint>>{};
     var attribution =
-        'TCGCSV category 89 (TCGPlayer market). History anchored to spot.';
+        'TCGCSV / TCGplayer spot · Vaultrex local history.';
     try {
       final raw = jsonDecode(
         await rootBundle.loadString('assets/data/price_history.json'),
@@ -52,11 +55,88 @@ class PriceHistoryStore {
     } catch (_) {
       // Asset optional until generated; fall back to synthetic series.
     }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_localKey);
+      if (raw != null && raw.isNotEmpty) {
+        final map = jsonDecode(raw) as Map<String, dynamic>;
+        for (final e in map.entries) {
+          final hist = <PricePoint>[];
+          for (final h in (e.value as List? ?? const [])) {
+            final row = h as Map<String, dynamic>;
+            final d = DateTime.tryParse(row['d'] as String? ?? '');
+            final p = (row['p'] as num?)?.toDouble();
+            if (d == null || p == null) continue;
+            hist.add(PricePoint(date: d, price: p));
+          }
+          if (hist.isEmpty) continue;
+          final existing = byId[e.key] ?? <PricePoint>[];
+          byId[e.key] = _mergeHistory(existing, hist);
+        }
+      }
+    } catch (_) {}
+
     _instance = PriceHistoryStore._(byId, attribution);
     return _instance!;
   }
 
-  /// Prefer asset history; otherwise build a dated series ending at [spot].
+  static void clearInstance() => _instance = null;
+
+  static List<PricePoint> _mergeHistory(
+    List<PricePoint> a,
+    List<PricePoint> b,
+  ) {
+    final byDay = <String, PricePoint>{};
+    for (final p in [...a, ...b]) {
+      final key =
+          '${p.date.year}-${p.date.month.toString().padLeft(2, '0')}-${p.date.day.toString().padLeft(2, '0')}';
+      byDay[key] = p;
+    }
+    final out = byDay.values.toList()
+      ..sort((x, y) => x.date.compareTo(y.date));
+    while (out.length > 180) {
+      out.removeAt(0);
+    }
+    return out;
+  }
+
+  /// Append today's spot closes for [cardId → price]. Reloads singleton.
+  static Future<void> appendSpots(Map<String, double> cardSpots) async {
+    if (cardSpots.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final existing = <String, List<Map<String, dynamic>>>{};
+    try {
+      final raw = prefs.getString(_localKey);
+      if (raw != null && raw.isNotEmpty) {
+        final map = jsonDecode(raw) as Map<String, dynamic>;
+        for (final e in map.entries) {
+          existing[e.key] = [
+            for (final h in (e.value as List? ?? const []))
+              Map<String, dynamic>.from(h as Map),
+          ];
+        }
+      }
+    } catch (_) {}
+
+    final today = DateTime.now().toUtc();
+    final dayKey =
+        '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+    for (final e in cardSpots.entries) {
+      if (e.value <= 0) continue;
+      final list = existing.putIfAbsent(e.key, () => []);
+      list.removeWhere((h) => (h['d'] as String? ?? '').startsWith(dayKey));
+      list.add({'d': today.toIso8601String(), 'p': e.value});
+      while (list.length > 180) {
+        list.removeAt(0);
+      }
+    }
+    await prefs.setString(_localKey, jsonEncode(existing));
+    clearInstance();
+    await load();
+  }
+
+  /// Prefer local+asset history; otherwise build a dated series ending at [spot].
   List<PricePoint> seriesFor(CardDef def, {double? spot, int days = 90}) {
     final cached = _byId[def.id];
     if (cached != null && cached.length >= 2) {
@@ -75,10 +155,10 @@ class PriceHistoryStore {
     DateTime? asOf,
   }) {
     if (current <= 0) {
-      final end = asOf ?? DateTime.utc(2026, 7, 16);
+      final end = asOf ?? DateTime.now().toUtc();
       return [PricePoint(date: end, price: 0.01)];
     }
-    final end = asOf ?? DateTime.utc(2026, 7, 16);
+    final end = asOf ?? DateTime.now().toUtc();
     final rng = Random(cardId.hashCode ^ (current * 100).round());
     final vol = current >= 500
         ? 0.028

@@ -7,6 +7,8 @@ import '../models/models.dart';
 import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import '../widgets/card_detail_sheet.dart';
+import '../widgets/cash_top_up_sheet.dart';
+import '../widgets/fake_google_pay_sheet.dart';
 import '../widgets/game_widgets.dart';
 
 enum _MarketFilter { all, raw, psa, foil }
@@ -24,10 +26,10 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
   String? _set;
   _MarketFilter _filter = _MarketFilter.all;
 
-  static const _setCodes = ['OGS', 'OGN', 'SFD', 'UNL'];
-
   List<MarketListing> _filtered(List<MarketListing> market, GameNotifier n) {
+    // Defensive: never render SKUs missing from the active franchise catalog.
     return market.where((m) {
+      if (!n.catalog.byId.containsKey(m.cardId)) return false;
       final def = n.cardById(m.cardId);
       if (def == null) return false;
       if (_set != null && def.setCode != _set) return false;
@@ -56,6 +58,9 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
     final listings = _filtered(state.market, notifier);
     final featured = [...listings]..sort((a, b) => b.price.compareTo(a.price));
     final carousel = featured.take(12).toList();
+    final setCodes = notifier.catalog.bySet.keys.toList()..sort();
+    final franchiseLabel =
+        notifier.activeGameId == 'pokemon' ? 'Pokémon' : 'Riftbound';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -77,7 +82,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                       ),
                     ),
                     Text(
-                      'Singles · raw & PSA slabs',
+                      '$franchiseLabel singles · rotating TCGCSV listings',
                       style: AppText.jakarta(
                         color: CC.inkMuted,
                         fontSize: 13,
@@ -86,20 +91,38 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                   ],
                 ),
               ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: CC.card,
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => showCashTopUp(context, ref),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: CC.line),
-                ),
-                child: Text(
-                  '\$${state.player.cash.toStringAsFixed(2)}',
-                  style: AppText.jakarta(
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF34D399),
-                    fontSize: 15,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: CC.card,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: CC.line),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '\$${state.player.cash.toStringAsFixed(2)}',
+                          style: AppText.jakarta(
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF34D399),
+                            fontSize: 15,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Icon(
+                          Icons.add_circle_outline,
+                          size: 16,
+                          color: CC.inkMuted.withValues(alpha: 0.9),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -156,7 +179,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                   ),
                 );
               }),
-              ..._setCodes.map((s) {
+              ...setCodes.map((s) {
                 final on = _set == s;
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -264,6 +287,8 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
       );
       return;
     }
+    final paid = await showFakeGooglePay(context, amount: listing.price);
+    if (!paid || !context.mounted) return;
     await ref.read(gameProvider.notifier).buyMarketListing(listing.id);
     if (!context.mounted) return;
     final msg = ref.read(gameProvider).message;
@@ -361,12 +386,12 @@ class _CarouselCard extends StatelessWidget {
                             compact: false,
                           ),
                         )
-                      : CardArt(
+                      : PortraitSlotArt(
                           url: def.displayArtUrl,
                           foil: listing.foil,
-                          autoPlay: false,
                           width: 112,
                           height: 156,
+                          landscape: def.isLandscapeCard,
                           radius: 10,
                         ),
                 ),
@@ -478,12 +503,12 @@ class _BuyNowRow extends StatelessWidget {
                             compact: true,
                           ),
                         )
-                      : CardArt(
+                      : PortraitSlotArt(
                           url: def.displayArtUrl,
                           foil: listing.foil,
-                          autoPlay: false,
                           width: 64,
                           height: 88,
+                          landscape: def.isLandscapeCard,
                           radius: 8,
                         ),
                 ),

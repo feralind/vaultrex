@@ -1,11 +1,11 @@
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/onboarding.dart';
 import '../game/game_controller.dart';
 import '../models/enums.dart';
 import '../models/models.dart';
@@ -46,7 +46,6 @@ Future<void> showPackTheater(
     return;
   }
 
-  // Preload the entire card stack art before the reveal phase (best-effort).
   for (final o in pulls) {
     final def = notifier.cardById(o.cardId);
     final url = def?.imageUrl ?? '';
@@ -88,7 +87,9 @@ Future<void> showPackTheater(
   );
 }
 
-enum _RipPhase { sealed, bursting, reveal }
+/// Frame map (reference Shorts samples):
+/// sealed idle → center V peel → flaps clear → card back hold → Y-flip → settle.
+enum _RipPhase { sealed, peeling, reveal }
 
 class PackRipTheater extends ConsumerStatefulWidget {
   const PackRipTheater({
@@ -116,37 +117,50 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
   bool _deciding = false;
   bool _glow = false;
   double _swipeDx = 0;
+  int _keptCount = 0;
+  int _presentGen = 0;
+  bool _sessionBusy = false;
+  bool _fastRip = false;
+  Future<void>? _inFlightDecide;
 
-  late final AnimationController _burst;
-  late final AnimationController _impact;
+  late final AnimationController _peelOut;
   late final AnimationController _flip;
   late final AnimationController _glowPulse;
+
+  bool get _closeEnabled =>
+      (_phase == _RipPhase.sealed || _phase == _RipPhase.reveal) &&
+      !_sessionBusy &&
+      _inFlightDecide == null;
 
   @override
   void initState() {
     super.initState();
-    _burst = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1000),
-    );
-    _impact = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 150),
-    );
-    _flip = AnimationController(
+    // ~frames 32–46 peel clear, 46–55 back hold, 55–70 flip (trimmed ~15%).
+    _peelOut = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 520),
     );
+    _flip = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 340),
+    );
     _glowPulse = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
+      duration: const Duration(milliseconds: 780),
     );
+    OnboardingStore.isFastRip().then((v) {
+      if (!mounted) return;
+      setState(() {
+        _fastRip = v;
+        _flip.duration = Duration(milliseconds: v ? 180 : 340);
+      });
+    });
   }
 
   @override
   void dispose() {
-    _burst.dispose();
-    _impact.dispose();
+    _presentGen++;
+    _peelOut.dispose();
     _flip.dispose();
     _glowPulse.dispose();
     super.dispose();
@@ -162,28 +176,34 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
     return false;
   }
 
+  Future<void> _toggleFastRip() async {
+    final next = !_fastRip;
+    setState(() {
+      _fastRip = next;
+      _flip.duration = Duration(milliseconds: next ? 180 : 340);
+    });
+    await OnboardingStore.setFastRip(next);
+  }
+
   void _onTearUpdate(DragUpdateDetails d) {
-    if (_phase != _RipPhase.sealed) return;
-    // Swipe across the top seal (horizontal). Small vertical drag still helps.
-    final across = d.delta.dx.abs() + math.max(0.0, -d.delta.dy) * 0.15;
-    _dragAccum = (_dragAccum + across).clamp(0.0, 200.0);
-    setState(() => _tear = (_dragAccum / 130).clamp(0.0, 1.0));
+    if (_phase != _RipPhase.sealed || _sessionBusy) return;
+    final down = math.max(0.0, d.delta.dy) + d.delta.dx.abs() * 0.1;
+    _dragAccum = (_dragAccum + down).clamp(0.0, 220.0);
+    setState(() => _tear = (_dragAccum / 150).clamp(0.0, 1.0));
     if (_tear >= 1) _openPack();
   }
 
   Future<void> _openPack() async {
-    if (_phase != _RipPhase.sealed) return;
+    if (_phase != _RipPhase.sealed || _sessionBusy) return;
     HapticFeedback.mediumImpact();
     setState(() {
-      _phase = _RipPhase.bursting;
+      _sessionBusy = true;
+      _phase = _RipPhase.peeling;
       _tear = 1;
     });
-    await _burst.forward(from: 0);
+    await _peelOut.forward(from: 0);
     if (!mounted) return;
-    HapticFeedback.lightImpact();
-    await _impact.forward(from: 0);
-    if (!mounted) return;
-    // Skip preload lineup — cards already emerged from the pack mouth.
+    HapticFeedback.heavyImpact();
     setState(() {
       _phase = _RipPhase.reveal;
       _cardIndex = 0;
@@ -191,25 +211,35 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
       _deciding = false;
       _glow = false;
       _swipeDx = 0;
+      _sessionBusy = false;
     });
     if (!mounted || _phase != _RipPhase.reveal) return;
     await _presentCard();
   }
 
   Future<void> _presentCard() async {
+    final gen = ++_presentGen;
     _flip.value = 0;
     setState(() {
       _flipped = false;
       _deciding = false;
       _glow = false;
       _swipeDx = 0;
+      _sessionBusy = true;
     });
-    // Brief beat on the focused back, then auto-flip.
-    await Future<void>.delayed(const Duration(milliseconds: 280));
-    if (!mounted || _phase != _RipPhase.reveal) return;
+    final holdMs = _fastRip ? 0 : 220;
+    if (holdMs > 0) {
+      await Future<void>.delayed(Duration(milliseconds: holdMs));
+    }
+    if (!mounted || gen != _presentGen || _phase != _RipPhase.reveal) return;
     await _flip.forward(from: 0);
-    if (!mounted) return;
+    if (!mounted || gen != _presentGen) return;
+    await _finishPresent(gen);
+  }
 
+  Future<void> _finishPresent(int gen) async {
+    if (!mounted || gen != _presentGen || _phase != _RipPhase.reveal) return;
+    if (_flipped || _deciding) return;
     final notifier = ref.read(gameProvider.notifier);
     final owned = _current;
     final def = notifier.cardById(owned.cardId);
@@ -226,40 +256,93 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
     setState(() {
       _flipped = true;
       _deciding = true;
+      _sessionBusy = false;
     });
   }
 
+  /// Tap during flip jumps to decide.
+  Future<void> _skipFlip() async {
+    if (_phase != _RipPhase.reveal || _deciding || _flipped) return;
+    final gen = _presentGen;
+    _flip.stop();
+    _flip.value = 1;
+    await _finishPresent(gen);
+  }
+
   Future<void> _decide({required bool keep}) async {
-    if (!_deciding || _phase != _RipPhase.reveal) return;
-    setState(() => _deciding = false);
+    if (!_deciding || _phase != _RipPhase.reveal || _inFlightDecide != null) {
+      return;
+    }
+    setState(() {
+      _deciding = false;
+      _sessionBusy = true;
+    });
 
     final notifier = ref.read(gameProvider.notifier);
     final owned = _current;
 
-    if (keep) {
-      await notifier.keepRipCard(owned.instanceId);
-      HapticFeedback.lightImpact();
-    } else {
-      await notifier.exchangeRipCard(owned.instanceId);
-      HapticFeedback.mediumImpact();
-    }
+    final op = () async {
+      await notifier.decideRipCard(owned.instanceId, keep: keep);
+      if (keep) {
+        HapticFeedback.lightImpact();
+        if (mounted) setState(() => _keptCount += 1);
+      } else {
+        HapticFeedback.mediumImpact();
+      }
 
-    if (!mounted) return;
-    if (_cardIndex < widget.pulls.length - 1) {
-      setState(() => _cardIndex += 1);
-      await _presentCard();
-    } else {
-      // No Pack Summary — finalize and return to previous screen.
-      await notifier.finalizeRip(keepRemaining: false);
       if (!mounted) return;
-      widget.onDone();
+      if (_cardIndex < widget.pulls.length - 1) {
+        setState(() {
+          _cardIndex += 1;
+          _sessionBusy = false;
+        });
+        await _presentCard();
+      } else {
+        await notifier.finalizeRip(keepRemaining: false);
+        if (!mounted) return;
+        widget.onDone();
+      }
+    }();
+
+    _inFlightDecide = op;
+    try {
+      await op;
+    } finally {
+      _inFlightDecide = null;
     }
+  }
+
+  Future<void> _closeOrKeepAll({required bool keepRemaining}) async {
+    if (!_closeEnabled) return;
+    _presentGen++;
+    setState(() {
+      _sessionBusy = true;
+      _deciding = false;
+    });
+    if (_inFlightDecide != null) {
+      try {
+        await _inFlightDecide;
+      } catch (_) {}
+    }
+    final notifier = ref.read(gameProvider.notifier);
+    if (keepRemaining) {
+      final ripLeft = ref.read(gameProvider).lastRip?.length ?? 0;
+      await notifier.finalizeRip(keepRemaining: true);
+      if (mounted && ripLeft > 0) {
+        setState(() => _keptCount += ripLeft);
+      }
+    } else {
+      await notifier.finalizeRip(keepRemaining: true);
+    }
+    if (!mounted) return;
+    widget.onDone();
   }
 
   @override
   Widget build(BuildContext context) {
     final notifier = ref.read(gameProvider.notifier);
     final candyBal = ref.watch(gameProvider.select((s) => s.player.candy));
+    final inReveal = _phase == _RipPhase.reveal;
 
     return Material(
       color: CC.bg,
@@ -267,101 +350,152 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Row(
-                children: [
-                  if (_phase == _RipPhase.sealed || _phase == _RipPhase.reveal)
-                    IconButton(
-                      onPressed: () async {
-                        await ref
-                            .read(gameProvider.notifier)
-                            .finalizeRip(keepRemaining: true);
-                        if (context.mounted) widget.onDone();
-                      },
-                      icon: const Icon(Icons.close_rounded),
-                    )
-                  else
-                    const SizedBox(width: 48),
-                  Expanded(
-                    child: Text(
-                      switch (_phase) {
-                        _RipPhase.sealed => 'Tear open',
-                        _RipPhase.bursting => 'Opening…',
-                        _RipPhase.reveal =>
-                          'Card ${_cardIndex + 1}/${widget.pulls.length}',
-                      },
-                      textAlign: TextAlign.center,
-                      style: AppText.jakarta(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
+              padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+              child: SizedBox(
+                height: 44,
+                child: Row(
+                  children: [
+                    if (_phase == _RipPhase.sealed || inReveal)
+                      IconButton(
+                        onPressed: _closeEnabled
+                            ? () => _closeOrKeepAll(keepRemaining: true)
+                            : null,
+                        icon: const Icon(Icons.close_rounded),
+                      )
+                    else
+                      const SizedBox(width: 48),
+                    if (inReveal)
+                      TextButton(
+                        onPressed: _closeEnabled
+                            ? () => _closeOrKeepAll(keepRemaining: true)
+                            : null,
+                        child: Text(
+                          'Keep all',
+                          style: AppText.jakarta(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: _closeEnabled ? CC.accent : CC.inkMuted,
+                          ),
+                        ),
                       ),
+                    Expanded(
+                      child: inReveal
+                          ? Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.inventory_2_outlined,
+                                  size: 16,
+                                  color: CC.inkMuted,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Kept',
+                                  style: AppText.jakarta(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: CC.inkMuted,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  width: 24,
+                                  height: 24,
+                                  alignment: Alignment.center,
+                                  decoration: const BoxDecoration(
+                                    color: CC.candy,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Text(
+                                    '$_keptCount',
+                                    style: AppText.jakarta(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : const SizedBox.shrink(),
                     ),
-                  ),
-                  CandyBalance(candyBal),
-                ],
+                    if (inReveal || _phase == _RipPhase.sealed)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: FilterChip(
+                          label: Text(
+                            'Fast',
+                            style: AppText.jakarta(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          selected: _fastRip,
+                          onSelected: (_) => _toggleFastRip(),
+                          visualDensity: VisualDensity.compact,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                    if (inReveal)
+                      CandyBalance(candyBal)
+                    else
+                      const SizedBox(width: 8),
+                  ],
+                ),
               ),
             ),
             Expanded(
-              child: switch (_phase) {
-                _RipPhase.sealed => _SealedPack(
-                    tear: _tear,
-                    imageUrl: widget.packImageUrl,
-                    onTearUpdate: _onTearUpdate,
-                    onTearEnd: () {
-                      if (_tear >= 0.82) _openPack();
-                    },
-                  ),
-                _RipPhase.bursting => AnimatedBuilder(
-                    animation: Listenable.merge([_burst, _impact]),
-                    builder: (context, _) {
-                      final t = Curves.easeOutCubic.transform(_burst.value);
-                      // Finish top tear → strip flies off; cards rise from mouth.
-                      final peel = 1.0 + t;
-                      final impactT =
-                          Curves.easeOutBack.transform(_impact.value);
-                      // 1.0 → ~1.06 → 1.0
-                      final impactScale =
-                          1.0 + 0.06 * math.sin(impactT * math.pi);
-                      return _PackPeelStage(
-                        tear: peel.clamp(0.0, 2.0),
-                        imageUrl: widget.packImageUrl,
-                        showHint: false,
-                        interactive: false,
-                        impactScale: impactScale,
-                      );
-                    },
-                  ),
-                _RipPhase.reveal => _RevealStage(
-                    pulls: widget.pulls,
-                    cardIndex: _cardIndex,
-                    def: notifier.cardById(_current.cardId),
-                    fair: notifier.fairFor(_current),
-                    flip: _flip,
-                    flipped: _flipped,
-                    glow: _glow,
-                    glowAnim: _glowPulse,
-                    swipeDx: _swipeDx,
-                    deciding: _deciding,
-                    onHorizontalDragUpdate: (d) {
-                      if (!_deciding) return;
-                      setState(() => _swipeDx =
-                          (_swipeDx + d.delta.dx).clamp(-160.0, 160.0));
-                    },
-                    onHorizontalDragEnd: (d) {
-                      if (!_deciding) return;
-                      final v = d.primaryVelocity ?? 0;
-                      if (_swipeDx > 80 || v > 600) {
-                        _decide(keep: true);
-                      } else if (_swipeDx < -80 || v < -600) {
-                        _decide(keep: false);
-                      } else {
-                        setState(() => _swipeDx = 0);
-                      }
-                    },
-                  ),
-              },
+              child: inReveal
+                  ? _RevealStage(
+                      pulls: widget.pulls,
+                      cardIndex: _cardIndex,
+                      def: notifier.cardById(_current.cardId),
+                      fair: notifier.fairFor(_current),
+                      flip: _flip,
+                      flipped: _flipped,
+                      glow: _glow,
+                      glowAnim: _glowPulse,
+                      swipeDx: _swipeDx,
+                      deciding: _deciding,
+                      onTapSkip: _skipFlip,
+                      onHorizontalDragUpdate: (d) {
+                        if (!_deciding) return;
+                        setState(() =>
+                            _swipeDx = (_swipeDx + d.delta.dx).clamp(-160.0, 160.0));
+                      },
+                      onHorizontalDragEnd: (d) {
+                        if (!_deciding) return;
+                        final v = d.primaryVelocity ?? 0;
+                        if (_swipeDx > 80 || v > 600) {
+                          _decide(keep: true);
+                        } else if (_swipeDx < -80 || v < -600) {
+                          _decide(keep: false);
+                        } else {
+                          setState(() => _swipeDx = 0);
+                        }
+                      },
+                    )
+                  : AnimatedBuilder(
+                      animation: _peelOut,
+                      builder: (context, _) {
+                        // 0..1 user rip, then +0..1 auto peel-out.
+                        final progress = _tear.clamp(0.0, 1.0) +
+                            (_phase == _RipPhase.peeling ? _peelOut.value : 0.0);
+                        return _PackPeelStage(
+                          tear: progress,
+                          imageUrl: widget.packImageUrl,
+                          showHint: _phase == _RipPhase.sealed,
+                          interactive: _phase == _RipPhase.sealed,
+                          onTearUpdate: _onTearUpdate,
+                          onTearEnd: () {
+                            if (_tear >= 0.72) _openPack();
+                          },
+                        );
+                      },
+                    ),
             ),
-            if (_phase == _RipPhase.reveal && _deciding)
+            if (inReveal && _deciding)
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
                 child: Row(
@@ -372,22 +506,22 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
                         child: OutlinedButton(
                           onPressed: () => _decide(keep: false),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: CC.candy,
-                            backgroundColor: CC.candy.withValues(alpha: 0.12),
+                            foregroundColor: CC.ink,
+                            backgroundColor: CC.bgElevated,
                             side: BorderSide(
-                              color: CC.candy.withValues(alpha: 0.7),
+                              color: CC.line.withValues(alpha: 0.9),
                             ),
                             padding: EdgeInsets.zero,
                             alignment: Alignment.center,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(28),
                             ),
                           ),
                           child: Text(
-                            'Exchange',
+                            '← Exchange',
                             style: AppText.jakarta(
                               fontWeight: FontWeight.w800,
-                              fontSize: 16,
+                              fontSize: 15,
                               height: 1,
                             ),
                           ),
@@ -401,17 +535,18 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
                         child: FilledButton(
                           onPressed: () => _decide(keep: true),
                           style: FilledButton.styleFrom(
+                            backgroundColor: CC.accent,
                             padding: EdgeInsets.zero,
                             alignment: Alignment.center,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(28),
                             ),
                           ),
                           child: Text(
-                            'Keep',
+                            'Keep →',
                             style: AppText.jakarta(
                               fontWeight: FontWeight.w800,
-                              fontSize: 16,
+                              fontSize: 15,
                               height: 1,
                             ),
                           ),
@@ -422,7 +557,6 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
                 ),
               )
             else
-              // Reserve sticky-bar height so sealed/burst pack stays truly centered.
               const SizedBox(height: 16),
           ],
         ),
@@ -431,34 +565,8 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
   }
 }
 
-class _SealedPack extends StatelessWidget {
-  const _SealedPack({
-    required this.tear,
-    required this.onTearUpdate,
-    required this.onTearEnd,
-    this.imageUrl,
-  });
-
-  final double tear;
-  final String? imageUrl;
-  final void Function(DragUpdateDetails) onTearUpdate;
-  final VoidCallback onTearEnd;
-
-  @override
-  Widget build(BuildContext context) {
-    return _PackPeelStage(
-      tear: tear,
-      imageUrl: imageUrl,
-      showHint: true,
-      interactive: true,
-      onTearUpdate: onTearUpdate,
-      onTearEnd: onTearEnd,
-    );
-  }
-}
-
-/// Sealed pack: horizontal top-seal tear; cards rise out of the pack mouth
-/// only after the pack is fully torn (burst), never while still sealed.
+/// Center V-peel from the top seal — matches reference samples 032–046.
+/// [tear] 0..1 = user rip; 1..2 = flaps peel clear and pack dissolves.
 class _PackPeelStage extends StatelessWidget {
   const _PackPeelStage({
     required this.tear,
@@ -467,7 +575,6 @@ class _PackPeelStage extends StatelessWidget {
     this.imageUrl,
     this.onTearUpdate,
     this.onTearEnd,
-    this.impactScale = 1.0,
   });
 
   final double tear;
@@ -476,241 +583,379 @@ class _PackPeelStage extends StatelessWidget {
   final bool interactive;
   final void Function(DragUpdateDetails)? onTearUpdate;
   final VoidCallback? onTearEnd;
-  final double impactScale;
 
   @override
   Widget build(BuildContext context) {
-    // tear 0..1 = user rip across top; >1 = burst (strip flies, cards emerge).
     final t = tear.clamp(0.0, 1.0);
     final exit = (tear - 1.0).clamp(0.0, 1.0);
     final peel = Curves.easeOutCubic.transform(t);
-    final emerge = Curves.easeOutBack.transform(exit);
-    final stripFly = Curves.easeOutExpo.transform(exit);
-    final packFade = (1.0 - exit * 0.9).clamp(0.0, 1.0);
-    final showEmerging = exit > 0.02;
-    // Start physically splitting once the swipe has real progress.
-    final torn = peel > 0.05;
+    final clear = Curves.easeOutCubic.transform(exit);
+    final packOpacity =
+        Curves.easeInCubic.transform((1.0 - clear * 1.05).clamp(0.0, 1.0));
+    final cardReveal = Curves.easeOutCubic.transform(
+      ((peel - 0.06) / 0.5 + clear * 0.65).clamp(0.0, 1.0),
+    );
+    final torn = peel > 0.03;
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        const targetPackW = 420.0;
-        const targetPackH = 600.0;
-        final availW = constraints.maxWidth * 0.88;
-        final availH = constraints.maxHeight * 0.82;
+        // Reference: pack ~55–65% of viewport height, centered.
+        const targetPackW = 340.0;
+        const targetPackH = 500.0;
+        final availW = constraints.maxWidth * 0.72;
+        final availH = constraints.maxHeight * 0.68;
         final scale = math.min(availW / targetPackW, availH / targetPackH);
         final packW = targetPackW * scale;
         final packH = targetPackH * scale;
-        // Real top-seal height so the torn piece is a visible chunk of pack art.
-        final stripH = packH * 0.18;
-        final backW = packW * 0.72;
-        final backH = packH * 0.70;
+        // Card nearly fills pack mouth — same scale into reveal.
+        final cardW = packW * 0.90;
+        final cardH = packH * 0.86;
 
-        // BoxFit.fill so clip coords match pack pixels (contain letterbox
-        // was clipping empty padding → tiny "icon" strip + intact body).
         Widget packArt() => _PackBody(
               imageUrl: imageUrl,
               width: packW,
               height: packH,
-              fit: BoxFit.fill,
             );
 
-        return Center(
-          child: SizedBox(
-            width: packW,
-            height: packH,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                if (showEmerging)
-                  Positioned(
-                    top: stripH * 0.4,
-                    left: (packW - backW) / 2,
-                    width: backW,
-                    height: backH,
-                    child: Opacity(
-                      opacity: (emerge * 1.15).clamp(0.0, 1.0),
-                      child: Transform.translate(
-                        offset: Offset(
-                          0,
-                          packH * 0.42 * (1 - emerge) - emerge * packH * 0.18,
+        final flapOutX = clear * packW * 0.85;
+        final flapOutY = clear * packH * 0.42;
+        final flapSpin = clear * 0.55;
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: const Alignment(0, -0.08),
+                    radius: 0.9,
+                    colors: [
+                      const Color(0xFF1A2240).withValues(alpha: 0.55),
+                      CC.bg.withValues(alpha: 0.35),
+                      CC.bg,
+                    ],
+                    stops: const [0.0, 0.48, 1.0],
+                  ),
+                ),
+              ),
+            ),
+            Center(
+              child: SizedBox(
+                width: packW * 1.08,
+                height: packH * 1.12,
+                child: Stack(
+                  alignment: Alignment.center,
+                  clipBehavior: Clip.none,
+                  children: [
+                    // Card back revealed through the V.
+                    if (cardReveal > 0.02)
+                      Opacity(
+                        opacity: cardReveal.clamp(0.0, 1.0),
+                        child: Transform.scale(
+                          scale: 0.96 + clear * 0.04,
+                          child: _CardBack(width: cardW, height: cardH),
                         ),
-                        child: _CardBack(width: backW, height: backH),
                       ),
-                    ),
-                  ),
 
-                // Intact pack (pre-tear).
-                if (!torn && packFade > 0.02)
-                  Positioned.fill(
-                    child: Opacity(
-                      opacity: packFade,
-                      child: packArt(),
-                    ),
-                  ),
+                    // Intact sealed pack.
+                    if (!torn && packOpacity > 0.02)
+                      Opacity(
+                        opacity: packOpacity,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            packArt(),
+                            // Faint center seam (reference idle frames).
+                            IgnorePointer(
+                              child: CustomPaint(
+                                size: Size(packW, packH),
+                                painter: const _CenterSeamPainter(),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
 
-                // Torn body: full-width pack with TOP stripH cut away.
-                if (torn && packFade > 0.02)
-                  Positioned(
-                    top: stripH,
-                    left: 0,
-                    width: packW,
-                    height: packH - stripH,
-                    child: Opacity(
-                      opacity: packFade,
-                      child: Transform.translate(
-                        offset: Offset(0, exit * packH * 0.04),
-                        child: ClipRect(
-                          child: OverflowBox(
-                            maxWidth: packW,
-                            maxHeight: packH,
-                            alignment: Alignment.bottomCenter,
-                            child: SizedBox(
+                    // Lower pack remnant under the V.
+                    if (torn && packOpacity > 0.02)
+                      Opacity(
+                        opacity: packOpacity * (1.0 - clear * 0.9),
+                        child: ClipPath(
+                          clipper: _PackRemnantClipper(progress: peel),
+                          child: packArt(),
+                        ),
+                      ),
+
+                    // Left flap — curls out, silver lining faces camera.
+                    if (torn && packOpacity > 0.01)
+                      Transform.translate(
+                        offset: Offset(
+                          -peel * packW * 0.06 - flapOutX,
+                          peel * packH * 0.03 + flapOutY,
+                        ),
+                        child: Transform.rotate(
+                          angle: -peel * 0.22 - flapSpin,
+                          alignment: Alignment.topCenter,
+                          child: Opacity(
+                            opacity:
+                                (packOpacity * (1.0 - clear * 0.95)).clamp(0.0, 1.0),
+                            child: _FoilFlap(
                               width: packW,
                               height: packH,
-                              child: packArt(),
+                              side: -1,
+                              peel: peel,
+                              art: packArt(),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
 
-                // Torn-off top seal: same pack art, only the top stripH, peeling away.
-                if (torn && stripFly < 0.98)
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    width: packW,
-                    height: stripH,
-                    child: Transform.translate(
-                      offset: Offset(
-                        peel * packW * 0.22 + stripFly * packW * 0.75,
-                        -peel * stripH * 0.35 - stripFly * packH * 0.6,
-                      ),
-                      child: Transform.rotate(
-                        alignment: Alignment.bottomLeft,
-                        angle: -peel * 0.35 - stripFly * 1.05,
-                        child: Opacity(
-                          opacity: (1.0 - stripFly * 0.85).clamp(0.0, 1.0),
-                          child: ClipRect(
-                            child: OverflowBox(
-                              maxWidth: packW,
-                              maxHeight: packH,
-                              alignment: Alignment.topCenter,
-                              child: SizedBox(
-                                width: packW,
-                                height: packH,
-                                child: packArt(),
-                              ),
+                    // Right flap.
+                    if (torn && packOpacity > 0.01)
+                      Transform.translate(
+                        offset: Offset(
+                          peel * packW * 0.06 + flapOutX,
+                          peel * packH * 0.03 + flapOutY,
+                        ),
+                        child: Transform.rotate(
+                          angle: peel * 0.22 + flapSpin,
+                          alignment: Alignment.topCenter,
+                          child: Opacity(
+                            opacity:
+                                (packOpacity * (1.0 - clear * 0.95)).clamp(0.0, 1.0),
+                            child: _FoilFlap(
+                              width: packW,
+                              height: packH,
+                              side: 1,
+                              peel: peel,
+                              art: packArt(),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
-
-                // Tear edge along the cut (on the body mouth).
-                if (torn)
-                  Positioned(
-                    top: stripH - 7,
-                    left: 0,
-                    width: packW,
-                    height: 14,
-                    child: CustomPaint(
-                      size: Size(packW, 14),
-                      painter: _HorizontalTearPainter(
-                        progress: 1.0,
-                        glow: 0.55 + peel * 0.45,
-                      ),
-                    ),
-                  ),
-
-                if (exit > 0.45)
-                  Positioned.fill(
-                    child: Opacity(
-                      opacity: ((exit - 0.45) / 0.55).clamp(0.0, 1.0),
-                      child: Transform.translate(
-                        offset: Offset(0, -packH * 0.12 * exit),
-                        child: Transform.scale(
-                          scale: (0.94 + exit * 0.06) * impactScale,
-                          child: Center(
-                            child: _CardBack(width: backW, height: backH),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                if (interactive)
-                  Positioned(
-                    left: packW * 0.05,
-                    right: packW * 0.05,
-                    top: 0,
-                    height: packH * 0.42,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onHorizontalDragUpdate: onTearUpdate,
-                      onHorizontalDragEnd: (_) => onTearEnd?.call(),
-                      child: showHint
-                          ? AnimatedOpacity(
-                              opacity: t < 0.12 ? 1 : (1 - t).clamp(0.0, 1.0),
-                              duration: const Duration(milliseconds: 180),
-                              child: Align(
-                                alignment: Alignment.topCenter,
-                                child: Padding(
-                                  padding: EdgeInsets.only(top: stripH + 6),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.swipe_rounded,
-                                        color: CC.accent.withValues(alpha: 0.9),
-                                        size: 28,
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 14,
-                                          vertical: 7,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: CC.bgElevated
-                                              .withValues(alpha: 0.72),
-                                          borderRadius:
-                                              BorderRadius.circular(20),
-                                          border: Border.all(
-                                            color: CC.accent.withValues(
-                                              alpha: 0.4 + t * 0.4,
-                                            ),
-                                          ),
-                                        ),
-                                        child: Text(
-                                          t <= 0
-                                              ? 'SWIPE ACROSS TOP'
-                                              : '${(t * 100).round()}%',
-                                          style: AppText.jakarta(
-                                            fontWeight: FontWeight.w800,
-                                            color: CC.accent,
-                                            letterSpacing: 1.0,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            )
-                          : const SizedBox.expand(),
-                    ),
-                  ),
-              ],
+                  ],
+                ),
+              ),
             ),
-          ),
+
+            if (interactive)
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onVerticalDragUpdate: onTearUpdate,
+                  onVerticalDragEnd: (_) => onTearEnd?.call(),
+                  onHorizontalDragUpdate: onTearUpdate,
+                  onHorizontalDragEnd: (_) => onTearEnd?.call(),
+                  child: showHint
+                      ? AnimatedOpacity(
+                          opacity: t < 0.15 ? 1 : (1 - t * 1.2).clamp(0.0, 1.0),
+                          duration: const Duration(milliseconds: 160),
+                          child: Align(
+                            alignment: const Alignment(0, -0.78),
+                            child: Text(
+                              'Swipe down to rip',
+                              style: AppText.jakarta(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                                color: Colors.white.withValues(alpha: 0.92),
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ),
+                        )
+                      : const SizedBox.expand(),
+                ),
+              ),
+          ],
         );
       },
     );
   }
+}
+
+class _CenterSeamPainter extends CustomPainter {
+  const _CenterSeamPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final x = size.width * 0.5;
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.22)
+      ..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(
+      Offset(x, size.height * 0.06),
+      Offset(x, size.height * 0.94),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// One half of the torn front foil: pack art + silver underside.
+class _FoilFlap extends StatelessWidget {
+  const _FoilFlap({
+    required this.width,
+    required this.height,
+    required this.side,
+    required this.peel,
+    required this.art,
+  });
+
+  final double width;
+  final double height;
+  /// -1 left, +1 right.
+  final int side;
+  final double peel;
+  final Widget art;
+
+  @override
+  Widget build(BuildContext context) {
+    final curl = Curves.easeOutCubic.transform(peel.clamp(0.0, 1.0));
+    return SizedBox(
+      width: width,
+      height: height,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          ClipPath(
+            clipper: _FlapClipper(side: side, progress: curl),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: side < 0 ? Alignment.centerRight : Alignment.centerLeft,
+                  end: side < 0 ? Alignment.centerLeft : Alignment.centerRight,
+                  colors: const [
+                    Color(0xFFF0F2F5),
+                    Color(0xFFC5CCD6),
+                    Color(0xFF9AA3B0),
+                  ],
+                  stops: const [0.0, 0.5, 1.0],
+                ),
+              ),
+              child: const SizedBox.expand(),
+            ),
+          ),
+          ClipPath(
+            clipper: _FlapClipper(side: side, progress: curl),
+            child: Opacity(
+              opacity: (1.0 - curl * 0.62).clamp(0.28, 1.0),
+              child: art,
+            ),
+          ),
+          IgnorePointer(
+            child: CustomPaint(
+              size: Size(width, height),
+              painter: _FlapEdgePainter(side: side, progress: curl),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FlapClipper extends CustomClipper<Path> {
+  _FlapClipper({required this.side, required this.progress});
+
+  final int side;
+  final double progress;
+
+  @override
+  Path getClip(Size size) {
+    final p = progress.clamp(0.04, 1.0);
+    final midX = size.width * 0.5;
+    final depth = size.height * (0.14 + p * 0.82);
+    final spread = size.width * (0.06 + p * 0.46);
+    final path = Path();
+    if (side < 0) {
+      path
+        ..moveTo(0, 0)
+        ..lineTo(midX, 0)
+        ..lineTo(midX - spread * 0.12, depth * 0.1)
+        ..lineTo(midX - spread, depth)
+        ..lineTo(0, depth * (0.5 + p * 0.4))
+        ..close();
+    } else {
+      path
+        ..moveTo(size.width, 0)
+        ..lineTo(midX, 0)
+        ..lineTo(midX + spread * 0.12, depth * 0.1)
+        ..lineTo(midX + spread, depth)
+        ..lineTo(size.width, depth * (0.5 + p * 0.4))
+        ..close();
+    }
+    return path;
+  }
+
+  @override
+  bool shouldReclip(covariant _FlapClipper old) =>
+      old.side != side || old.progress != progress;
+}
+
+class _PackRemnantClipper extends CustomClipper<Path> {
+  _PackRemnantClipper({required this.progress});
+
+  final double progress;
+
+  @override
+  Path getClip(Size size) {
+    final p = progress.clamp(0.0, 1.0);
+    final midX = size.width * 0.5;
+    final depth = size.height * (0.14 + p * 0.82);
+    final spread = size.width * (0.06 + p * 0.46);
+    final outer = Path()..addRect(Offset.zero & size);
+    final v = Path()
+      ..moveTo(midX, 0)
+      ..lineTo(midX - spread, depth)
+      ..lineTo(midX + spread, depth)
+      ..close();
+    return Path.combine(PathOperation.difference, outer, v);
+  }
+
+  @override
+  bool shouldReclip(covariant _PackRemnantClipper old) =>
+      old.progress != progress;
+}
+
+class _FlapEdgePainter extends CustomPainter {
+  _FlapEdgePainter({required this.side, required this.progress});
+
+  final int side;
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = progress.clamp(0.04, 1.0);
+    final midX = size.width * 0.5;
+    final depth = size.height * (0.14 + p * 0.82);
+    final spread = size.width * (0.06 + p * 0.46);
+    final edge = Path();
+    if (side < 0) {
+      edge
+        ..moveTo(midX, 0)
+        ..lineTo(midX - spread, depth);
+    } else {
+      edge
+        ..moveTo(midX, 0)
+        ..lineTo(midX + spread, depth);
+    }
+    canvas.drawPath(
+      edge,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.45)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.4
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _FlapEdgePainter old) =>
+      old.side != side || old.progress != progress;
 }
 
 class _PackBody extends StatelessWidget {
@@ -718,56 +963,50 @@ class _PackBody extends StatelessWidget {
     required this.width,
     required this.height,
     this.imageUrl,
-    this.fit = BoxFit.fill,
   });
+
   final double width;
   final double height;
   final String? imageUrl;
-  final BoxFit fit;
 
   @override
   Widget build(BuildContext context) {
     final hasArt = imageUrl != null && imageUrl!.isNotEmpty;
-    // Fill the tear frame edge-to-edge so top/bottom clips cut real pack pixels.
     final art = hasArt
         ? KnockoutProductImage(
             url: imageUrl!,
             width: width,
             height: height,
-            fit: fit,
+            fit: BoxFit.fill,
             placeholder: const _FoilPackFallback(),
             error: const _FoilPackFallback(),
           )
-        : ClipRRect(
-            borderRadius: const BorderRadius.all(Radius.circular(18)),
-            child: SizedBox(
-              width: width,
-              height: height,
-              child: const _FoilPackFallback(),
-            ),
+        : SizedBox(
+            width: width,
+            height: height,
+            child: const _FoilPackFallback(),
           );
 
     return SizedBox(
       width: width,
       height: height,
       child: Stack(
-        alignment: Alignment.center,
         fit: StackFit.expand,
         clipBehavior: Clip.hardEdge,
         children: [
           Positioned(
-            left: width * 0.17,
-            right: width * 0.17,
-            top: height * 0.16,
-            bottom: height * 0.11,
+            left: width * 0.14,
+            right: width * 0.14,
+            top: height * 0.14,
+            bottom: height * 0.1,
             child: DecoratedBox(
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(22),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.55),
-                    blurRadius: 28,
-                    offset: const Offset(0, 16),
+                    color: Colors.black.withValues(alpha: 0.5),
+                    blurRadius: 26,
+                    offset: const Offset(0, 14),
                   ),
                 ],
               ),
@@ -785,45 +1024,59 @@ class _FoilPackFallback extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
+    final isPokemon = refCatalogIsPokemon(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFFDE68A),
-            Color(0xFFF59E0B),
-            Color(0xFF8B5CF6),
-          ],
+          colors: isPokemon
+              ? const [
+                  Color(0xFF0D1B4C),
+                  Color(0xFF1E3A8A),
+                  Color(0xFFFFCB05),
+                ]
+              : const [
+                  Color(0xFF2A3A6A),
+                  Color(0xFF5B8CFF),
+                  Color(0xFFA78BFA),
+                ],
         ),
       ),
       child: Stack(
+        fit: StackFit.expand,
         children: [
           Center(
-            child: Container(
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white70, width: 3),
-                color: Colors.white.withValues(alpha: 0.12),
-              ),
-              child: const Icon(Icons.bolt_rounded, color: Colors.white, size: 42),
-            ),
+            child: isPokemon
+                ? Text(
+                    'Pokémon',
+                    style: AppText.jakarta(
+                      color: const Color(0xFFFFCB05),
+                      fontWeight: FontWeight.w900,
+                      fontSize: 28,
+                      letterSpacing: 1.2,
+                    ),
+                  )
+                : Image.asset(
+                    'assets/logos/riftbound.png',
+                    width: 120,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, _, _) =>
+                        const RiftMark(size: 72, framed: false),
+                  ),
           ),
           Positioned(
             left: 16,
             right: 16,
             bottom: 28,
             child: Text(
-              'VAULTREX\nRIFTBOUND',
+              isPokemon ? 'POKÉMON' : 'RIFTBOUND',
               textAlign: TextAlign.center,
               style: AppText.jakarta(
                 color: Colors.white,
                 fontWeight: FontWeight.w800,
                 fontSize: 16,
-                height: 1.2,
-                letterSpacing: 1,
+                letterSpacing: 1.4,
               ),
             ),
           ),
@@ -833,238 +1086,79 @@ class _FoilPackFallback extends StatelessWidget {
   }
 }
 
-/// Horizontal jagged rip across the top seal (left → right with swipe).
-class _HorizontalTearPainter extends CustomPainter {
-  _HorizontalTearPainter({required this.progress, required this.glow});
-
-  final double progress;
-  final double glow;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final midY = size.height * 0.5;
-    final len = size.width * progress.clamp(0.08, 1.0);
-    final path = Path()..moveTo(0, midY);
-    const segs = 22;
-    for (var i = 1; i <= segs; i++) {
-      final x = len * i / segs;
-      final zig = math.sin(i * 1.7) * 3.2 + (i.isEven ? -1.4 : 1.4);
-      path.lineTo(x, midY + zig);
-    }
-
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = CC.accent.withValues(alpha: 0.28 * glow)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 6
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
-    );
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = Colors.white.withValues(alpha: 0.92 * glow)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.2
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _HorizontalTearPainter oldDelegate) =>
-      oldDelegate.progress != progress || oldDelegate.glow != glow;
-}
-
+/// Official card back art for face-down cards in theater.
 class _CardBack extends StatelessWidget {
   const _CardBack({this.width = 200, this.height = 280});
+
+  static const riftboundPath = 'assets/card_backs/riftbound_back.png';
+  static const pokemonPath = 'assets/card_backs/pokemon_back.png';
+
   final double width;
   final double height;
 
   @override
   Widget build(BuildContext context) {
+    final isPokemon = refCatalogIsPokemon(context);
+    final path = isPokemon ? pokemonPath : riftboundPath;
     return Container(
       width: width,
       height: height,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.45),
-            blurRadius: 22,
-            offset: const Offset(0, 12),
+            color: Colors.black.withValues(alpha: 0.42),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        // Vector paint stays crisp at every flip size; PNG is a shipped asset
-        // for tooling / previews (1000×1400).
-        child: CustomPaint(
-          size: Size(width, height),
-          painter: const _RiftboundCardBackPainter(),
+        borderRadius: BorderRadius.circular(16),
+        child: Image.asset(
+          path,
+          width: width,
+          height: height,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => isPokemon
+              ? ColoredBox(
+                  color: const Color(0xFF0D1B4C),
+                  child: Center(
+                    child: Text(
+                      'Pokémon',
+                      style: AppText.jakarta(
+                        color: const Color(0xFFFFCB05),
+                        fontWeight: FontWeight.w900,
+                        fontSize: width * 0.16,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+                )
+              : ColoredBox(
+                  color: const Color(0xFF0C1428),
+                  child: Center(
+                    child: Image.asset(
+                      'assets/logos/riftbound.png',
+                      width: width * 0.55,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ),
         ),
       ),
     );
   }
 }
 
-/// Vector-style Riftbound main-deck back (navy + gold) — crisp at any scale.
-class _RiftboundCardBackPainter extends CustomPainter {
-  const _RiftboundCardBackPainter();
-
-  static const _navy = Color(0xFF08163A);
-  static const _gold = Color(0xFFD4AF5F);
-  static const _goldLt = Color(0xFFE8CC8A);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    final cx = w / 2;
-    final cy = h / 2;
-
-    canvas.drawRect(Offset.zero & size, Paint()..color = _navy);
-
-    final glow = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          const Color(0xFF12285A),
-          _navy,
-        ],
-      ).createShader(Rect.fromCircle(center: Offset(cx, cy), radius: h * 0.55));
-    canvas.drawRect(Offset.zero & size, glow);
-
-    final goldStroke = Paint()
-      ..color = _gold
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = w * 0.008
-      ..isAntiAlias = true;
-
-    final goldStrokeThin = Paint()
-      ..color = _goldLt
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = w * 0.0045
-      ..isAntiAlias = true;
-
-    final margin = w * 0.048;
-    final outer = RRect.fromRectAndRadius(
-      Rect.fromLTRB(margin, margin, w - margin, h - margin),
-      Radius.circular(w * 0.04),
-    );
-    canvas.drawRRect(outer, goldStroke);
-    final innerM = margin + w * 0.018;
-    final inner = RRect.fromRectAndRadius(
-      Rect.fromLTRB(innerM, innerM, w - innerM, h - innerM),
-      Radius.circular(w * 0.028),
-    );
-    canvas.drawRRect(inner, goldStrokeThin);
-
-    void drawDiamond(Offset c, double half, Paint p) {
-      final path = Path()
-        ..moveTo(c.dx, c.dy - half)
-        ..lineTo(c.dx + half, c.dy)
-        ..lineTo(c.dx, c.dy + half)
-        ..lineTo(c.dx - half, c.dy)
-        ..close();
-      canvas.drawPath(path, p);
-    }
-
-    final corner = margin + w * 0.009;
-    final ds = w * 0.012;
-    for (final o in [
-      Offset(corner, corner),
-      Offset(w - corner, corner),
-      Offset(corner, h - corner),
-      Offset(w - corner, h - corner),
-    ]) {
-      drawDiamond(o, ds, goldStrokeThin);
-    }
-
-    final half = w * 0.21;
-    drawDiamond(Offset(cx, cy), half, goldStroke);
-    drawDiamond(Offset(cx, cy), half * 0.86, goldStrokeThin);
-
-    // Wings
-    for (final side in [-1.0, 1.0]) {
-      final x0 = cx + side * (half - w * 0.008);
-      final path = Path()
-        ..moveTo(x0, cy - w * 0.018)
-        ..lineTo(x0 + side * w * 0.028, cy - w * 0.006)
-        ..lineTo(x0 + side * w * 0.095, cy)
-        ..lineTo(x0 + side * w * 0.028, cy + w * 0.006)
-        ..lineTo(x0, cy + w * 0.018)
-        ..lineTo(x0 + side * w * 0.012, cy)
-        ..close();
-      canvas.drawPath(path, goldStrokeThin);
-    }
-
-    // Arcs
-    for (final upward in [true, false]) {
-      final yc = cy + (upward ? -half * 0.62 : half * 0.62);
-      for (final r in [w * 0.155, w * 0.175, w * 0.195]) {
-        final rect = Rect.fromCircle(center: Offset(cx, yc), radius: r);
-        canvas.drawArc(
-          rect,
-          upward ? 3.6 : 0.35,
-          upward ? 2.2 : 2.2,
-          false,
-          goldStrokeThin,
-        );
-      }
-    }
-
-    drawDiamond(Offset(cx, cy - half - w * 0.048), w * 0.014, goldStrokeThin);
-    drawDiamond(Offset(cx, cy + half + w * 0.048), w * 0.014, goldStrokeThin);
-
-    final leagueStyle = TextStyle(
-      color: _goldLt,
-      fontWeight: FontWeight.w800,
-      fontSize: w * 0.07,
-      letterSpacing: w * 0.004,
-      height: 1,
-    );
-    final ofStyle = leagueStyle.copyWith(fontSize: w * 0.038);
-
-    void paintBar(String text, double y, TextStyle style) {
-      final tp = TextPainter(
-        text: TextSpan(text: text, style: style),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      final padX = w * 0.028;
-      final padY = w * 0.012;
-      final rect = RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: Offset(cx, y),
-          width: tp.width + padX * 2,
-          height: tp.height + padY * 2,
-        ),
-        const Radius.circular(2),
-      );
-      canvas.drawRRect(rect, Paint()..color = _navy);
-      canvas.drawRRect(rect, goldStrokeThin);
-      tp.paint(canvas, Offset(cx - tp.width / 2, y - tp.height / 2));
-    }
-
-    paintBar('LEAGUE', cy - w * 0.075, leagueStyle);
-    final ofTp = TextPainter(
-      text: TextSpan(text: 'OF', style: ofStyle),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    canvas.drawRect(
-      Rect.fromCenter(
-        center: Offset(cx, cy),
-        width: ofTp.width + w * 0.03,
-        height: ofTp.height + w * 0.016,
-      ),
-      Paint()..color = _navy,
-    );
-    ofTp.paint(canvas, Offset(cx - ofTp.width / 2, cy - ofTp.height / 2));
-    paintBar('LEGENDS', cy + w * 0.075, leagueStyle);
+/// Reads franchise from the active game notifier when available.
+bool refCatalogIsPokemon(BuildContext context) {
+  try {
+    final container = ProviderScope.containerOf(context, listen: false);
+    return container.read(gameProvider.notifier).catalog.isPokemon;
+  } catch (_) {
+    return false;
   }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 Color _ambientFor(Rarity? rarity, {bool foil = false}) {
@@ -1092,6 +1186,7 @@ class _RevealStage extends StatelessWidget {
     required this.deciding,
     required this.onHorizontalDragUpdate,
     required this.onHorizontalDragEnd,
+    this.onTapSkip,
   });
 
   final List<OwnedCard> pulls;
@@ -1104,6 +1199,7 @@ class _RevealStage extends StatelessWidget {
   final Animation<double> glowAnim;
   final double swipeDx;
   final bool deciding;
+  final VoidCallback? onTapSkip;
   final void Function(DragUpdateDetails) onHorizontalDragUpdate;
   final void Function(DragEndDetails) onHorizontalDragEnd;
 
@@ -1115,95 +1211,63 @@ class _RevealStage extends StatelessWidget {
     final ambient = _ambientFor(def?.rarity, foil: owned.foil);
 
     return GestureDetector(
+      onTap: deciding ? null : onTapSkip,
       onHorizontalDragUpdate: onHorizontalDragUpdate,
       onHorizontalDragEnd: onHorizontalDragEnd,
       child: AnimatedBuilder(
         animation: Listenable.merge([flip, glowAnim]),
         builder: (context, _) {
-          final t = Curves.easeInOutCubic.transform(flip.value);
+          final t = Curves.easeOutCubic.transform(flip.value);
           final angle = t * math.pi;
           final showFront = angle >= math.pi / 2;
           final displayAngle = showFront ? angle - math.pi : angle;
           final pulse = glow
-              ? (0.4 + 0.35 * math.sin(glowAnim.value * math.pi * 2))
+              ? (0.35 + 0.3 * math.sin(glowAnim.value * math.pi * 2))
               : 0.0;
           final keepHint = swipeDx > 24;
           final exchangeHint = swipeDx < -24;
 
           return LayoutBuilder(
             builder: (context, constraints) {
+              // Face-on framing; Battlefields use landscape aspect so full art shows.
+              final aspect = def?.artAspectRatio ?? (2.5 / 3.5);
               final maxH = math.min(
-                constraints.maxHeight * 0.86,
-                constraints.maxWidth * 1.7,
+                constraints.maxHeight * 0.66,
+                constraints.maxWidth * (def?.isLandscapeCard == true ? 0.95 : 1.4),
               );
-              final maxW = constraints.maxWidth - 24;
-              var cardH = maxH;
-              var cardW = cardH * (5 / 7);
-              if (cardW > maxW) {
-                cardW = maxW;
-                cardH = cardW * (7 / 5);
+              final maxW = constraints.maxWidth *
+                  (def?.isLandscapeCard == true ? 0.92 : 0.78);
+              var cardW = maxW;
+              var cardH = cardW / aspect;
+              if (cardH > maxH) {
+                cardH = maxH;
+                cardW = cardH * aspect;
               }
 
               return Stack(
                 fit: StackFit.expand,
+                clipBehavior: Clip.none,
                 children: [
                   IgnorePointer(
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        if (artUrl.isNotEmpty && showFront)
-                          Opacity(
-                            opacity: 0.28,
-                            child: ImageFiltered(
-                              imageFilter:
-                                  ImageFilter.blur(sigmaX: 42, sigmaY: 42),
-                              child: Transform.scale(
-                                scale: 1.35,
-                                child: CachedNetworkImage(
-                                  imageUrl: artUrl,
-                                  fit: BoxFit.cover,
-                                  errorWidget: (_, _, _) =>
-                                      const SizedBox.shrink(),
-                                ),
-                              ),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: RadialGradient(
+                          center: const Alignment(0, -0.12),
+                          radius: 1.0,
+                          colors: [
+                            ambient.withValues(
+                              alpha: showFront ? 0.38 + pulse * 0.2 : 0.18,
                             ),
-                          ),
-                        DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: RadialGradient(
-                              center: const Alignment(0, -0.15),
-                              radius: 1.05,
-                              colors: [
-                                ambient.withValues(
-                                  alpha: showFront ? 0.38 + pulse * 0.2 : 0.18,
-                                ),
-                                CC.bg.withValues(alpha: 0.15),
-                                CC.bg,
-                              ],
-                              stops: const [0.0, 0.45, 1.0],
-                            ),
-                          ),
+                            CC.bg.withValues(alpha: 0.25),
+                            CC.bg,
+                          ],
+                          stops: const [0.0, 0.48, 1.0],
                         ),
-                        const DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Color(0xCC0A0C12),
-                                Color(0x000A0C12),
-                                Color(0x000A0C12),
-                                Color(0xE60A0C12),
-                              ],
-                              stops: [0.0, 0.18, 0.72, 1.0],
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
                     child: Column(
                       children: [
                         Expanded(
@@ -1224,9 +1288,9 @@ class _RevealStage extends StatelessWidget {
                         ),
                         AnimatedOpacity(
                           opacity: flipped ? 1 : 0,
-                          duration: const Duration(milliseconds: 220),
+                          duration: const Duration(milliseconds: 200),
                           child: Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                            padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -1237,78 +1301,68 @@ class _RevealStage extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                   style: AppText.jakarta(
                                     fontWeight: FontWeight.w800,
-                                    fontSize: 20,
+                                    fontSize: 18,
                                     height: 1.2,
-                                    letterSpacing: -0.3,
                                   ),
                                 ),
-                                const SizedBox(height: 10),
-                                SizedBox(
-                                  height: 28,
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
-                                    children: [
-                                      if (def != null) ...[
-                                        RarityChip(def!.rarity),
-                                        const SizedBox(width: 12),
-                                      ],
-                                      MoneyText(
-                                        fair,
-                                        style: AppText.jakarta(
-                                          fontSize: 17,
-                                          fontWeight: FontWeight.w800,
-                                          height: 1,
-                                          color: glow ? ambient : CC.ink,
-                                        ),
+                                if (def case final d?) ...[
+                                  if (d.setName.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      d.setName,
+                                      textAlign: TextAlign.center,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppText.jakarta(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                        color: CC.inkMuted,
                                       ),
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                        ),
-                                        child: Container(
-                                          width: 3,
-                                          height: 3,
-                                          decoration: const BoxDecoration(
-                                            color: CC.inkMuted,
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                      ),
-                                      const Icon(
-                                        Icons.cookie,
-                                        size: 15,
-                                        color: CC.candy,
-                                      ),
-                                      const SizedBox(width: 5),
-                                      Text(
-                                        '${(fair * 100).round()}',
-                                        style: AppText.jakarta(
-                                          color: CC.candy,
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 15,
-                                          height: 1,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (glow) ...[
-                                  const SizedBox(height: 10),
+                                    ),
+                                  ],
+                                ],
+                                const SizedBox(height: 8),
+                                if (def?.isUnlisted == true) ...[
                                   Text(
-                                    'NICE PULL',
+                                    'Not on market yet · Speculative value',
+                                    textAlign: TextAlign.center,
                                     style: AppText.jakarta(
-                                      color: ambient,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 1.4,
-                                      fontSize: 11,
-                                      height: 1,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: CC.accentHot,
                                     ),
                                   ),
+                                  const SizedBox(height: 6),
                                 ],
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      'Exchange for ',
+                                      style: AppText.jakarta(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: CC.inkMuted,
+                                      ),
+                                    ),
+                                    const Icon(
+                                      Icons.auto_awesome,
+                                      size: 14,
+                                      color: CC.candy,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${(fair * 100).round()}',
+                                      style: AppText.jakarta(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w800,
+                                        color: CC.candy,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                                 if (deciding) ...[
-                                  const SizedBox(height: 12),
+                                  const SizedBox(height: 10),
                                   Text(
                                     keepHint
                                         ? 'Release to Keep'
@@ -1323,7 +1377,16 @@ class _RevealStage extends StatelessWidget {
                                               : CC.inkMuted,
                                       fontWeight: FontWeight.w600,
                                       fontSize: 13,
-                                      height: 1,
+                                    ),
+                                  ),
+                                ] else if (!flipped) ...[
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    'Tap to skip flip',
+                                    style: AppText.jakarta(
+                                      color: CC.inkMuted,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
                                     ),
                                   ),
                                 ],
@@ -1344,7 +1407,6 @@ class _RevealStage extends StatelessWidget {
   }
 }
 
-/// Remaining backs fan behind the enlarged active card (flip + swipe).
 class _ActiveLineup extends StatelessWidget {
   const _ActiveLineup({
     required this.remaining,
@@ -1373,60 +1435,47 @@ class _ActiveLineup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final waiting = math.max(0, remaining - 1);
-    // Show up to ~8 peeks so a 14-card pull still reads as a stack.
-    final peekCount = math.min(waiting, 8);
-    final peekW = cardW * 0.88;
-    final peekH = cardH * 0.88;
+    final peekCount = math.min(waiting, 5);
 
     return SizedBox(
-      width: cardW + peekCount * 18,
-      height: cardH + 24,
+      width: cardW + 20,
+      height: cardH + peekCount * 7.0 + 12,
       child: Stack(
         alignment: Alignment.center,
         clipBehavior: Clip.none,
         children: [
-          // Waiting cards — cascading stack behind / to the sides.
           for (var i = peekCount; i >= 1; i--)
             Transform.translate(
-              offset: Offset(
-                (i.isEven ? 1 : -1) * (10.0 + i * 11.0),
-                6.0 + i * 5.0,
-              ),
-              child: Transform.rotate(
-                angle: (i.isEven ? 1 : -1) * (0.03 + i * 0.012),
-                child: Opacity(
-                  opacity: (0.92 - i * 0.06).clamp(0.35, 0.9),
-                  child: _CardBack(width: peekW, height: peekH),
-                ),
+              offset: Offset(0, -i * 6.0),
+              child: Opacity(
+                opacity: (0.9 - i * 0.08).clamp(0.45, 0.92),
+                child: _CardBack(width: cardW, height: cardH),
               ),
             ),
-          // Active focused card.
           Transform.translate(
             offset: Offset(swipeDx * 0.45, 0),
             child: Transform.rotate(
               angle: swipeDx / 480,
               child: Container(
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(18),
                   boxShadow: [
                     BoxShadow(
-                      color: ambient.withValues(
-                        alpha: 0.35 + pulse * 0.25,
-                      ),
-                      blurRadius: 36 + pulse * 18,
-                      spreadRadius: 2,
+                      color: ambient.withValues(alpha: 0.3 + pulse * 0.22),
+                      blurRadius: 28 + pulse * 14,
+                      spreadRadius: 1,
                     ),
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.5),
-                      blurRadius: 28,
-                      offset: const Offset(0, 16),
+                      color: Colors.black.withValues(alpha: 0.45),
+                      blurRadius: 22,
+                      offset: const Offset(0, 12),
                     ),
                   ],
                 ),
                 child: Transform(
                   alignment: Alignment.center,
                   transform: Matrix4.identity()
-                    ..setEntry(3, 2, 0.0018 / (cardW / 200))
+                    ..setEntry(3, 2, 0.0016 / (cardW / 200))
                     ..rotateY(displayAngle),
                   child: showFront
                       ? FoilChromatic(
@@ -1438,7 +1487,7 @@ class _ActiveLineup extends StatelessWidget {
                             width: cardW,
                             height: cardH,
                             foil: false,
-                            radius: 18,
+                            radius: 16,
                           ),
                         )
                       : _CardBack(width: cardW, height: cardH),
@@ -1451,5 +1500,3 @@ class _ActiveLineup extends StatelessWidget {
     );
   }
 }
-
-

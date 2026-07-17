@@ -41,6 +41,81 @@ class CardDef {
   String get thumbArtUrl =>
       imageUrlSmall.isNotEmpty ? imageUrlSmall : imageUrl;
 
+  /// Riftbound Battlefields are printed landscape; TCGPlayer art is face-on
+  /// (horizontal long edge) — use landscape frame + [BoxFit.contain], do not
+  /// force a 90° rotate unless an asset is known to be sideways.
+  bool get isLandscapeCard {
+    final t = (cardType ?? '').toLowerCase();
+    return t.contains('battlefield');
+  }
+
+  /// Face-on layout aspect (width / height): portrait 2.5:3.5, landscape 3.5:2.5.
+  double get artAspectRatio =>
+      isLandscapeCard ? 3.5 / 2.5 : 2.5 / 3.5;
+
+  /// Pokémon catalog ids are prefixed `pkm_`; everything else is Riftbound.
+  bool get isPokemonCard =>
+      id.startsWith('pkm_') || id.startsWith('pokemon_');
+
+  String get franchiseId => isPokemonCard ? 'pokemon' : 'riftbound';
+
+  /// Uppercase chip label for detail / collection tags.
+  String get franchiseTag => isPokemonCard ? 'POKÉMON' : 'RIFTBOUND';
+
+  String get franchiseDisplayName =>
+      isPokemonCard ? 'Pokémon' : 'Riftbound';
+
+  /// Approximate print year for slab / detail chrome.
+  String get setYear => switch (setCode) {
+        'OGS' || 'OGN' || 'SFD' || 'UNL' => '2025',
+        'MEW' || 'OBF' || 'PAL' => '2023',
+        'TWM' || 'SSP' || 'PRE' => '2024',
+        _ => isPokemonCard ? '2024' : '2025',
+      };
+
+  /// PSA slab set line, e.g. "2023 SV: SCARLET & VIOLET 151".
+  String get slabSetLabel => '$setYear $setName'.toUpperCase();
+
+  /// No real secondary-market spot (TCGCSV/TCGplayer) — rip-only / speculative.
+  bool get isUnlisted => marketPrice <= 0;
+
+  CardDef copyWith({
+    String? id,
+    int? productId,
+    String? setCode,
+    String? setName,
+    String? name,
+    Rarity? rarity,
+    double? marketPrice,
+    String? imageUrl,
+    String? imageUrlSmall,
+    String? imageKey,
+    String? number,
+    String? cardType,
+    String? domain,
+    double? foilMarketPrice,
+    bool clearFoilMarketPrice = false,
+  }) {
+    return CardDef(
+      id: id ?? this.id,
+      productId: productId ?? this.productId,
+      setCode: setCode ?? this.setCode,
+      setName: setName ?? this.setName,
+      name: name ?? this.name,
+      rarity: rarity ?? this.rarity,
+      marketPrice: marketPrice ?? this.marketPrice,
+      imageUrl: imageUrl ?? this.imageUrl,
+      imageUrlSmall: imageUrlSmall ?? this.imageUrlSmall,
+      imageKey: imageKey ?? this.imageKey,
+      number: number ?? this.number,
+      cardType: cardType ?? this.cardType,
+      domain: domain ?? this.domain,
+      foilMarketPrice: clearFoilMarketPrice
+          ? null
+          : (foilMarketPrice ?? this.foilMarketPrice),
+    );
+  }
+
   factory CardDef.fromJson(Map<String, dynamic> m) {
     return CardDef(
       id: m['id'] as String,
@@ -384,6 +459,9 @@ class MarketListing {
     this.grade,
     this.gradingCompany,
     this.sellerAlias,
+    this.rating,
+    this.salesCount,
+    this.shipsInDays,
   });
 
   final String id;
@@ -400,6 +478,13 @@ class MarketListing {
   final double? grade;
   final GradingCompany? gradingCompany;
   final String? sellerAlias;
+  final double? rating;
+  final int? salesCount;
+  final int? shipsInDays;
+
+  double get displayRating => rating ?? sellerType.rating;
+  int get displaySales => salesCount ?? sellerType.typicalSales;
+  int get displayShipsInDays => shipsInDays ?? sellerType.shipsInDays;
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -416,26 +501,35 @@ class MarketListing {
         'grade': grade,
         'gradingCompany': gradingCompany?.name,
         'sellerAlias': sellerAlias,
+        'rating': rating,
+        'salesCount': salesCount,
+        'shipsInDays': shipsInDays,
       };
 
-  factory MarketListing.fromJson(Map<String, dynamic> j) => MarketListing(
-        id: j['id'] as String,
-        sellerType: SellerType.values.byName(j['sellerType'] as String),
-        title: j['title'] as String,
-        price: (j['price'] as num).toDouble(),
-        cardId: j['cardId'] as String,
-        foil: j['foil'] as bool? ?? false,
-        condition: Condition.values.byName(j['condition'] as String),
-        centeringLR: (j['centeringLR'] as num?)?.toDouble() ?? 50,
-        centeringTB: (j['centeringTB'] as num?)?.toDouble() ?? 50,
-        isFake: j['isFake'] as bool? ?? false,
-        graded: j['graded'] as bool? ?? false,
-        grade: (j['grade'] as num?)?.toDouble(),
-        gradingCompany: j['gradingCompany'] != null
-            ? GradingCompanyX.parse(j['gradingCompany'] as String?)
-            : null,
-        sellerAlias: j['sellerAlias'] as String?,
-      );
+  factory MarketListing.fromJson(Map<String, dynamic> j) {
+    final seller = SellerType.values.byName(j['sellerType'] as String);
+    return MarketListing(
+      id: j['id'] as String,
+      sellerType: seller,
+      title: j['title'] as String,
+      price: (j['price'] as num).toDouble(),
+      cardId: j['cardId'] as String,
+      foil: j['foil'] as bool? ?? false,
+      condition: Condition.values.byName(j['condition'] as String),
+      centeringLR: (j['centeringLR'] as num?)?.toDouble() ?? 50,
+      centeringTB: (j['centeringTB'] as num?)?.toDouble() ?? 50,
+      isFake: j['isFake'] as bool? ?? false,
+      graded: j['graded'] as bool? ?? false,
+      grade: (j['grade'] as num?)?.toDouble(),
+      gradingCompany: j['gradingCompany'] != null
+          ? GradingCompanyX.parse(j['gradingCompany'] as String?)
+          : null,
+      sellerAlias: j['sellerAlias'] as String?,
+      rating: (j['rating'] as num?)?.toDouble() ?? seller.rating,
+      salesCount: j['salesCount'] as int? ?? seller.typicalSales,
+      shipsInDays: j['shipsInDays'] as int? ?? seller.shipsInDays,
+    );
+  }
 }
 
 class OnlineListing {
@@ -481,6 +575,7 @@ class GradingJob {
     this.ready = false,
     this.revealed = false,
     this.resultGrade,
+    this.readyAtMs,
   });
 
   final String id;
@@ -490,6 +585,8 @@ class GradingJob {
   bool ready;
   bool revealed;
   double? resultGrade;
+  /// Epoch ms when realtime grading completes (~10s). Null = legacy day jobs.
+  int? readyAtMs;
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -499,16 +596,18 @@ class GradingJob {
         'ready': ready,
         'revealed': revealed,
         'resultGrade': resultGrade,
+        'readyAtMs': readyAtMs,
       };
 
   factory GradingJob.fromJson(Map<String, dynamic> j) => GradingJob(
         id: j['id'] as String,
         ownedInstanceId: j['ownedInstanceId'] as String,
         company: GradingCompanyX.parse(j['company'] as String?),
-        turnsLeft: j['turnsLeft'] as int,
+        turnsLeft: j['turnsLeft'] as int? ?? 0,
         ready: j['ready'] as bool? ?? false,
         revealed: j['revealed'] as bool? ?? false,
         resultGrade: (j['resultGrade'] as num?)?.toDouble(),
+        readyAtMs: j['readyAtMs'] as int?,
       );
 }
 
@@ -630,7 +729,7 @@ class UpgradeDef {
 }
 
 class PlayerStats {
-  PlayerStats({
+  const PlayerStats({
     this.cash = 500,
     this.candy = 50000,
     this.xp = 0,
@@ -638,20 +737,44 @@ class PlayerStats {
     this.packsOpened = 0,
     this.cardsSold = 0,
     this.gemsPulled = 0,
+    this.ownedUpgrades = const {},
+    this.unlockedAchievements = const {},
+  });
+
+  final double cash;
+  final int candy;
+  final int xp;
+  final int businessLevel;
+  final int packsOpened;
+  final int cardsSold;
+  final int gemsPulled;
+  final Set<String> ownedUpgrades;
+  final Set<String> unlockedAchievements;
+
+  PlayerStats copyWith({
+    double? cash,
+    int? candy,
+    int? xp,
+    int? businessLevel,
+    int? packsOpened,
+    int? cardsSold,
+    int? gemsPulled,
     Set<String>? ownedUpgrades,
     Set<String>? unlockedAchievements,
-  })  : ownedUpgrades = ownedUpgrades ?? {},
-        unlockedAchievements = unlockedAchievements ?? {};
-
-  double cash;
-  int candy;
-  int xp;
-  int businessLevel;
-  int packsOpened;
-  int cardsSold;
-  int gemsPulled;
-  Set<String> ownedUpgrades;
-  Set<String> unlockedAchievements;
+  }) {
+    return PlayerStats(
+      cash: cash ?? this.cash,
+      candy: candy ?? this.candy,
+      xp: xp ?? this.xp,
+      businessLevel: businessLevel ?? this.businessLevel,
+      packsOpened: packsOpened ?? this.packsOpened,
+      cardsSold: cardsSold ?? this.cardsSold,
+      gemsPulled: gemsPulled ?? this.gemsPulled,
+      ownedUpgrades: ownedUpgrades ?? this.ownedUpgrades,
+      unlockedAchievements:
+          unlockedAchievements ?? this.unlockedAchievements,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'cash': cash,

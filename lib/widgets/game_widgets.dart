@@ -33,6 +33,8 @@ class CardArt extends StatelessWidget {
     this.foil = false,
     this.radius = 12,
     this.autoPlay = true,
+    /// Face-on full card — avoid [BoxFit.cover] cropping edges / landmarks.
+    this.fit = BoxFit.contain,
   });
 
   final String url;
@@ -42,6 +44,7 @@ class CardArt extends StatelessWidget {
   final double radius;
   /// Continuous foil animation — off in grids/lists for performance.
   final bool autoPlay;
+  final BoxFit fit;
 
   @override
   Widget build(BuildContext context) {
@@ -62,7 +65,8 @@ class CardArt extends StatelessWidget {
               imageUrl: url,
               width: width.isFinite ? width : null,
               height: height.isFinite ? height : null,
-              fit: BoxFit.cover,
+              fit: fit,
+              alignment: Alignment.center,
               filterQuality: FilterQuality.high,
               memCacheWidth: cacheW,
               memCacheHeight: cacheH,
@@ -177,8 +181,6 @@ class OwnedCardTile extends ConsumerStatefulWidget {
   final double fair;
   final VoidCallback? onTap;
 
-  static const _cardAspect = 2.5 / 3.5;
-
   @override
   ConsumerState<OwnedCardTile> createState() => _OwnedCardTileState();
 }
@@ -257,7 +259,8 @@ class _OwnedCardTileState extends ConsumerState<OwnedCardTile>
         curve: Curves.easeOutCubic,
         child: Material(
           color: Colors.transparent,
-          clipBehavior: Clip.hardEdge,
+          // Clip splash/art only via InkWell radius; keep footer text unclipped.
+          clipBehavior: Clip.none,
           borderRadius: BorderRadius.circular(12),
           child: InkWell(
             onTap: widget.onTap,
@@ -292,26 +295,29 @@ class _OwnedCardTileState extends ConsumerState<OwnedCardTile>
                               compact: true,
                               animateEnter: false,
                               cardName: def.name,
-                              setLabel:
-                                  '${def.setCode} ${def.setName}'.toUpperCase(),
+                              setLabel: def.slabSetLabel,
                               cardNumber: def.number,
-                              child: CardArt(
+                              child: PortraitSlotArt(
                                 url: def.displayArtUrl,
                                 foil: owned.foil,
-                                autoPlay: false,
                                 width: slabW,
-                                height: slabW / OwnedCardTile._cardAspect,
+                                height: slabW / (2.5 / 3.5),
+                                landscape: def.isLandscapeCard,
                                 radius: 4,
+                                autoPlay: false,
                               ),
                             ),
                           ),
                         );
                       }
 
+                      // Always use a portrait footprint so every tile matches.
+                      // Landscape Battlefields are rotated + scaled to fill.
+                      const portraitAspect = 2.5 / 3.5;
                       final byW = maxW;
-                      final byH = maxH * OwnedCardTile._cardAspect;
+                      final byH = maxH * portraitAspect;
                       final cardW = byW < byH ? byW : byH;
-                      final cardH = cardW / OwnedCardTile._cardAspect;
+                      final cardH = cardW / portraitAspect;
                       return Center(
                         child: Hero(
                           tag: heroTag,
@@ -326,12 +332,12 @@ class _OwnedCardTileState extends ConsumerState<OwnedCardTile>
                                 ),
                               ],
                             ),
-                            child: CardArt(
+                            child: PortraitSlotArt(
                               url: def.displayArtUrl,
                               foil: owned.foil,
-                              autoPlay: false,
                               width: cardW,
                               height: cardH,
+                              landscape: def.isLandscapeCard,
                               radius: 10,
                             ),
                           ),
@@ -340,52 +346,125 @@ class _OwnedCardTileState extends ConsumerState<OwnedCardTile>
                     },
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  def.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppText.jakarta(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 11,
-                    height: 1.15,
-                    color: CC.ink,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        [
-                          def.setCode,
-                          if (def.number != null) '#${def.number}',
-                          if (owned.foil) 'Foil',
-                          if (owned.graded) 'PSA',
-                        ].join(' · '),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(6, 5, 6, 2),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        def.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.left,
                         style: AppText.jakarta(
-                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 11,
                           height: 1.15,
-                          fontWeight: FontWeight.w500,
-                          color: CC.inkMuted,
+                          color: CC.ink,
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '\$${fair.toStringAsFixed(2)}',
-                      style: AppText.jakarta(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 11,
-                        height: 1.15,
-                        color: CC.scan,
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              [
+                                def.franchiseTag,
+                                def.setCode,
+                                if (def.number != null) '#${def.number}',
+                                if (owned.foil) 'Foil',
+                                if (owned.graded) 'PSA',
+                              ].join(' · '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.left,
+                              style: AppText.jakarta(
+                                fontSize: 10,
+                                height: 1.15,
+                                fontWeight: FontWeight.w500,
+                                color: CC.inkMuted,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '\$${fair.toStringAsFixed(2)}',
+                            softWrap: false,
+                            style: AppText.jakarta(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 11,
+                              height: 1.15,
+                              color: CC.scan,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Grid/market portrait slot. Landscape (Battlefield) art is rotated 90° and
+/// scaled to fill the same footprint as portrait cards (Rare Candy–style).
+class PortraitSlotArt extends StatelessWidget {
+  const PortraitSlotArt({
+    super.key,
+    required this.url,
+    required this.width,
+    required this.height,
+    required this.landscape,
+    this.foil = false,
+    this.radius = 10,
+    this.autoPlay = false,
+  });
+
+  final String url;
+  final double width;
+  final double height;
+  final bool landscape;
+  final bool foil;
+  final double radius;
+  final bool autoPlay;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!landscape) {
+      return CardArt(
+        url: url,
+        foil: foil,
+        autoPlay: autoPlay,
+        width: width,
+        height: height,
+        radius: radius,
+        fit: BoxFit.contain,
+      );
+    }
+
+    return SizedBox(
+      width: width,
+      height: height,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: FittedBox(
+          fit: BoxFit.cover,
+          clipBehavior: Clip.hardEdge,
+          child: RotatedBox(
+            quarterTurns: 1,
+            child: CardArt(
+              url: url,
+              foil: foil,
+              autoPlay: autoPlay,
+              width: height * (3.5 / 2.5),
+              height: height,
+              radius: 0,
+              fit: BoxFit.cover,
             ),
           ),
         ),

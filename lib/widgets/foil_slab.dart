@@ -331,7 +331,7 @@ class _SlabCaseState extends State<SlabCase> with TickerProviderStateMixin {
         : widget.grade.toStringAsFixed(widget.grade % 1 == 0 ? 0 : 1);
     final descriptor = psaGradeDescriptor(widget.grade);
     final setLine =
-        (widget.setLabel ?? '${widget.year ?? '2025'} RIFTBOUND').toUpperCase();
+        (widget.setLabel ?? '${widget.year ?? '2024'} SINGLE').toUpperCase();
     final nameLine = (widget.cardName ?? 'CARD').toUpperCase();
     final numberLine =
         widget.cardNumber != null && widget.cardNumber!.isNotEmpty

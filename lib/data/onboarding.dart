@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 const _kOnboarded = 'cardcandy_onboarded_v1';
 const _kGame = 'cardcandy_selected_game';
+const _kFastRip = 'vaultrex_fast_rip';
 
 class OnboardingStore {
   static Future<bool> isDone() async {
@@ -25,6 +26,16 @@ class OnboardingStore {
     final p = await SharedPreferences.getInstance();
     await p.remove(_kOnboarded);
     await p.remove(_kGame);
+  }
+
+  static Future<bool> isFastRip() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getBool(_kFastRip) ?? false;
+  }
+
+  static Future<void> setFastRip(bool value) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setBool(_kFastRip, value);
   }
 }
 
@@ -55,7 +66,7 @@ const kGames = [
   GameOption(
     id: 'pokemon',
     name: 'Pokémon',
-    enabled: false,
+    enabled: true,
     color: Color(0xFFFFCB05),
     logoAsset: 'assets/logos/pokemon.svg',
   ),

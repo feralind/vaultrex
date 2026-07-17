@@ -37,8 +37,16 @@ class _PackGroup {
   final double sellCash;
 }
 
-class SealedInventorySheet extends ConsumerWidget {
+class SealedInventorySheet extends ConsumerStatefulWidget {
   const SealedInventorySheet({super.key});
+
+  @override
+  ConsumerState<SealedInventorySheet> createState() =>
+      _SealedInventorySheetState();
+}
+
+class _SealedInventorySheetState extends ConsumerState<SealedInventorySheet> {
+  bool _busy = false;
 
   List<_PackGroup> _groups(GameState state, GameNotifier notifier) {
     final map = <String, List<UnopenedPack>>{};
@@ -98,32 +106,30 @@ class SealedInventorySheet extends ConsumerWidget {
     }
   }
 
-  Future<void> _openOne(
-    BuildContext context,
-    WidgetRef ref,
-    _PackGroup group,
-  ) async {
-    final pack = group.packs.first;
-    final imageUrl = group.imageUrl;
-    // Navigator context (not ScaffoldMessenger) — required to host pack theater.
-    final navContext = Navigator.of(context, rootNavigator: true).context;
-    Navigator.pop(context);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!navContext.mounted) return;
-      showPackTheater(
-        navContext,
-        ref,
-        packId: pack.id,
-        packImageUrl: imageUrl,
-      );
-    });
+  Future<void> _openOne(_PackGroup group) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final pack = group.packs.first;
+      final imageUrl = group.imageUrl;
+      // Navigator context (not ScaffoldMessenger) — required to host pack theater.
+      final navContext = Navigator.of(context, rootNavigator: true).context;
+      Navigator.pop(context);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!navContext.mounted) return;
+        showPackTheater(
+          navContext,
+          ref,
+          packId: pack.id,
+          packImageUrl: imageUrl,
+        );
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
-  Future<void> _sellOne(
-    BuildContext context,
-    WidgetRef ref,
-    _PackGroup group,
-  ) async {
+  Future<void> _sellOne(_PackGroup group) async {
     final pack = group.packs.first;
     final cash = group.sellCash;
     final candy = (cash * 100).round();
@@ -190,7 +196,7 @@ class SealedInventorySheet extends ConsumerWidget {
         ),
       ),
     );
-    if (choice == null || !context.mounted) return;
+    if (choice == null || !mounted) return;
     await ref.read(gameProvider.notifier).sellUnopenedPack(
           pack.id,
           refundAs: choice,
@@ -198,7 +204,7 @@ class SealedInventorySheet extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final state = ref.watch(gameProvider);
     final notifier = ref.read(gameProvider.notifier);
     final groups = _groups(state, notifier);
@@ -294,6 +300,9 @@ class SealedInventorySheet extends ConsumerWidget {
                               colors: _colorsFor(g.setCode),
                               width: 64,
                               height: 92,
+                              franchiseId: ref.watch(
+                                gameProvider.select((s) => s.franchiseId),
+                              ),
                             ),
                             const SizedBox(width: 14),
                             Expanded(
@@ -333,8 +342,9 @@ class SealedInventorySheet extends ConsumerWidget {
                                         child: SizedBox(
                                           height: 40,
                                           child: FilledButton(
-                                            onPressed: () =>
-                                                _openOne(context, ref, g),
+                                            onPressed: _busy
+                                                ? null
+                                                : () => _openOne(g),
                                             child: Text(
                                               'Open',
                                               style:
@@ -350,8 +360,9 @@ class SealedInventorySheet extends ConsumerWidget {
                                         child: SizedBox(
                                           height: 40,
                                           child: OutlinedButton(
-                                            onPressed: () =>
-                                                _sellOne(context, ref, g),
+                                            onPressed: _busy
+                                                ? null
+                                                : () => _sellOne(g),
                                             style: OutlinedButton.styleFrom(
                                               foregroundColor: CC.candy,
                                               side: const BorderSide(

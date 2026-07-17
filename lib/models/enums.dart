@@ -84,6 +84,28 @@ extension SellerTypeX on SellerType {
         SellerType.scammy => 'Suspicious Seller',
         SellerType.goblin => 'Goblin Auction',
       };
+
+  /// Simulated positive feedback % for Feebay-style listings.
+  double get rating => switch (this) {
+        SellerType.serious => 98.5,
+        SellerType.clueless => 94.0,
+        SellerType.goblin => 91.2,
+        SellerType.scammy => 72.4,
+      };
+
+  int get typicalSales => switch (this) {
+        SellerType.serious => 4200,
+        SellerType.clueless => 180,
+        SellerType.goblin => 860,
+        SellerType.scammy => 45,
+      };
+
+  int get shipsInDays => switch (this) {
+        SellerType.serious => 1,
+        SellerType.clueless => 3,
+        SellerType.goblin => 2,
+        SellerType.scammy => 5,
+      };
 }
 
 extension SealedKindX on SealedKind {
@@ -99,11 +121,15 @@ extension SealedKindX on SealedKind {
 extension GradingCompanyX on GradingCompany {
   String get label => 'PSA';
 
-  String get blurb => 'Prestige slabs. Slow, expensive, respected.';
+  String get blurb => 'Prestige slabs. Fast sim turnaround, respected.';
 
   int get fee => 35;
 
-  int get turns => 3;
+  /// Legacy day-ticks (Advance Day). Realtime grading uses ~10s wall clock.
+  int get turns => 0;
+
+  /// Simulated PSA wait in the app (not multi-day).
+  int get realtimeSeconds => 10;
 
   /// Maps legacy save values (zag / pza / bucket) onto PSA.
   static GradingCompany parse(String? name) {

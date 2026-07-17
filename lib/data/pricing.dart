@@ -2,6 +2,7 @@ import 'dart:math';
 
 import '../models/enums.dart';
 import '../models/models.dart';
+
 class Pricing {
   static double trendMult(List<MarketEvent> events, String setCode) {
     var m = 1.0;
@@ -11,14 +12,50 @@ class Pricing {
     return m;
   }
 
+  /// Speculative floor by rarity when no TCGCSV spot exists.
+  static double speculativeBase(CardDef def) {
+    final r = def.rarity;
+    final floor = switch (r) {
+      Rarity.common => 0.35,
+      Rarity.uncommon => 0.85,
+      Rarity.rare => 4.5,
+      Rarity.epic => 18,
+      Rarity.showcase => 55,
+      Rarity.overnumbered => 80,
+      Rarity.signature => 120,
+      Rarity.ultimate => 200,
+      Rarity.promo => 12,
+      Rarity.token => 0.15,
+      Rarity.none => 0.5,
+    };
+    // Pre-market premium — cards not on real secondary market yet.
+    final premium = switch (r) {
+      Rarity.showcase ||
+      Rarity.signature ||
+      Rarity.ultimate ||
+      Rarity.overnumbered =>
+        2.5,
+      Rarity.epic => 2.1,
+      Rarity.rare => 1.85,
+      _ => 1.6,
+    };
+    return floor * premium;
+  }
+
   static double fairValue(
     CardDef def,
     OwnedCard owned, {
     List<MarketEvent> events = const [],
   }) {
-    final base = owned.foil
-        ? (def.foilMarketPrice ?? def.marketPrice * 2.2)
-        : def.marketPrice;
+    double base;
+    if (def.isUnlisted) {
+      base = speculativeBase(def);
+      if (owned.foil) base *= 2.0;
+    } else {
+      base = owned.foil
+          ? (def.foilMarketPrice ?? def.marketPrice * 2.2)
+          : def.marketPrice;
+    }
     var v = base * owned.condition.valueMult;
     final center = owned.centeringScore / 100.0;
     v *= 0.85 + center * 0.2;

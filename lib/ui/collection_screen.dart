@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../game/game_controller.dart';
-import '../models/enums.dart';
 import '../models/models.dart';
 import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import '../widgets/card_detail_sheet.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/portfolio_value_chart.dart';
+import '../widgets/psa_grading_progress.dart';
 import 'create_binder_sheet.dart';
 import 'flip_layout.dart';
 import 'sealed_inventory.dart';
@@ -86,6 +86,16 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen>
                       style: AppText.jakarta(
                         fontWeight: FontWeight.w800,
                         fontSize: 18,
+                      ),
+                    ),
+                    Text(
+                      notifier.activeGameId == 'pokemon'
+                          ? 'Pokémon collection'
+                          : 'Riftbound collection',
+                      style: AppText.jakarta(
+                        color: CC.inkMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                     Row(
@@ -466,6 +476,9 @@ class _CardsTab extends ConsumerWidget {
       return true;
     }).toList();
 
+    final setCodes = notifier.catalog.bySet.keys.toList()..sort();
+    final chipSets = ['ALL', ...setCodes];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -514,7 +527,7 @@ class _CardsTab extends ConsumerWidget {
           child: ListView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            children: ['ALL', 'OGS', 'OGN', 'SFD', 'UNL']
+            children: chipSets
                 .map(
                   (s) => Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -605,6 +618,7 @@ class _CardsTab extends ConsumerWidget {
           def: def,
           allMarket: state.market,
           fairPrice: fair,
+          suggestedAsk: notifier.suggestedAskFor(owned),
           onListForSale: (ask) => notifier.listOnline(owned.instanceId, ask),
           onCancelListing: () async {
             OnlineListing? match;
@@ -618,8 +632,14 @@ class _CardsTab extends ConsumerWidget {
               await notifier.cancelOnlineListing(match.id);
             }
           },
-          onSendToPsa: () =>
-              notifier.sendToGrading(owned.instanceId, GradingCompany.psa),
+          onSendToPsa: () async {
+            Navigator.pop(context);
+            await showPsaGradingProgress(
+              context,
+              ref,
+              instanceId: owned.instanceId,
+            );
+          },
         );
       },
     );
@@ -632,7 +652,9 @@ class _SetsTab extends ConsumerWidget {
     final state = ref.watch(gameProvider);
     final notifier = ref.read(gameProvider.notifier);
     if (!state.ready) return const SizedBox.shrink();
-    final sets = ['OGS', 'OGN', 'SFD', 'UNL'];
+    final sets = notifier.catalog.isPokemon
+        ? notifier.catalog.bySet.keys.toList()
+        : ['OGS', 'OGN', 'SFD', 'UNL'];
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: sets.length,

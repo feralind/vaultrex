@@ -12,15 +12,19 @@ import 'game_widgets.dart';
 
 enum CardDetailMode { buy, owned }
 
-String cardDetailSetYear(String setCode) => switch (setCode) {
-      'OGS' || 'OGN' => '2025',
-      'SFD' => '2025',
-      'UNL' => '2025',
-      _ => '2025',
-    };
+String cardDetailSetYear(String setCode) {
+  // Prefer CardDef.setYear when a def is available; this remains for set-code-only callers.
+  return switch (setCode) {
+    'OGS' || 'OGN' || 'SFD' || 'UNL' => '2025',
+    'MEW' || 'OBF' || 'PAL' => '2023',
+    'TWM' || 'SSP' || 'PRE' => '2024',
+    _ => '2024',
+  };
+}
 
-String cardDetailSlabSetLabel(CardDef def) =>
-    '${cardDetailSetYear(def.setCode)} ${def.setName}'.toUpperCase();
+String cardDetailSlabSetLabel(CardDef def) => def.slabSetLabel;
+
+String cardDetailFranchiseTag(CardDef def) => def.franchiseTag;
 
 /// PSA slab used in Market carousels and detail sheets.
 Widget buildCardDetailSlab({
@@ -67,6 +71,7 @@ class CardDetailSheet extends StatefulWidget {
   })  : mode = CardDetailMode.buy,
         owned = null,
         fairPrice = null,
+        suggestedAsk = null,
         onListForSale = null,
         onCancelListing = null,
         onSendToPsa = null;
@@ -80,6 +85,7 @@ class CardDetailSheet extends StatefulWidget {
     required this.onListForSale,
     required this.onCancelListing,
     required this.onSendToPsa,
+    this.suggestedAsk,
   })  : mode = CardDetailMode.owned,
         listing = null,
         onBuy = null;
@@ -90,6 +96,7 @@ class CardDetailSheet extends StatefulWidget {
   final CardDef def;
   final List<MarketListing> allMarket;
   final double? fairPrice;
+  final double? suggestedAsk;
   final Future<void> Function(String id)? onBuy;
   final Future<void> Function(double ask)? onListForSale;
   final Future<void> Function()? onCancelListing;
@@ -132,7 +139,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
       _foil = owned.foil;
       _condition = owned.condition;
       _ask = TextEditingController(
-        text: (widget.fairPrice ?? 0).toStringAsFixed(2),
+        text: (widget.suggestedAsk ?? widget.fairPrice ?? 0).toStringAsFixed(2),
       );
     }
     PriceHistoryStore.load().then((store) {
@@ -181,7 +188,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
     );
   }
 
-  Map<Condition, double> _conditionPrices() {
+  Map<Condition, double?> _conditionPrices() {
     const keys = [
       Condition.nearMint,
       Condition.lightlyPlayed,
@@ -191,19 +198,23 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
     final siblings = widget.allMarket.where(
       (m) => m.cardId == def.id && !m.graded && m.foil == _foil,
     );
-    final map = <Condition, double>{};
-    final base = _foil
-        ? (def.foilMarketPrice ?? def.marketPrice * 2)
-        : def.marketPrice;
+    final map = <Condition, double?>{};
     for (final c in keys) {
       final matches = siblings.where((m) => m.condition == c);
       if (matches.isEmpty) {
-        map[c] = double.parse((base * c.valueMult).toStringAsFixed(2));
+        map[c] = null; // no real ask — chip still tappable for guide
       } else {
         map[c] = matches.map((m) => m.price).reduce((a, b) => a < b ? a : b);
       }
     }
     return map;
+  }
+
+  double _guideForCondition(Condition c) {
+    final raw = _foil
+        ? (def.foilMarketPrice ?? def.marketPrice * 2)
+        : def.marketPrice;
+    return double.parse((raw * c.valueMult).toStringAsFixed(2));
   }
 
   List<MarketListing> _buyNowListings() {
@@ -336,7 +347,8 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
                         padding: const EdgeInsets.symmetric(horizontal: 3),
                         child: _CondChip(
                           label: e.key.label,
-                          price: e.value,
+                          price: e.value ?? _guideForCondition(e.key),
+                          hasListing: e.value != null,
                           selected: e.key == _condition,
                           onTap: () => setState(() => _condition = e.key),
                         ),
@@ -371,21 +383,25 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
     final heroTag = widget.owned != null
         ? 'card-art-${widget.owned!.instanceId}'
         : 'card-art-buy-${def.id}';
+    final aspect = def.artAspectRatio;
+    // Face-on hero: landscape Battlefields use a wide frame so full art shows.
+    final artW = def.isLandscapeCard ? 168.0 : 126.0;
+    final artH = artW / aspect;
     final art = _graded && _grade != null
         ? buildCardDetailSlab(
             foil: _foil,
             grade: _grade!,
             company: _company,
             def: def,
-            width: 132,
+            width: def.isLandscapeCard ? 148 : 132,
             compact: false,
           )
         : CardArt(
             url: def.displayArtUrl,
             foil: _foil,
             autoPlay: true,
-            width: 126,
-            height: 176,
+            width: artW,
+            height: artH,
             radius: 12,
           );
 
@@ -405,12 +421,27 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
                 spacing: 6,
                 runSpacing: 6,
                 children: [
-                  const _TagChip(label: 'RIFTBOUND'),
+                  _TagChip(label: def.franchiseTag),
                   _TagChip(label: def.setCode),
                   const _TagChip(label: 'EN'),
                   if (_graded) const _TagChip(label: 'PSA'),
+                  if (def.isUnlisted)
+                    const _TagChip(label: 'NOT ON MARKET'),
                 ],
               ),
+              if (def.isUnlisted) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Speculative value — no TCGCSV/TCGplayer spot yet. '
+                  'Pulled from packs; price may settle higher once listed.',
+                  style: AppText.jakarta(
+                    color: CC.accentHot,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    height: 1.35,
+                  ),
+                ),
+              ],
               const SizedBox(height: 10),
               Text(
                 def.name,
@@ -463,7 +494,38 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
     MarketListing primary,
     List<MarketListing> buyList,
   ) {
+    final fair = _guideBase;
+    final deal = primary.price <= fair * 0.92;
+    final warn = primary.sellerType == SellerType.scammy || primary.isFake;
+
     return [
+      if (deal || warn) ...[
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: warn
+                ? const Color(0x33F59E0B)
+                : const Color(0x2234D399),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: warn ? const Color(0xFFF59E0B) : const Color(0xFF34D399),
+            ),
+          ),
+          child: Text(
+            warn
+                ? 'Caution · seller reputation looks weak'
+                    '${primary.isFake ? ' · possible counterfeit risk' : ''}'
+                : 'Best deal · \$${primary.price.toStringAsFixed(2)} vs fair \$${fair.toStringAsFixed(2)}',
+            style: AppText.jakarta(
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+              color: warn ? const Color(0xFFFBBF24) : const Color(0xFF34D399),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
       SizedBox(
         width: double.infinity,
         child: FilledButton(
@@ -484,7 +546,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
       ),
       const SizedBox(height: 22),
       Text(
-        'Buy Now',
+        'All listings · ${buyList.length}',
         style: AppText.jakarta(
           fontWeight: FontWeight.w800,
           fontSize: 16,
@@ -492,7 +554,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
       ),
       const SizedBox(height: 4),
       Text(
-        'Simulated sellers · Riftbound singles',
+        'Sorted by price · seller · condition',
         style: AppText.jakarta(
           color: CC.inkMuted,
           fontSize: 12,
@@ -501,6 +563,9 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
       const SizedBox(height: 12),
       ...buyList.map((m) {
         final platform = _platformFor(m);
+        final rating = m.displayRating.toStringAsFixed(1);
+        final ships = m.displayShipsInDays;
+        final shady = m.sellerType == SellerType.scammy || m.isFake;
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Container(
@@ -551,10 +616,13 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
                         ),
                       ),
                       Text(
-                        '${m.sellerAlias ?? m.sellerType.label} · ${platform.$3}',
+                        '${m.sellerAlias ?? m.sellerType.label}'
+                        ' · $rating% · ${m.displaySales} sold · ${ships}d',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: AppText.jakarta(
                           fontSize: 11,
-                          color: CC.inkMuted,
+                          color: shady ? const Color(0xFFFBBF24) : CC.inkMuted,
                         ),
                       ),
                     ],
@@ -685,7 +753,9 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
             labelText: 'List online',
             prefixText: '\$',
             border: const OutlineInputBorder(),
-            helperText: 'Fair ≈ \$${fair.toStringAsFixed(2)}',
+            helperText: widget.suggestedAsk != null
+                ? 'Comps ≈ \$${widget.suggestedAsk!.toStringAsFixed(2)} · Fair ≈ \$${fair.toStringAsFixed(2)}'
+                : 'Fair ≈ \$${fair.toStringAsFixed(2)}',
           ),
         ),
         const SizedBox(height: 10),
@@ -1060,12 +1130,14 @@ class _CondChip extends StatelessWidget {
     required this.label,
     required this.price,
     required this.selected,
+    this.hasListing = true,
     this.onTap,
   });
 
   final String label;
-  final double? price;
+  final double price;
   final bool selected;
+  final bool hasListing;
   final VoidCallback? onTap;
 
   @override
@@ -1080,7 +1152,13 @@ class _CondChip extends StatelessWidget {
           decoration: BoxDecoration(
             color: selected ? CC.accent.withValues(alpha: 0.18) : CC.card,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: selected ? CC.accent : CC.line),
+            border: Border.all(
+              color: selected
+                  ? CC.accent
+                  : hasListing
+                      ? CC.line
+                      : CC.line.withValues(alpha: 0.5),
+            ),
           ),
           child: Column(
             children: [
@@ -1089,15 +1167,18 @@ class _CondChip extends StatelessWidget {
                 style: AppText.jakarta(
                   fontWeight: FontWeight.w800,
                   fontSize: 12,
+                  color: hasListing ? CC.ink : CC.inkMuted,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
-                price == null ? '—' : '\$${price!.toStringAsFixed(0)}',
+                hasListing ? '\$${price.toStringAsFixed(0)}' : '—',
                 style: AppText.jakarta(
                   fontWeight: FontWeight.w700,
-                  fontSize: 12,
-                  color: const Color(0xFF34D399),
+                  fontSize: 11,
+                  color: hasListing
+                      ? const Color(0xFF34D399)
+                      : CC.inkMuted,
                 ),
               ),
             ],

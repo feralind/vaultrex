@@ -277,6 +277,7 @@ class PackVisual extends StatelessWidget {
     this.showSlab = false,
     this.slabChild,
     this.halfCrop = false,
+    this.franchiseId,
   });
 
   final String title;
@@ -288,6 +289,8 @@ class PackVisual extends StatelessWidget {
   final bool showSlab;
   final Widget? slabChild;
   final bool halfCrop;
+  /// `pokemon` | `riftbound` — drives foil fallback branding.
+  final String? franchiseId;
 
   @override
   Widget build(BuildContext context) {
@@ -330,6 +333,7 @@ class PackVisual extends StatelessWidget {
                   colors: colors,
                   width: width,
                   height: height,
+                  franchiseId: franchiseId,
                 ),
               )
             else
@@ -338,6 +342,7 @@ class PackVisual extends StatelessWidget {
                 colors: colors,
                 width: width,
                 height: height,
+                franchiseId: franchiseId,
               ),
             if (showSlab && slabChild != null)
               Positioned(
@@ -437,18 +442,22 @@ class _FoilPack extends StatelessWidget {
     required this.colors,
     required this.width,
     required this.height,
+    this.franchiseId,
   });
 
   final String title;
   final List<Color> colors;
   final double width;
   final double height;
+  final String? franchiseId;
 
   @override
   Widget build(BuildContext context) {
     final stops = colors.length == 1
         ? [colors.first, colors.first]
         : colors;
+    final isPokemon = franchiseId == 'pokemon';
+    final brandLabel = isPokemon ? 'POKÉMON' : 'RIFTBOUND';
 
     return Container(
       width: width,
@@ -493,10 +502,22 @@ class _FoilPack extends StatelessWidget {
                 ),
               ),
             ),
-            // Center emblem — free bolt, no square logo frame
+            // Center emblem — franchise mark
             Align(
               alignment: const Alignment(0, -0.18),
-              child: RiftMark(size: width * 0.42, framed: false),
+              child: isPokemon
+                  ? Icon(
+                      Icons.catching_pokemon,
+                      size: width * 0.42,
+                      color: Colors.white.withValues(alpha: 0.92),
+                    )
+                  : Image.asset(
+                      'assets/logos/riftbound.png',
+                      width: width * 0.42,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, _, _) =>
+                          RiftMark(size: width * 0.42, framed: false),
+                    ),
             ),
             // Brand footer integrated into foil face
             Positioned(
@@ -506,7 +527,7 @@ class _FoilPack extends StatelessWidget {
               child: Column(
                 children: [
                   Text(
-                    'VAULTREX',
+                    brandLabel,
                     textAlign: TextAlign.center,
                     style: AppText.jakarta(
                       fontSize: math.max(7, width * 0.075),
@@ -598,6 +619,7 @@ class _MiniSlabState extends State<MiniSlab> {
 
   int _index = 0;
   Timer? _timer;
+  bool? _tickerOn;
 
   List<String> get _urls =>
       widget.imageUrls.where((u) => u.isNotEmpty).toList(growable: false);
@@ -609,6 +631,20 @@ class _MiniSlabState extends State<MiniSlab> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final on = TickerMode.valuesOf(context).enabled;
+    if (_tickerOn == on) return;
+    _tickerOn = on;
+    if (on) {
+      _armTimer();
+    } else {
+      _timer?.cancel();
+      _timer = null;
+    }
+  }
+
+  @override
   void didUpdateWidget(covariant MiniSlab oldWidget) {
     super.didUpdateWidget(oldWidget);
     final urlsChanged = !_sameUrls(oldWidget.imageUrls, widget.imageUrls);
@@ -616,7 +652,7 @@ class _MiniSlabState extends State<MiniSlab> {
       _index = 0;
     }
     if (urlsChanged || oldWidget.rotateInterval != widget.rotateInterval) {
-      _armTimer();
+      if (_tickerOn != false) _armTimer();
     }
   }
 
@@ -639,9 +675,9 @@ class _MiniSlabState extends State<MiniSlab> {
     _timer?.cancel();
     final urls = _urls;
     if (urls.length < 2) return;
+    if (_tickerOn == false) return;
     _timer = Timer.periodic(widget.rotateInterval, (_) {
       if (!mounted) return;
-      // Pause when offstage / route inactive (scroll-dispose handles the rest).
       if (!TickerMode.valuesOf(context).enabled) return;
       setState(() => _index = (_index + 1) % urls.length);
     });
@@ -816,6 +852,58 @@ class CandyBalance extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Tappable cash pill — opens top-up when [onTap] is set.
+class CashBalance extends StatelessWidget {
+  const CashBalance(this.amount, {super.key, this.onTap});
+
+  final double amount;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final child = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: CC.card,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: CC.line),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.payments_outlined, size: 14, color: Color(0xFF34D399)),
+          const SizedBox(width: 5),
+          Text(
+            '\$${amount.toStringAsFixed(2)}',
+            style: AppText.jakarta(
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+              color: const Color(0xFF34D399),
+            ),
+          ),
+          if (onTap != null) ...[
+            const SizedBox(width: 4),
+            Icon(
+              Icons.add_circle_outline,
+              size: 14,
+              color: CC.inkMuted.withValues(alpha: 0.9),
+            ),
+          ],
+        ],
+      ),
+    );
+    if (onTap == null) return child;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: child,
       ),
     );
   }

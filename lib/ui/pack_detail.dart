@@ -7,6 +7,7 @@ import '../models/models.dart';
 import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import '../widgets/brand.dart';
+import '../widgets/fake_google_pay_sheet.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/pack_theater.dart';
 import 'sealed_inventory.dart';
@@ -25,11 +26,21 @@ Future<void> showPackDetail(
   );
 }
 
-class _PackDetailSheet extends ConsumerWidget {
+class _PackDetailSheet extends ConsumerStatefulWidget {
   const _PackDetailSheet({required this.product, required this.listing});
 
   final SealedProduct product;
   final SealedListing listing;
+
+  @override
+  ConsumerState<_PackDetailSheet> createState() => _PackDetailSheetState();
+}
+
+class _PackDetailSheetState extends ConsumerState<_PackDetailSheet> {
+  bool _busy = false;
+
+  SealedProduct get product => widget.product;
+  SealedListing get listing => widget.listing;
 
   List<CardDef> _topHits(GameNotifier notifier) {
     final pool = notifier.catalog.bySet[product.setCode] ?? const <CardDef>[];
@@ -38,7 +49,7 @@ class _PackDetailSheet extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final state = ref.watch(gameProvider);
     final notifier = ref.read(gameProvider.notifier);
     final soldOut = listing.stock <= 0;
@@ -75,6 +86,8 @@ class _PackDetailSheet extends ConsumerWidget {
                     colors: _colorsFor(product.setCode),
                     width: 168,
                     height: 240,
+                    franchiseId:
+                        ref.watch(gameProvider.select((s) => s.franchiseId)),
                   ),
                 ),
                 const SizedBox(height: 18),
@@ -91,7 +104,10 @@ class _PackDetailSheet extends ConsumerWidget {
                 Text(
                   product.kind == SealedKind.box
                       ? 'Booster box · ${product.packsPerBox ?? 24} packs'
-                      : 'Digital Instapack · real Riftbound pulls',
+                      : ref.watch(gameProvider.select((s) => s.franchiseId)) ==
+                              'pokemon'
+                          ? 'Digital Instapack · real Pokémon pulls'
+                          : 'Digital Instapack · real Riftbound pulls',
                   textAlign: TextAlign.center,
                   style: AppText.jakarta(
                     color: CC.inkMuted,
@@ -186,13 +202,11 @@ class _PackDetailSheet extends ConsumerWidget {
                       SizedBox(
                         width: double.infinity,
                         child: FilledButton(
-                          onPressed: state.player.cash < listing.price
+                          onPressed: _busy ||
+                                  notifier.isShopBusy ||
+                                  state.player.cash < listing.price
                               ? null
-                              : () => _buy(
-                                    context,
-                                    ref,
-                                    PaymentMethod.cash,
-                                  ),
+                              : () => _buy(PaymentMethod.cash),
                           child: Text(
                             'BUY NOW  ·  \$${listing.price.toStringAsFixed(2)}',
                           ),
@@ -202,13 +216,11 @@ class _PackDetailSheet extends ConsumerWidget {
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton(
-                          onPressed: state.player.candy < candyCost
+                          onPressed: _busy ||
+                                  notifier.isShopBusy ||
+                                  state.player.candy < candyCost
                               ? null
-                              : () => _buy(
-                                    context,
-                                    ref,
-                                    PaymentMethod.candy,
-                                  ),
+                              : () => _buy(PaymentMethod.candy),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: CC.candy,
                             side: const BorderSide(color: CC.candy),
@@ -241,64 +253,70 @@ class _PackDetailSheet extends ConsumerWidget {
     );
   }
 
-  Future<void> _buy(
-    BuildContext context,
-    WidgetRef ref,
-    PaymentMethod method,
-  ) async {
-    final notifier = ref.read(gameProvider.notifier);
-    final before = ref.read(gameProvider).unopened.length;
-    // Capture a Navigator-hosted context BEFORE popping the sheet.
-    // ScaffoldMessenger.context sits above the Navigator and cannot push dialogs —
-    // that was silently killing the pack theater after payment.
-    final navContext = Navigator.of(context, rootNavigator: true).context;
-    await notifier.buySealed(listing.id, payWith: method);
-    if (!context.mounted) return;
-    final afterState = ref.read(gameProvider);
-    final after = afterState.unopened.length;
-    if (after <= before) {
-      final msg = afterState.message ?? 'Purchase failed.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-      return;
-    }
-    final isRipPack = product.kind == SealedKind.pack;
-    final art = product.displayArtUrl.isNotEmpty ? product.displayArtUrl : null;
-    final added = after - before;
-    // Newly purchased packs are appended — rip the first new one.
-    final newPackId = afterState.unopened[before].id;
-    Navigator.pop(context);
+  Future<void> _buy(PaymentMethod method) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final notifier = ref.read(gameProvider.notifier);
+      final before = ref.read(gameProvider).unopened.length;
+      // Capture a Navigator-hosted context BEFORE popping the sheet.
+      // ScaffoldMessenger.context sits above the Navigator and cannot push dialogs —
+      // that was silently killing the pack theater after payment.
+      final navContext = Navigator.of(context, rootNavigator: true).context;
+      if (method == PaymentMethod.cash) {
+        final paid = await showFakeGooglePay(context, amount: listing.price);
+        if (!paid || !mounted) return;
+      }
+      await notifier.buySealed(listing.id, payWith: method);
+      if (!mounted) return;
+      final afterState = ref.read(gameProvider);
+      final after = afterState.unopened.length;
+      if (after <= before) {
+        final msg = afterState.message ?? 'Purchase failed.';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        return;
+      }
+      final isRipPack = product.kind == SealedKind.pack;
+      final art = product.displayArtUrl.isNotEmpty ? product.displayArtUrl : null;
+      final added = after - before;
+      // Newly purchased packs are appended — rip the first new one.
+      final newPackId = afterState.unopened[before].id;
+      Navigator.pop(context);
 
-    // Boxes / decks / kits land in sealed inventory — do not auto-open theater.
-    if (!isRipPack) {
-      if (!navContext.mounted) return;
-      ScaffoldMessenger.of(navContext).showSnackBar(
-        SnackBar(
-          content: Text(
-            product.kind == SealedKind.box
-                ? 'Added $added sealed packs to inventory. Open them anytime.'
-                : 'Added to sealed inventory. Open or sell anytime.',
+      // Boxes / decks / kits land in sealed inventory — do not auto-open theater.
+      if (!isRipPack) {
+        if (!navContext.mounted) return;
+        ScaffoldMessenger.of(navContext).showSnackBar(
+          SnackBar(
+            content: Text(
+              product.kind == SealedKind.box
+                  ? 'Added $added sealed packs to inventory. Open them anytime.'
+                  : 'Added to sealed inventory. Open or sell anytime.',
+            ),
+            action: SnackBarAction(
+              label: 'View',
+              onPressed: () {
+                if (navContext.mounted) showSealedInventory(navContext);
+              },
+            ),
           ),
-          action: SnackBarAction(
-            label: 'View',
-            onPressed: () {
-              if (navContext.mounted) showSealedInventory(navContext);
-            },
-          ),
-        ),
-      );
-      return;
-    }
+        );
+        return;
+      }
 
-    // Single pack: open rip theater after the sheet has dismissed.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!navContext.mounted) return;
-      showPackTheater(
-        navContext,
-        ref,
-        packId: newPackId,
-        packImageUrl: art,
-      );
-    });
+      // Single pack: open rip theater after the sheet has dismissed.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!navContext.mounted) return;
+        showPackTheater(
+          navContext,
+          ref,
+          packId: newPackId,
+          packImageUrl: art,
+        );
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   static String _fmtCandy(int n) {

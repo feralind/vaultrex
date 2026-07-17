@@ -17,6 +17,7 @@ dependencies:
   cached_network_image: ^3.4.1
   shared_preferences: ^2.5.5
   flutter_svg: ^2.3.0
+  http: ^1.4.0
 
 dev_dependencies:
   flutter_test:
@@ -28,6 +29,9 @@ flutter:
   assets:
     - assets/data/riftbound_catalog.json
     - assets/data/sealed_products.json
+    - assets/data/pokemon_catalog.json
+    - assets/data/pokemon_sealed.json
+    - assets/data/pokemon_featured_packs.json
     - assets/data/price_history.json
     - assets/logos/
     - assets/sealed/

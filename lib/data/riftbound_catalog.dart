@@ -5,24 +5,43 @@ import 'package:flutter/services.dart';
 import '../models/enums.dart';
 import '../models/models.dart';
 
-class RiftboundCatalog {
-  RiftboundCatalog._(this.cards, this.sealed, this.byId, this.bySet);
+/// Spot from TCGCSV / TCGplayer (USD).
+class SpotPrice {
+  const SpotPrice({required this.marketPrice, this.foilMarketPrice});
+  final double marketPrice;
+  final double? foilMarketPrice;
+}
 
+/// Franchise catalog (Riftbound or Pokémon) loaded from bundled TCGCSV JSON.
+class GameCatalog {
+  GameCatalog._(this.gameId, this.cards, this.sealed, this.byId, this.bySet);
+
+  final String gameId;
   final List<CardDef> cards;
   final List<SealedProduct> sealed;
   final Map<String, CardDef> byId;
   final Map<String, List<CardDef>> bySet;
 
-  static RiftboundCatalog? _instance;
+  bool get isPokemon => gameId == 'pokemon';
+  bool get isRiftbound => gameId == 'riftbound';
 
-  static Future<RiftboundCatalog> load() async {
-    if (_instance != null) return _instance!;
+  static final Map<String, GameCatalog> _cache = {};
+
+  static Future<GameCatalog> load([String gameId = 'riftbound']) async {
+    final id = gameId == 'pokemon' ? 'pokemon' : 'riftbound';
+    if (_cache.containsKey(id)) return _cache[id]!;
+
+    final cardAsset = id == 'pokemon'
+        ? 'assets/data/pokemon_catalog.json'
+        : 'assets/data/riftbound_catalog.json';
+    final sealedAsset = id == 'pokemon'
+        ? 'assets/data/pokemon_sealed.json'
+        : 'assets/data/sealed_products.json';
+
     final cardRaw =
-        jsonDecode(await rootBundle.loadString('assets/data/riftbound_catalog.json'))
-            as Map<String, dynamic>;
+        jsonDecode(await rootBundle.loadString(cardAsset)) as Map<String, dynamic>;
     final sealedRaw =
-        jsonDecode(await rootBundle.loadString('assets/data/sealed_products.json'))
-            as Map<String, dynamic>;
+        jsonDecode(await rootBundle.loadString(sealedAsset)) as Map<String, dynamic>;
 
     final cards = <CardDef>[];
     for (final e in (cardRaw['cards'] as List)) {
@@ -30,7 +49,6 @@ class RiftboundCatalog {
       final name = m['name'] as String? ?? '';
       final rarity = parseRarity(m['rarity'] as String?);
       final number = m['number'] as String?;
-      // Singles only — never admit sealed kits/packs/boxes into CardDef catalog.
       if (_looksLikeSealedProduct(name) || number == null || number.isEmpty) {
         continue;
       }
@@ -40,6 +58,11 @@ class RiftboundCatalog {
 
     final sealed = (sealedRaw['products'] as List)
         .map((e) => SealedProduct.fromJson(e as Map<String, dynamic>))
+        .where((p) => !_isCodeCardProduct(p.name))
+        .where((p) =>
+            p.kind == SealedKind.pack ||
+            p.kind == SealedKind.box ||
+            (id == 'pokemon' && p.kind == SealedKind.other && p.marketPrice > 0))
         .where((p) => p.kind == SealedKind.pack || p.kind == SealedKind.box)
         .toList();
 
@@ -48,8 +71,42 @@ class RiftboundCatalog {
     for (final c in cards) {
       bySet.putIfAbsent(c.setCode, () => []).add(c);
     }
-    _instance = RiftboundCatalog._(cards, sealed, byId, bySet);
-    return _instance!;
+    final catalog = GameCatalog._(id, cards, sealed, byId, bySet);
+    _cache[id] = catalog;
+    return catalog;
+  }
+
+  static void clearCache() => _cache.clear();
+
+  /// Apply TCGCSV spot overrides keyed by TCGplayer [productId].
+  GameCatalog withPriceOverrides(Map<int, SpotPrice> overrides) {
+    if (overrides.isEmpty) return this;
+    final next = <CardDef>[];
+    for (final c in cards) {
+      final spot = overrides[c.productId];
+      if (spot == null) {
+        next.add(c);
+        continue;
+      }
+      next.add(
+        c.copyWith(
+          marketPrice: spot.marketPrice,
+          foilMarketPrice: spot.foilMarketPrice,
+          clearFoilMarketPrice:
+              spot.foilMarketPrice == null && c.foilMarketPrice != null
+                  ? false
+                  : false,
+        ),
+      );
+    }
+    final byId = {for (final c in next) c.id: c};
+    final bySet = <String, List<CardDef>>{};
+    for (final c in next) {
+      bySet.putIfAbsent(c.setCode, () => []).add(c);
+    }
+    final catalog = GameCatalog._(gameId, next, sealed, byId, bySet);
+    _cache[gameId] = catalog;
+    return catalog;
   }
 
   List<CardDef> pool(String setCode, Rarity rarity, {bool tokens = false}) {
@@ -65,7 +122,9 @@ class RiftboundCatalog {
   }
 }
 
-/// Sealed product names that sometimes leak into TCGCSV "products" as faux cards.
+/// Back-compat alias used across openers / controller.
+typedef RiftboundCatalog = GameCatalog;
+
 bool _looksLikeSealedProduct(String name) {
   final n = name.toLowerCase();
   return n.contains('booster') ||
@@ -76,12 +135,48 @@ bool _looksLikeSealedProduct(String name) {
       n.contains('event kit') ||
       n.contains('bulk runes') ||
       n.contains('art bundle') ||
+      n.contains('elite trainer') ||
+      n.contains('collection box') ||
+      n.contains('code card') ||
       RegExp(r'\bkit\b').hasMatch(n) ||
       RegExp(r'\bbox\b').hasMatch(n);
 }
 
-/// True when [c] is a real graded-single candidate (collector # + chase rarity/price).
+bool _isCodeCardProduct(String name) =>
+    name.toLowerCase().contains('code card');
+
+Rarity parseRarity(String? raw) {
+  if (raw == null || raw.isEmpty || raw == 'None') return Rarity.none;
+  switch (raw.toLowerCase()) {
+    case 'common':
+      return Rarity.common;
+    case 'uncommon':
+      return Rarity.uncommon;
+    case 'rare':
+      return Rarity.rare;
+    case 'epic':
+      return Rarity.epic;
+    case 'showcase':
+      return Rarity.showcase;
+    case 'overnumbered':
+      return Rarity.overnumbered;
+    case 'signature':
+      return Rarity.signature;
+    case 'ultimate':
+      return Rarity.ultimate;
+    case 'promo':
+      return Rarity.promo;
+    case 'token':
+      return Rarity.token;
+    default:
+      if (raw.toLowerCase().contains('showcase')) return Rarity.showcase;
+      if (raw.toLowerCase().contains('signature')) return Rarity.signature;
+      return Rarity.none;
+  }
+}
+
 bool isSlabEligibleCard(CardDef c) {
+  if (c.isUnlisted || c.marketPrice <= 0) return false;
   if (c.number == null || c.number!.isEmpty) return false;
   if (_looksLikeSealedProduct(c.name)) return false;
   if (c.rarity == Rarity.token || c.rarity == Rarity.none) return false;
@@ -99,10 +194,8 @@ bool isSlabEligibleCard(CardDef c) {
 }
 
 /// HD art URLs for Instapacks PSA mini-slab rotation (set chase cards).
-///
-/// Prefers [isSlabEligibleCard] / rare+, foil-eligible, high [CardDef.marketPrice].
 List<String> chaseArtUrlsForSet(
-  RiftboundCatalog catalog,
+  GameCatalog catalog,
   String setCode, {
   int count = 6,
 }) {
@@ -157,34 +250,4 @@ List<String> chaseArtUrlsForSet(
     if (urls.length >= count) break;
   }
   return urls;
-}
-
-Rarity parseRarity(String? raw) {
-  if (raw == null || raw.isEmpty || raw == 'None') return Rarity.none;
-  switch (raw.toLowerCase()) {
-    case 'common':
-      return Rarity.common;
-    case 'uncommon':
-      return Rarity.uncommon;
-    case 'rare':
-      return Rarity.rare;
-    case 'epic':
-      return Rarity.epic;
-    case 'showcase':
-      return Rarity.showcase;
-    case 'overnumbered':
-      return Rarity.overnumbered;
-    case 'signature':
-      return Rarity.signature;
-    case 'ultimate':
-      return Rarity.ultimate;
-    case 'promo':
-      return Rarity.promo;
-    case 'token':
-      return Rarity.token;
-    default:
-      if (raw.toLowerCase().contains('showcase')) return Rarity.showcase;
-      if (raw.toLowerCase().contains('signature')) return Rarity.signature;
-      return Rarity.none;
-  }
 }

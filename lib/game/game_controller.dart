@@ -6,11 +6,18 @@ import 'package:uuid/uuid.dart';
 import '../data/database.dart';
 import '../data/featured_packs.dart';
 import '../data/pricing.dart';
+import '../data/onboarding.dart';
+import '../data/price_history.dart';
 import '../data/riftbound_catalog.dart';
+import '../data/tcgcsv_price_refresh.dart';
 import '../models/enums.dart';
 import '../models/models.dart';
 import 'featured_pack_opener.dart';
 import 'pack_opener.dart';
+
+part 'rip_session.dart';
+part 'shop_actions.dart';
+part 'grading_actions.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase();
@@ -74,6 +81,7 @@ class GameState {
     required this.lastRipPaid,
     required this.message,
     required this.migrationNotice,
+    this.franchiseId = 'riftbound',
     this.valueHistory = const [],
     this.binders = const [],
     this.recentlyKeptIds = const {},
@@ -81,6 +89,8 @@ class GameState {
 
   final bool ready;
   final bool catalogLoaded;
+  /// Active TCG franchise for this save slot (`riftbound` | `pokemon`).
+  final String franchiseId;
   final PlayerStats player;
   final List<OwnedCard> collection;
   final List<UnopenedPack> unopened;
@@ -103,6 +113,7 @@ class GameState {
   factory GameState.loading() => GameState(
         ready: false,
         catalogLoaded: false,
+        franchiseId: 'riftbound',
         player: PlayerStats(),
         collection: const [],
         unopened: const [],
@@ -125,6 +136,7 @@ class GameState {
   GameState copyWith({
     bool? ready,
     bool? catalogLoaded,
+    String? franchiseId,
     PlayerStats? player,
     List<OwnedCard>? collection,
     List<UnopenedPack>? unopened,
@@ -149,6 +161,7 @@ class GameState {
     return GameState(
       ready: ready ?? this.ready,
       catalogLoaded: catalogLoaded ?? this.catalogLoaded,
+      franchiseId: franchiseId ?? this.franchiseId,
       player: player ?? this.player,
       collection: collection ?? this.collection,
       unopened: unopened ?? this.unopened,
@@ -172,6 +185,7 @@ class GameState {
 
   Map<String, dynamic> toJson() => {
         'v': 2,
+        'franchiseId': franchiseId,
         'player': player.toJson(),
         'collection': collection.map((e) => e.toJson()).toList(),
         'unopened': unopened.map((e) => e.toJson()).toList(),
@@ -182,6 +196,8 @@ class GameState {
         'auctions': auctions.map((e) => e.toJson()).toList(),
         'events': events.map((e) => e.toJson()).toList(),
         'day': day,
+        'lastRip': lastRip?.map((e) => e.toJson()).toList(),
+        'lastRipPaid': lastRipPaid,
         'valueHistory': valueHistory.map((e) => e.toJson()).toList(),
         'binders': binders.map((e) => e.toJson()).toList(),
       };
@@ -193,6 +209,7 @@ class GameState {
       return GameState(
         ready: true,
         catalogLoaded: true,
+        franchiseId: 'riftbound',
         player: PlayerStats(cash: 500),
         collection: const [],
         unopened: const [],
@@ -213,9 +230,13 @@ class GameState {
         recentlyKeptIds: const {},
       );
     }
+    final fid = (j['franchiseId'] as String?) == 'pokemon'
+        ? 'pokemon'
+        : 'riftbound';
     return GameState(
       ready: true,
       catalogLoaded: true,
+      franchiseId: fid,
       player: PlayerStats.fromJson(j['player'] as Map<String, dynamic>),
       collection: (j['collection'] as List? ?? [])
           .map((e) => OwnedCard.fromJson(e as Map<String, dynamic>))
@@ -242,8 +263,10 @@ class GameState {
           .map((e) => MarketEvent.fromJson(e as Map<String, dynamic>))
           .toList(),
       day: j['day'] as int? ?? 1,
-      lastRip: null,
-      lastRipPaid: null,
+      lastRip: (j['lastRip'] as List?)
+          ?.map((e) => OwnedCard.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      lastRipPaid: (j['lastRipPaid'] as num?)?.toDouble(),
       message: null,
       migrationNotice: null,
       valueHistory: (j['valueHistory'] as List? ?? [])
@@ -257,7 +280,9 @@ class GameState {
   }
 }
 
-class GameNotifier extends Notifier<GameState> {
+/// Library-private base so part mixins can share fields without circular
+/// `on GameNotifier` inheritance.
+abstract class _GameNotifierBase extends Notifier<GameState> {
   final _uuid = const Uuid();
   final _rng = Random();
   late RiftboundCatalog _catalog;
@@ -265,47 +290,104 @@ class GameNotifier extends Notifier<GameState> {
   late FeaturedPackOpener _featuredOpener;
   late AppDatabase _db;
 
-  RiftboundCatalog get catalog => _catalog;
+  Future<void>? _ripChain;
+  bool _shopBusy = false;
 
-  @override
-  GameState build() {
-    _db = ref.read(databaseProvider);
-    Future.microtask(_bootstrap);
-    return GameState.loading();
+  bool get isShopBusy => _shopBusy;
+  bool get isRipBusy => _ripChain != null;
+
+  Future<T> _enqueueRip<T>(Future<T> Function() action) {
+    final previous = _ripChain;
+    final done = () async {
+      if (previous != null) {
+        try {
+          await previous;
+        } catch (_) {}
+      }
+      return action();
+    }();
+    final marker = done.then((_) {}, onError: (_) {});
+    _ripChain = marker;
+    marker.whenComplete(() {
+      if (identical(_ripChain, marker)) {
+        _ripChain = null;
+      }
+    });
+    return done;
   }
 
-  Future<void> _bootstrap() async {
-    _catalog = await RiftboundCatalog.load();
+  Future<void> _persist();
+  void _checkAchievements();
+  // ignore: unused_element_parameter — `force` is passed from GameNotifier callers
+  void _recordCollectionValue({bool force = false});
+  double fairFor(OwnedCard card);
+  SealedProduct? sealedById(String id);
+}
+
+class GameNotifier extends _GameNotifierBase
+    with _RipSession, _ShopActions, _GradingActions {
+  RiftboundCatalog get catalog => _catalog;
+
+  String get activeGameId => _catalog.gameId;
+
+  /// Switch franchise (Riftbound ↔ Pokémon). Each franchise keeps its own
+  /// market / sealed / collection slot; wallet (cash/candy/xp) stays shared.
+  Future<void> switchFranchise(String gameId) async {
+    final id = gameId == 'pokemon' ? 'pokemon' : 'riftbound';
+    if (_catalog.gameId == id && state.ready) return;
+
+    // Persist current franchise economy before leaving.
+    if (state.ready && state.catalogLoaded) {
+      await _persist();
+    }
+
+    final wallet = state.player;
+    await OnboardingStore.complete(gameId: id);
+    GameCatalog.clearCache();
+    _catalog = await GameCatalog.load(id);
+    await _applySpotRefresh();
     _opener = RiftboundPackOpener(_catalog);
     _featuredOpener = FeaturedPackOpener(_catalog);
-    final raw = await _db.loadPayload();
+
+    final raw = await _db.loadPayload(id);
+    GameState next;
     if (raw != null) {
       try {
-        var loaded = GameState.fromJson(raw);
-        // Refresh Instapacks inventory from latest sealed catalog (prices/art).
-        loaded = loaded.copyWith(
-          sealedListings: _generateSealedShop(loaded.events),
+        next = GameState.fromJson(raw).copyWith(
+          ready: true,
+          catalogLoaded: true,
+          franchiseId: id,
+          player: wallet,
         );
-        // Upgrade thin / invalid markets (e.g. sealed kits slabbed as PSA).
-        if (loaded.market.isEmpty ||
-            !loaded.market.any((m) => m.graded) ||
-            _marketNeedsRegen(loaded.market)) {
-          loaded = loaded.copyWith(market: _generateSinglesMarket());
+        next = _sanitizeEconomy(next);
+        if (next.market.isEmpty || _marketNeedsRegen(next.market)) {
+          next = next.copyWith(market: _generateSinglesMarket());
         }
-        state = loaded.copyWith(ready: true, catalogLoaded: true);
-        if (state.valueHistory.isEmpty) {
-          _recordCollectionValue(force: true);
+        if (next.sealedListings.isEmpty) {
+          next = next.copyWith(sealedListings: _generateSealedShop(next.events));
         }
-        await _persist();
-        return;
+        next = next.copyWith(
+          message: id == 'pokemon'
+              ? 'Switched to Pokémon — your Pokémon market restored.'
+              : 'Switched to Riftbound — your Riftbound market restored.',
+        );
       } catch (_) {
-        // fall through to fresh
+        next = _freshFranchiseState(id, wallet);
       }
+    } else {
+      next = _freshFranchiseState(id, wallet);
     }
-    final fresh = GameState(
+
+    state = next;
+    await _persist();
+  }
+
+  GameState _freshFranchiseState(String id, PlayerStats wallet) {
+    return GameState(
       ready: true,
       catalogLoaded: true,
-      player: PlayerStats(cash: 500),
+      franchiseId: id,
+      player: wallet,
       collection: const [],
       unopened: const [],
       sealedListings: _generateSealedShop(const []),
@@ -317,7 +399,92 @@ class GameNotifier extends Notifier<GameState> {
       day: 1,
       lastRip: null,
       lastRipPaid: null,
-      message: 'Welcome to Vaultrex — Riftbound sealed & singles.',
+      message: id == 'pokemon'
+          ? 'Switched to Pokémon — sealed & singles stocked.'
+          : 'Switched to Riftbound — sealed & singles stocked.',
+      migrationNotice: null,
+      valueHistory: [
+        CollectionValuePoint(date: DateTime.now(), value: 0),
+      ],
+      binders: const [],
+      recentlyKeptIds: const {},
+    );
+  }
+
+  @override
+  GameState build() {
+    _db = ref.read(databaseProvider);
+    Future.microtask(_bootstrap);
+    return GameState.loading();
+  }
+
+  Future<void> _bootstrap() async {
+    final gameId = await OnboardingStore.selectedGame();
+    await _db.migrateLegacyIfNeeded(gameId);
+    _catalog = await GameCatalog.load(gameId);
+    await _applySpotRefresh();
+    _opener = RiftboundPackOpener(_catalog);
+    _featuredOpener = FeaturedPackOpener(_catalog);
+
+    final walletRaw = await _db.loadWallet();
+    PlayerStats? sharedWallet;
+    if (walletRaw != null) {
+      try {
+        sharedWallet = PlayerStats.fromJson(walletRaw);
+      } catch (_) {}
+    }
+
+    final raw = await _db.loadPayload(gameId);
+    if (raw != null) {
+      try {
+        var loaded = GameState.fromJson(raw).copyWith(
+          ready: true,
+          catalogLoaded: true,
+          franchiseId: gameId,
+        );
+        if (sharedWallet != null) {
+          loaded = loaded.copyWith(player: sharedWallet);
+        }
+        loaded = _sanitizeEconomy(loaded);
+        // Refresh Instapacks inventory from latest sealed catalog (prices/art).
+        loaded = loaded.copyWith(
+          sealedListings: _generateSealedShop(loaded.events),
+        );
+        if (loaded.market.isEmpty ||
+            !loaded.market.any((m) => m.graded) ||
+            _marketNeedsRegen(loaded.market)) {
+          loaded = loaded.copyWith(market: _generateSinglesMarket());
+        }
+        state = loaded;
+        if (state.valueHistory.isEmpty) {
+          _recordCollectionValue(force: true);
+        }
+        await _persist();
+        return;
+      } catch (_) {
+        // fall through to fresh
+      }
+    }
+
+    final fresh = GameState(
+      ready: true,
+      catalogLoaded: true,
+      franchiseId: gameId,
+      player: sharedWallet ?? const PlayerStats(cash: 500),
+      collection: const [],
+      unopened: const [],
+      sealedListings: _generateSealedShop(const []),
+      market: _generateSinglesMarket(),
+      onlineListings: const [],
+      grading: const [],
+      auctions: _generateAuctions(),
+      events: [_randomEvent()],
+      day: 1,
+      lastRip: null,
+      lastRipPaid: null,
+      message: gameId == 'pokemon'
+          ? 'Welcome to Vaultrex — Pokémon sealed & singles.'
+          : 'Welcome to Vaultrex — Riftbound sealed & singles.',
       migrationNotice: null,
       valueHistory: [
         CollectionValuePoint(date: DateTime.now(), value: 0),
@@ -329,8 +496,76 @@ class GameNotifier extends Notifier<GameState> {
     await _persist();
   }
 
+  /// TCGCSV spot refresh + local history append. Soft-fails offline.
+  Future<void> _applySpotRefresh() async {
+    try {
+      final before = {for (final c in _catalog.cards) c.productId: c.marketPrice};
+      _catalog = await TcgcsvPriceRefresh.refreshCatalog(_catalog);
+      _opener = RiftboundPackOpener(_catalog);
+      _featuredOpener = FeaturedPackOpener(_catalog);
+      final spots = <String, double>{};
+      for (final c in _catalog.cards) {
+        final prev = before[c.productId];
+        if (c.marketPrice > 0 && (prev == null || (prev - c.marketPrice).abs() > 0.001)) {
+          spots[c.id] = c.marketPrice;
+        } else if (c.marketPrice > 0 && TcgcsvPriceRefresh.lastRefreshAt != null) {
+          // Still record a daily close when refresh succeeded.
+          spots[c.id] = c.marketPrice;
+        }
+      }
+      // Cap append size — top 400 by price to keep prefs lean.
+      if (spots.length > 400) {
+        final ranked = spots.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
+        spots
+          ..clear()
+          ..addEntries(ranked.take(400));
+      }
+      if (spots.isNotEmpty && TcgcsvPriceRefresh.lastRefreshAt != null) {
+        await PriceHistoryStore.appendSpots(spots);
+      }
+    } catch (_) {}
+  }
+
+  @override
   Future<void> _persist() async {
-    await _db.savePayload(state.toJson());
+    final id = state.franchiseId == 'pokemon' ? 'pokemon' : 'riftbound';
+    await _db.savePayload(id, state.toJson());
+    await _db.saveWallet(state.player.toJson());
+  }
+
+  /// Drop listings / inventory that do not belong to the active catalog.
+  GameState _sanitizeEconomy(GameState s) {
+    final sealedIds = {for (final p in _catalog.sealed) p.id};
+    final market =
+        s.market.where((m) => _catalog.byId.containsKey(m.cardId)).toList();
+    final sealedListings = s.sealedListings
+        .where((l) => sealedIds.contains(l.sealedProductId))
+        .toList();
+    final collection =
+        s.collection.where((c) => _catalog.byId.containsKey(c.cardId)).toList();
+    final keptIds = {for (final c in collection) c.instanceId};
+    final unopened = s.unopened
+        .where((u) => sealedIds.contains(u.sealedProductId))
+        .toList();
+    final online = s.onlineListings
+        .where((l) => keptIds.contains(l.ownedInstanceId))
+        .toList();
+    final grading = s.grading
+        .where((g) => keptIds.contains(g.ownedInstanceId))
+        .toList();
+    final auctions =
+        s.auctions.where((a) => _catalog.byId.containsKey(a.cardId)).toList();
+    return s.copyWith(
+      franchiseId: _catalog.gameId,
+      market: market,
+      sealedListings: sealedListings,
+      collection: collection,
+      unopened: unopened,
+      onlineListings: online,
+      grading: grading,
+      auctions: auctions,
+    );
   }
 
   void clearMessage() => state = state.copyWith(clearMessage: true);
@@ -343,7 +578,10 @@ class GameNotifier extends Notifier<GameState> {
       // Instapacks: Riftbound sealed — packs, boxes, decks, kits (skip wholesale cases).
       if (p.kind == SealedKind.displayCase) continue;
       if (p.name.contains('Art Bundle') || p.name.contains('Case')) continue;
+      if (p.name.toLowerCase().contains('code card')) continue;
       if (p.marketPrice <= 0) continue;
+      // Prefer real booster pack art over near-zero SKUs floor-priced to $0.99.
+      if (p.kind == SealedKind.pack && p.marketPrice < 1.0) continue;
       final mult = Pricing.trendMult(events, p.setCode);
       final jitter = 0.92 + _rng.nextDouble() * 0.2;
       final price = max(0.99, p.marketPrice * mult * jitter);
@@ -381,11 +619,16 @@ class GameNotifier extends Notifier<GameState> {
     return listings;
   }
 
-  /// True when saved market still references missing / sealed / non-slab IDs.
+  /// True when saved market still references missing / foreign / sealed IDs.
   bool _marketNeedsRegen(List<MarketListing> market) {
+    if (market.isEmpty) return true;
+    var foreign = 0;
     for (final m in market) {
       final def = _catalog.byId[m.cardId];
-      if (def == null) return true;
+      if (def == null) {
+        foreign++;
+        continue;
+      }
       if (m.graded && !isSlabEligibleCard(def)) return true;
       final n = def.name.toLowerCase();
       if (n.contains('pre-rift') ||
@@ -396,14 +639,17 @@ class GameNotifier extends Notifier<GameState> {
         return true;
       }
     }
+    // Any foreign-franchise SKU → regenerate this franchise's market only.
+    if (foreign > 0) return true;
     return false;
   }
 
   List<MarketListing> _generateSinglesMarket() {
-    // Raw listings: real catalog singles only (sealed kits never enter CardDef).
+    // Real secondary-market singles only (TCGCSV spot > 0).
     final pool = _catalog.cards
         .where(
           (c) =>
+              !c.isUnlisted &&
               c.marketPrice > 0 &&
               c.number != null &&
               c.number!.isNotEmpty &&
@@ -415,46 +661,123 @@ class GameNotifier extends Notifier<GameState> {
     if (pool.isEmpty) return const [];
 
     final out = <MarketListing>[];
-    const rawCount = 40;
-    const slabCount = 16;
-
-    // Bias raw toward mid/high value so the shop feels like a real singles market.
     final rawWeighted = [...pool]
       ..sort((a, b) => b.marketPrice.compareTo(a.marketPrice));
-    final rawFocus = [
-      ...rawWeighted.take(min(80, rawWeighted.length)),
-      ...pool.take(min(40, pool.length)),
-    ]..shuffle(_rng);
-    for (var i = 0; i < rawCount; i++) {
-      out.add(_makeMarketListing(rawFocus[i % rawFocus.length], graded: false));
+
+    // Hot chase: top ~20 by spot, 2–6 competing asks.
+    final hot = rawWeighted.take(min(20, rawWeighted.length)).toList();
+    for (final c in hot) {
+      final n = 2 + _rng.nextInt(5); // 2–6
+      final usedConds = <Condition>{};
+      for (var i = 0; i < n; i++) {
+        final listing = _makeMarketListing(
+          c,
+          graded: false,
+          preferUnusedCondition: usedConds,
+        );
+        usedConds.add(listing.condition);
+        out.add(listing);
+      }
     }
 
-    // PSA slabs: chase singles only (epics / showcases / signatures / $$$ rares).
-    final slabPool = _catalog.cards.where(isSlabEligibleCard).toList()
-      ..sort((a, b) => b.marketPrice.compareTo(a.marketPrice));
-    if (slabPool.isEmpty) {
-      out.shuffle(_rng);
-      return out;
+    // Mid: next ~40 with 1–2 asks.
+    final mid = rawWeighted.skip(hot.length).take(40).toList();
+    for (final c in mid) {
+      final n = 1 + (_rng.nextDouble() < 0.35 ? 1 : 0);
+      for (var i = 0; i < n; i++) {
+        out.add(_makeMarketListing(c, graded: false));
+      }
     }
-    final slabPick = slabPool.take(min(64, slabPool.length)).toList()
+
+    // Budget long-tail: sample ~30 lower-priced real cards.
+    final budgetPool = rawWeighted.where((c) => c.marketPrice < 8).toList()
       ..shuffle(_rng);
-    for (var i = 0; i < slabCount && i < slabPick.length; i++) {
-      out.add(_makeMarketListing(slabPick[i], graded: true));
+    final seen = out.map((m) => m.cardId).toSet();
+    for (final c in budgetPool.take(30)) {
+      if (seen.contains(c.id) && _rng.nextDouble() < 0.6) continue;
+      out.add(_makeMarketListing(c, graded: false));
+      seen.add(c.id);
+    }
+
+    // PSA slabs: priced chase only.
+    final slabPool = pool.where(isSlabEligibleCard).toList()
+      ..sort((a, b) => b.marketPrice.compareTo(a.marketPrice));
+    final slabHot = slabPool.take(min(12, slabPool.length)).toList();
+    for (final c in slabHot) {
+      final n = 2 + _rng.nextInt(3);
+      for (var i = 0; i < n; i++) {
+        out.add(_makeMarketListing(c, graded: true));
+      }
+    }
+    for (final c in slabPool.skip(slabHot.length).take(10)) {
+      out.add(_makeMarketListing(c, graded: true));
     }
 
     out.shuffle(_rng);
-    return out;
+    return out.take(min(120, out.length)).toList();
   }
 
-  MarketListing _makeMarketListing(CardDef c, {required bool graded}) {
+  /// Keep bargains; replace ~35%+ so the shop feels alive. Cap 120.
+  List<MarketListing> _churnSinglesMarket(List<MarketListing> current) {
+    final valid =
+        current.where((m) => _catalog.byId.containsKey(m.cardId)).toList();
+    if (valid.isEmpty) return _generateSinglesMarket();
+    final keep = <MarketListing>[];
+    final drop = <MarketListing>[];
+    for (final m in valid) {
+      final def = _catalog.byId[m.cardId]!;
+      if (def.isUnlisted) {
+        drop.add(m);
+        continue;
+      }
+      final fair =
+          (m.foil ? (def.foilMarketPrice ?? def.marketPrice * 2) : def.marketPrice) *
+              m.condition.valueMult *
+              Pricing.trendMult(state.events, def.setCode);
+      final bargain = m.price <= fair * 0.92;
+      final keepChance = bargain ? 0.72 : 0.45;
+      if (_rng.nextDouble() < keepChance) {
+        keep.add(m);
+      } else {
+        drop.add(m);
+      }
+    }
+    final fresh = _generateSinglesMarket();
+    final replaceN = max(drop.length, (valid.length * 0.35).round());
+    final next = [...keep, ...fresh.take(replaceN)];
+    next.shuffle(_rng);
+    return next.take(min(120, next.length)).toList();
+  }
+
+  MarketListing _makeMarketListing(
+    CardDef c, {
+    required bool graded,
+    Set<Condition>? preferUnusedCondition,
+  }) {
     final seller = SellerType.values[_rng.nextInt(SellerType.values.length)];
     final foil = _rng.nextDouble() < 0.35 && c.foilMarketPrice != null;
-    final cond = graded
-        ? Condition.nearMint
-        : Condition.values[1 + _rng.nextInt(4)]; // HP..NM
+    Condition cond;
+    if (graded) {
+      cond = Condition.nearMint;
+    } else {
+      final pool = [
+        Condition.heavilyPlayed,
+        Condition.moderatelyPlayed,
+        Condition.lightlyPlayed,
+        Condition.nearMint,
+        Condition.mint,
+      ];
+      final unused = preferUnusedCondition == null
+          ? pool
+          : pool.where((x) => !preferUnusedCondition.contains(x)).toList();
+      final pickFrom = unused.isNotEmpty ? unused : pool;
+      cond = pickFrom[_rng.nextInt(pickFrom.length)];
+    }
+    final trend = Pricing.trendMult(state.events, c.setCode);
     final base =
         (foil ? (c.foilMarketPrice ?? c.marketPrice * 2) : c.marketPrice) *
-            cond.valueMult;
+            cond.valueMult *
+            trend;
 
     double grade = 0;
     var price = base;
@@ -470,18 +793,24 @@ class GameNotifier extends Notifier<GameState> {
                   : grade >= 8.5
                       ? 1.35
                       : 1.2;
-      price = base * gradeMult * 1.2; // PSA premium
+      price = base * gradeMult * 1.2;
     }
 
-    if (seller == SellerType.clueless) price *= 0.55 + _rng.nextDouble() * 0.25;
-    if (seller == SellerType.scammy) price *= 0.7 + _rng.nextDouble() * 0.2;
-    if (seller == SellerType.serious) price *= 0.95 + _rng.nextDouble() * 0.2;
-    if (seller == SellerType.goblin) price *= 0.8 + _rng.nextDouble() * 0.4;
+    // Tighter to spot — less gamey seller noise.
+    if (seller == SellerType.clueless) price *= 0.78 + _rng.nextDouble() * 0.12;
+    if (seller == SellerType.scammy) price *= 0.85 + _rng.nextDouble() * 0.12;
+    if (seller == SellerType.serious) price *= 0.97 + _rng.nextDouble() * 0.08;
+    if (seller == SellerType.goblin) price *= 0.9 + _rng.nextDouble() * 0.15;
+    price *= 0.97 + _rng.nextDouble() * 0.06;
 
     final alias = _sellerNames[_rng.nextInt(_sellerNames.length)];
     final gradeLabel = graded
         ? 'PSA ${grade >= 10 ? '10' : grade.toStringAsFixed(grade % 1 == 0 ? 0 : 1)}'
         : null;
+    final ratingJitter = (seller.rating + (_rng.nextDouble() * 2.4 - 1.2))
+        .clamp(55.0, 99.9);
+    final sales =
+        (seller.typicalSales * (0.55 + _rng.nextDouble() * 0.9)).round();
 
     return MarketListing(
       id: _uuid.v4(),
@@ -500,6 +829,9 @@ class GameNotifier extends Notifier<GameState> {
       grade: graded ? grade : null,
       gradingCompany: graded ? GradingCompany.psa : null,
       sellerAlias: alias,
+      rating: double.parse(ratingJitter.toStringAsFixed(1)),
+      salesCount: sales,
+      shipsInDays: seller.shipsInDays,
     );
   }
 
@@ -524,14 +856,17 @@ class GameNotifier extends Notifier<GameState> {
   }
 
   MarketEvent _randomEvent() {
-    const sets = ['OGN', 'SFD', 'UNL', 'OGS'];
-    final set = sets[_rng.nextInt(sets.length)];
+    final keys = _catalog.bySet.keys.toList();
+    final set = keys.isEmpty
+        ? (_catalog.isPokemon ? 'MEW' : 'OGN')
+        : keys[_rng.nextInt(keys.length)];
     final hot = _rng.nextBool();
+    final game = _catalog.isPokemon ? 'Pokémon' : 'Riftbound';
     return MarketEvent(
       id: _uuid.v4(),
       title: hot ? '$set hype spike' : '$set cools off',
       description: hot
-          ? 'Chase cards from $set are moving — sealed floats up.'
+          ? '$game chase from $set is moving — sealed floats up.'
           : 'Supply dump on $set — street prices soften.',
       setCode: set,
       multiplier: hot ? 1.08 + _rng.nextDouble() * 0.12 : 0.88 + _rng.nextDouble() * 0.08,
@@ -539,470 +874,37 @@ class GameNotifier extends Notifier<GameState> {
     );
   }
 
-  Future<void> buySealed(
-    String listingId, {
-    int qty = 1,
-    PaymentMethod payWith = PaymentMethod.cash,
-  }) async {
-    final listing = state.sealedListings.firstWhere((l) => l.id == listingId);
-    final product =
-        _catalog.sealed.firstWhere((s) => s.id == listing.sealedProductId);
-    final total = listing.price * qty;
-    final candyCost = (total * 100).round();
-    final player = state.player;
+  /// Sibling market asks for the same card/foil/condition (sell comps).
+  List<double> marketAsksFor({
+    required String cardId,
+    required bool foil,
+    required Condition condition,
+    bool graded = false,
+  }) {
+    final prices = state.market
+        .where(
+          (m) =>
+              m.cardId == cardId &&
+              m.foil == foil &&
+              m.graded == graded &&
+              (graded || m.condition == condition),
+        )
+        .map((m) => m.price)
+        .toList()
+      ..sort();
+    return prices;
+  }
 
-    if (payWith == PaymentMethod.cash) {
-      if (player.cash < total) {
-        state = state.copyWith(message: 'Not enough cash.');
-        return;
-      }
-      player.cash -= total;
-    } else {
-      if (player.candy < candyCost) {
-        state = state.copyWith(message: 'Not enough Candy.');
-        return;
-      }
-      player.candy -= candyCost;
-    }
-
-    if (listing.stock < qty) {
-      state = state.copyWith(message: 'Not enough stock.');
-      return;
-    }
-    final packs = <UnopenedPack>[];
-    for (var i = 0; i < qty; i++) {
-      if (product.kind == SealedKind.box) {
-        for (var p = 0; p < (product.packsPerBox ?? 24); p++) {
-          packs.add(UnopenedPack(
-            id: _uuid.v4(),
-            sealedProductId: product.id,
-            setCode: product.setCode,
-          ));
-        }
-      } else {
-        packs.add(UnopenedPack(
-          id: _uuid.v4(),
-          sealedProductId: product.id,
-          setCode: product.setCode,
-        ));
-      }
-    }
-    listing.stock -= qty;
-    state = state.copyWith(
-      player: player,
-      unopened: [...state.unopened, ...packs],
-      sealedListings: [...state.sealedListings],
-      message: product.kind == SealedKind.box
-          ? 'Bought box — ${(product.packsPerBox ?? 24) * qty} packs queued.'
-          : 'Bought $qty pack(s).',
-      lastRipPaid: total,
+  double? suggestedAskFor(OwnedCard owned) {
+    final comps = marketAsksFor(
+      cardId: owned.cardId,
+      foil: owned.foil,
+      condition: owned.condition,
+      graded: owned.graded,
     );
-    await _persist();
-  }
-
-  /// Buy a Featured Pack and open immediately into [lastRip].
-  /// Returns true on success so UI can launch [showPackTheater] with
-  /// `alreadyOpened: true`.
-  Future<bool> buyFeaturedPack(
-    String featuredPackId, {
-    PaymentMethod payWith = PaymentMethod.cash,
-  }) async {
-    final pack = featuredPackById(featuredPackId);
-    if (pack == null) {
-      state = state.copyWith(message: 'Featured pack not found.');
-      return false;
-    }
-    final total = pack.priceUsd;
-    final candyCost = pack.candyPrice;
-    final player = state.player;
-
-    if (payWith == PaymentMethod.cash) {
-      if (player.cash < total) {
-        state = state.copyWith(message: 'Not enough cash.');
-        return false;
-      }
-      player.cash -= total;
-    } else {
-      if (player.candy < candyCost) {
-        state = state.copyWith(message: 'Not enough Candy.');
-        return false;
-      }
-      player.candy -= candyCost;
-    }
-
-    final pulls = _featuredOpener.open(pack);
-    if (pulls.isEmpty) {
-      // Refund on empty open (should not happen with a loaded catalog).
-      if (payWith == PaymentMethod.cash) {
-        player.cash += total;
-      } else {
-        player.candy += candyCost;
-      }
-      state = state.copyWith(
-        player: player,
-        message: 'Could not open featured pack — catalog empty.',
-      );
-      return false;
-    }
-
-    player.packsOpened += 1;
-    player.xp += 3;
-    state = state.copyWith(
-      player: player,
-      lastRip: pulls,
-      lastRipPaid: total,
-      message: 'Ripping ${pack.name}…',
-    );
-    _checkAchievements();
-    await _persist();
-    return true;
-  }
-
-  /// Opens a sealed pack into [lastRip] without adding to collection yet.
-  /// Keep / Exchange decide each card during the theater.
-  /// When [packId] is null, opens the oldest pack in inventory.
-  Future<void> openPack({String? packId}) async {
-    if (state.unopened.isEmpty) {
-      state = state.copyWith(message: 'No packs to open.');
-      return;
-    }
-    final idx = packId == null
-        ? 0
-        : state.unopened.indexWhere((p) => p.id == packId);
-    if (idx < 0) {
-      state = state.copyWith(message: 'Pack not found.');
-      return;
-    }
-    final pack = state.unopened[idx];
-    final remain = [...state.unopened]..removeAt(idx);
-    final pulls = _opener.openPack(pack.setCode);
-    final player = state.player
-      ..packsOpened += 1
-      ..xp += 2;
-    state = state.copyWith(
-      player: player,
-      unopened: remain,
-      lastRip: pulls,
-      message: 'Ripping ${pack.setCode}…',
-    );
-    _checkAchievements();
-    await _persist();
-  }
-
-  /// Back-compat alias.
-  Future<void> openNextPack() => openPack();
-
-  /// Street value of one unopened pack (box lots pro-rated per pack).
-  double sealedPackMarketValue(UnopenedPack pack) {
-    final product = sealedById(pack.sealedProductId);
-    if (product == null) return 4.99;
-    if (product.kind == SealedKind.pack) {
-      return product.marketPrice > 0 ? product.marketPrice : 4.99;
-    }
-    if (product.kind == SealedKind.box) {
-      final n = (product.packsPerBox ?? 24).clamp(1, 99);
-      return product.marketPrice / n;
-    }
-    try {
-      final match = _catalog.sealed.firstWhere(
-        (s) => s.setCode == pack.setCode && s.kind == SealedKind.pack,
-      );
-      return match.marketPrice > 0 ? match.marketPrice : 4.99;
-    } catch (_) {
-      return 4.99;
-    }
-  }
-
-  /// Sell refund: ~80% of market as cash (or candy at 100¢/$).
-  double sealedPackSellCash(UnopenedPack pack) =>
-      double.parse((sealedPackMarketValue(pack) * 0.80).toStringAsFixed(2));
-
-  Future<void> sellUnopenedPack(
-    String packId, {
-    PaymentMethod refundAs = PaymentMethod.cash,
-  }) async {
-    final idx = state.unopened.indexWhere((p) => p.id == packId);
-    if (idx < 0) {
-      state = state.copyWith(message: 'Pack not found.');
-      return;
-    }
-    final pack = state.unopened[idx];
-    final cash = sealedPackSellCash(pack);
-    final candy = (cash * 100).round().clamp(1, 999999);
-    final remain = [...state.unopened]..removeAt(idx);
-    final player = state.player;
-    if (refundAs == PaymentMethod.cash) {
-      player.cash += cash;
-      state = state.copyWith(
-        player: player,
-        unopened: remain,
-        message: 'Sold sealed pack for \$${cash.toStringAsFixed(2)}.',
-      );
-    } else {
-      player.candy += candy;
-      state = state.copyWith(
-        player: player,
-        unopened: remain,
-        message: 'Sold sealed pack for $candy Candy.',
-      );
-    }
-    await _persist();
-  }
-
-  Future<void> keepRipCard(String instanceId) async {
-    final rip = state.lastRip;
-    if (rip == null) return;
-    OwnedCard? card;
-    for (final c in rip) {
-      if (c.instanceId == instanceId) {
-        card = c;
-        break;
-      }
-    }
-    if (card == null) return;
-    state = state.copyWith(
-      collection: [...state.collection, card],
-      lastRip: rip.where((c) => c.instanceId != instanceId).toList(),
-      message: 'Kept for collection.',
-      recentlyKeptIds: {...state.recentlyKeptIds, instanceId},
-    );
-    _recordCollectionValue();
-    await _persist();
-  }
-
-  Future<void> exchangeRipCard(String instanceId) async {
-    final rip = state.lastRip;
-    if (rip == null) return;
-    OwnedCard? card;
-    for (final c in rip) {
-      if (c.instanceId == instanceId) {
-        card = c;
-        break;
-      }
-    }
-    if (card == null) return;
-    final fair = fairFor(card);
-    final candyGain = (fair * 100).round().clamp(1, 999999);
-    final player = state.player
-      ..candy += candyGain
-      ..cardsSold += 1
-      ..xp += 1;
-    state = state.copyWith(
-      player: player,
-      lastRip: rip.where((c) => c.instanceId != instanceId).toList(),
-      message: 'Exchanged for $candyGain Candy.',
-    );
-    await _persist();
-  }
-
-  /// Auto-keep any remaining rip cards (e.g. user closes early).
-  Future<void> finalizeRip({bool keepRemaining = true}) async {
-    final rip = state.lastRip;
-    if (rip == null || rip.isEmpty) {
-      state = state.copyWith(clearLastRip: true);
-      await _persist();
-      return;
-    }
-    if (keepRemaining) {
-      state = state.copyWith(
-        collection: [...state.collection, ...rip],
-        clearLastRip: true,
-        message: 'Cards added to collection.',
-        recentlyKeptIds: {
-          ...state.recentlyKeptIds,
-          ...rip.map((c) => c.instanceId),
-        },
-      );
-      _recordCollectionValue();
-    } else {
-      state = state.copyWith(clearLastRip: true);
-    }
-    await _persist();
-  }
-
-  void acknowledgeRecentlyKept(String instanceId) {
-    if (!state.recentlyKeptIds.contains(instanceId)) return;
-    final next = {...state.recentlyKeptIds}..remove(instanceId);
-    state = state.copyWith(recentlyKeptIds: next);
-  }
-
-  Future<void> openBoxBurst(String setCode) async {
-    // Convenience: if player has 24 packs of set, open as box with correction.
-    final matching = state.unopened.where((p) => p.setCode == setCode).take(24).toList();
-    if (matching.length < 24) {
-      state = state.copyWith(message: 'Need 24 $setCode packs queued.');
-      return;
-    }
-    final pulls = _opener.openBox(setCode);
-    final remain = [...state.unopened];
-    for (final m in matching) {
-      remain.removeWhere((p) => p.id == m.id);
-    }
-    final player = state.player
-      ..packsOpened += 24
-      ..xp += 40;
-    state = state.copyWith(
-      player: player,
-      unopened: remain,
-      lastRip: pulls,
-      message: 'Box break: ${pulls.length} cards from $setCode.',
-    );
-    _checkAchievements();
-    await _persist();
-  }
-
-  Future<void> buyMarketListing(String id) async {
-    final listing = state.market.firstWhere((m) => m.id == id);
-    if (state.player.cash < listing.price) {
-      state = state.copyWith(message: 'Not enough cash.');
-      return;
-    }
-    final owned = OwnedCard(
-      instanceId: _uuid.v4(),
-      cardId: listing.cardId,
-      foil: listing.foil,
-      condition: listing.condition,
-      centeringLR: listing.centeringLR,
-      centeringTB: listing.centeringTB,
-      surface: listing.isFake ? 4 : (listing.graded ? 9.0 : 8.5),
-      edges: listing.isFake ? 4 : (listing.graded ? 9.0 : 8.5),
-      corners: listing.isFake ? 3.5 : (listing.graded ? 9.0 : 8.5),
-      defects: listing.isFake ? [FactoryDefect.printLine] : const [],
-      graded: listing.graded,
-      grade: listing.grade,
-      gradingCompany: listing.gradingCompany,
-    );
-    final player = state.player..cash -= listing.price;
-    state = state.copyWith(
-      player: player,
-      collection: [...state.collection, owned],
-      market: state.market.where((m) => m.id != id).toList(),
-      message: listing.isFake
-          ? 'Bought… looks suspicious. Might be fake.'
-          : 'Purchased ${listing.title}.',
-    );
-    _recordCollectionValue();
-    await _persist();
-  }
-
-  Future<void> listOnline(String instanceId, double ask) async {
-    final card = state.collection.firstWhere((c) => c.instanceId == instanceId);
-    if (card.listedAsk != null) {
-      state = state.copyWith(message: 'Already listed.');
-      return;
-    }
-    final listing = OnlineListing(
-      id: _uuid.v4(),
-      ownedInstanceId: instanceId,
-      ask: ask,
-      listedDay: state.day,
-    );
-    final updated = state.collection
-        .map((c) => c.instanceId == instanceId ? c.copyWith(listedAsk: ask) : c)
-        .toList();
-    state = state.copyWith(
-      collection: updated,
-      onlineListings: [...state.onlineListings, listing],
-      message: 'Listed online for \$${ask.toStringAsFixed(2)}.',
-    );
-    await _persist();
-  }
-
-  Future<void> cancelOnlineListing(String listingId) async {
-    final listing = state.onlineListings.firstWhere((l) => l.id == listingId);
-    state = state.copyWith(
-      onlineListings:
-          state.onlineListings.where((l) => l.id != listingId).toList(),
-      collection: state.collection
-          .map((c) => c.instanceId == listing.ownedInstanceId
-              ? c.copyWith(clearListedAsk: true)
-              : c)
-          .toList(),
-      message: 'Listing cancelled.',
-    );
-    await _persist();
-  }
-
-  Future<void> sendToGrading(String instanceId, GradingCompany company) async {
-    final card = state.collection.firstWhere((c) => c.instanceId == instanceId);
-    if (card.graded || card.listedAsk != null) {
-      state = state.copyWith(message: 'Cannot grade this card right now.');
-      return;
-    }
-    final fee = company.fee.toDouble();
-    if (state.player.cash < fee) {
-      state = state.copyWith(message: 'Need \$${fee.toStringAsFixed(0)} for grading.');
-      return;
-    }
-    final player = state.player..cash -= fee;
-    final job = GradingJob(
-      id: _uuid.v4(),
-      ownedInstanceId: instanceId,
-      company: company,
-      turnsLeft: company.turns,
-    );
-    state = state.copyWith(
-      player: player,
-      grading: [...state.grading, job],
-      message: 'Sent to ${company.label}.',
-    );
-    await _persist();
-  }
-
-  Future<void> revealSlab(String jobId) async {
-    final job = state.grading.firstWhere((g) => g.id == jobId);
-    if (!job.ready || job.revealed) return;
-    final card =
-        state.collection.firstWhere((c) => c.instanceId == job.ownedInstanceId);
-    final grade = _rollGrade(card, job.company);
-    job.revealed = true;
-    job.resultGrade = grade;
-    final updated = state.collection.map((c) {
-      if (c.instanceId != card.instanceId) return c;
-      return c.copyWith(
-        graded: true,
-        grade: grade,
-        gradingCompany: job.company,
-      );
-    }).toList();
-    final player = state.player;
-    if (grade >= 10) player.gemsPulled += 1;
-    player.xp += grade >= 9.5 ? 15 : 5;
-    state = state.copyWith(
-      player: player,
-      collection: updated,
-      grading: [...state.grading],
-      message: grade >= 10
-          ? 'GEM MINT 10!'
-          : '${job.company.label} ${grade.toStringAsFixed(1)}',
-    );
-    _checkAchievements();
-    _recordCollectionValue();
-    await _persist();
-  }
-
-  Future<void> massReveal() async {
-    if (!state.player.ownedUpgrades.contains('mass_reveal')) {
-      state = state.copyWith(message: 'Unlock Mass Reveal first.');
-      return;
-    }
-    final ready = state.grading.where((g) => g.ready && !g.revealed).toList();
-    for (final j in ready) {
-      await revealSlab(j.id);
-    }
-  }
-
-  double _rollGrade(OwnedCard card, GradingCompany _) {
-    final center = card.centeringScore;
-    final sub = (card.surface + card.edges + card.corners) / 3;
-    var raw = (center / 10 + sub) / 2;
-    // PSA — honest grades, no soft bump
-    if (card.defects.contains(FactoryDefect.miscut)) raw -= 1.5;
-    if (card.defects.contains(FactoryDefect.bentCorner)) raw -= 0.8;
-    raw = raw.clamp(1.0, 10.0);
-    // Snap to common grade steps
-    final steps = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 8.5, 9.0, 9.5, 10.0];
-    return steps.reduce((a, b) => (a - raw).abs() < (b - raw).abs() ? a : b);
+    if (comps.isEmpty) return null;
+    final mid = comps[comps.length ~/ 2];
+    return double.parse(mid.toStringAsFixed(2));
   }
 
   Future<void> bidAuction(String id) async {
@@ -1025,9 +927,10 @@ class GameNotifier extends Notifier<GameState> {
       state = state.copyWith(message: 'Need more XP or cash.');
       return;
     }
-    final player = state.player
-      ..cash -= def.cost
-      ..ownedUpgrades.add(id);
+    final player = state.player.copyWith(
+      cash: state.player.cash - def.cost,
+      ownedUpgrades: {...state.player.ownedUpgrades, id},
+    );
     state = state.copyWith(player: player, message: 'Unlocked ${def.name}.');
     await _persist();
   }
@@ -1039,17 +942,25 @@ class GameNotifier extends Notifier<GameState> {
         .toList();
     if (_rng.nextDouble() < 0.55) events = [...events, _randomEvent()];
 
-    // Grading countdown
+    // Grading: realtime jobs by readyAtMs; legacy day-tick jobs still advance.
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
     final grading = state.grading.map((g) {
       if (!g.ready && !g.revealed) {
-        g.turnsLeft -= 1;
-        if (g.turnsLeft <= 0) g.ready = true;
+        if (g.readyAtMs != null) {
+          if (nowMs >= g.readyAtMs!) {
+            g.ready = true;
+            g.turnsLeft = 0;
+          }
+        } else {
+          g.turnsLeft -= 1;
+          if (g.turnsLeft <= 0) g.ready = true;
+        }
       }
       return g;
     }).toList();
 
-    // Online listing fills
-    final player = state.player;
+    // Online listing fills — easier near-fair asks (app tempo, not grind).
+    var player = state.player;
     var collection = [...state.collection];
     var online = [...state.onlineListings];
     final soldIds = <String>[];
@@ -1060,17 +971,21 @@ class GameNotifier extends Notifier<GameState> {
       final fair = Pricing.fairValue(def, card, events: events);
       final ratio = listing.ask / max(0.01, fair);
       var chance = ratio <= 0.95
-          ? 0.75
+          ? 0.92
           : ratio <= 1.05
-              ? 0.35
-              : ratio <= 1.2
-                  ? 0.12
-                  : 0.03;
+              ? 0.68
+              : ratio <= 1.15
+                  ? 0.28
+                  : ratio <= 1.3
+                      ? 0.08
+                      : 0.02;
       if (_rng.nextDouble() < chance) {
         final fee = listing.ask * Pricing.platformFeeRate(player);
-        player.cash += listing.ask - fee;
-        player.cardsSold += 1;
-        player.xp += 3;
+        player = player.copyWith(
+          cash: player.cash + listing.ask - fee,
+          cardsSold: player.cardsSold + 1,
+          xp: player.xp + 3,
+        );
         soldIds.add(listing.id);
         collection = collection
             .where((c) => c.instanceId != listing.ownedInstanceId)
@@ -1093,7 +1008,7 @@ class GameNotifier extends Notifier<GameState> {
     for (final a in auctions) {
       a.endsInTurns -= 1;
       if (a.endsInTurns <= 0) finished.add(a);
-      if (state.player.ownedUpgrades.contains('auto_snipe') &&
+      if (player.ownedUpgrades.contains('auto_snipe') &&
           a.endsInTurns == 0 &&
           !a.playerIsHighBidder) {
         final def = _catalog.byId[a.cardId];
@@ -1110,7 +1025,7 @@ class GameNotifier extends Notifier<GameState> {
     for (final a in finished) {
       if (a.playerIsHighBidder) {
         if (player.cash >= a.currentBid) {
-          player.cash -= a.currentBid;
+          player = player.copyWith(cash: player.cash - a.currentBid);
           collection.add(OwnedCard(
             instanceId: _uuid.v4(),
             cardId: a.cardId,
@@ -1132,9 +1047,13 @@ class GameNotifier extends Notifier<GameState> {
     }
 
     final sealed = _generateSealedShop(events);
-    final market = _generateSinglesMarket();
+    await _applySpotRefresh();
+    var market = _churnSinglesMarket(state.market);
+    if (_marketNeedsRegen(market)) {
+      market = _generateSinglesMarket();
+    }
 
-    state = state.copyWith(
+    var next = state.copyWith(
       day: state.day + 1,
       player: player,
       collection: collection,
@@ -1148,17 +1067,27 @@ class GameNotifier extends Notifier<GameState> {
           ? 'Day ${state.day + 1} — shop restocked.'
           : 'Day ${state.day + 1} — sold ${soldIds.length} online listing(s).',
     );
+    state = _sanitizeEconomy(next);
     _checkAchievements();
     _recordCollectionValue();
     await _persist();
   }
 
+  @override
   void _checkAchievements() {
     final p = state.player;
-    if (p.packsOpened >= 10) p.unlockedAchievements.add('ripper_10');
-    if (p.gemsPulled >= 1) p.unlockedAchievements.add('first_gem');
-    if (p.cardsSold >= 5) p.unlockedAchievements.add('seller_5');
-    if (state.collection.length >= 50) p.unlockedAchievements.add('binder_50');
+    final next = {...p.unlockedAchievements};
+    if (p.packsOpened >= 10) next.add('ripper_10');
+    if (p.gemsPulled >= 1) next.add('first_gem');
+    if (p.cardsSold >= 5) next.add('seller_5');
+    if (state.collection.length >= 50) next.add('binder_50');
+    if (next.length == p.unlockedAchievements.length &&
+        next.containsAll(p.unlockedAchievements)) {
+      return;
+    }
+    state = state.copyWith(
+      player: p.copyWith(unlockedAchievements: next),
+    );
   }
 
   double totalCollectionValue() {
@@ -1170,6 +1099,7 @@ class GameNotifier extends Notifier<GameState> {
   }
 
   /// Snapshot portfolio value when it changes (same calendar day updates in place).
+  @override
   void _recordCollectionValue({bool force = false}) {
     final value = double.parse(totalCollectionValue().toStringAsFixed(2));
     final now = DateTime.now();
@@ -1239,12 +1169,14 @@ class GameNotifier extends Notifier<GameState> {
     await _persist();
   }
 
+  @override
   double fairFor(OwnedCard card) {
     final def = _catalog.byId[card.cardId];
     if (def == null) return 0;
     return Pricing.fairValue(def, card, events: state.events);
   }
 
+  @override
   SealedProduct? sealedById(String id) {
     try {
       return _catalog.sealed.firstWhere((s) => s.id == id);

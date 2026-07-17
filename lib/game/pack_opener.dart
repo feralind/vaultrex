@@ -16,6 +16,22 @@ class RiftboundPackOpener {
   final _uuid = const Uuid();
 
   List<OwnedCard> openPack(String setCode) {
+    if (catalog.isPokemon) {
+      // Modern Pokémon-style 10-card pack (Rare Candy feel).
+      // Some catalog sets omit Uncommon — fill those slots from Common.
+      final cards = <OwnedCard>[];
+      cards.addAll(_drawMany(setCode, Rarity.common, 5, foil: false));
+      final uncommons = _drawMany(setCode, Rarity.uncommon, 3, foil: false);
+      cards.addAll(uncommons);
+      if (uncommons.length < 3) {
+        cards.addAll(
+          _drawMany(setCode, Rarity.common, 3 - uncommons.length, foil: false),
+        );
+      }
+      cards.add(_drawReverseHolo(setCode));
+      cards.addAll(_drawRarePlus(setCode, 1, forceFoil: false));
+      return cards;
+    }
     final cards = <OwnedCard>[];
     cards.addAll(_drawMany(setCode, Rarity.common, 7, foil: false));
     cards.addAll(_drawMany(setCode, Rarity.uncommon, 3, foil: false));
@@ -25,14 +41,28 @@ class RiftboundPackOpener {
     return cards;
   }
 
-  /// 24 packs with box-level correction for Epic/alt expectations.
+  /// 36 packs for Pokémon boxes; 24 for Riftbound.
   List<OwnedCard> openBox(String setCode) {
+    final packs = catalog.isPokemon ? 36 : 24;
     final all = <OwnedCard>[];
-    for (var i = 0; i < 24; i++) {
+    for (var i = 0; i < packs; i++) {
       all.addAll(openPack(setCode));
     }
     _boxCorrection(all, setCode);
     return all;
+  }
+
+  OwnedCard _drawReverseHolo(String setCode) {
+    final roll = _rng.nextDouble();
+    final rarity = roll < 0.6
+        ? Rarity.common
+        : roll < 0.9
+            ? Rarity.uncommon
+            : Rarity.rare;
+    final def = _pick(setCode, rarity) ??
+        _pick(setCode, Rarity.common) ??
+        catalog.bySet[setCode]!.first;
+    return _instantiate(def, foil: true);
   }
 
   List<OwnedCard> _drawMany(
@@ -91,6 +121,11 @@ class RiftboundPackOpener {
 
   Rarity _rollRarePlus(String setCode) {
     final roll = _rng.nextDouble();
+    if (catalog.isPokemon) {
+      if (roll < 0.78) return Rarity.rare;
+      if (roll < 0.96) return Rarity.epic;
+      return Rarity.promo;
+    }
     // Approximate community rates; Ultimate mainly Unleashed+.
     if (setCode == 'UNL' && roll < 0.001) return Rarity.ultimate;
     if (roll < 0.72) return Rarity.rare;
@@ -138,10 +173,11 @@ class RiftboundPackOpener {
 
   Condition _rollSealedCondition() {
     final r = _rng.nextDouble();
-    if (r < 0.02) return Condition.lightlyPlayed; // factory whitening feel
-    if (r < 0.08) return Condition.nearMint;
-    if (r < 0.98) return Condition.nearMint;
-    return Condition.mint;
+    // Sealed-fresh feel: mostly Mint/NM.
+    if (r < 0.70) return Condition.mint;
+    if (r < 0.95) return Condition.nearMint;
+    if (r < 0.99) return Condition.lightlyPlayed;
+    return Condition.moderatelyPlayed;
   }
 
   double _gauss(double mean, double std) {
@@ -155,28 +191,29 @@ class RiftboundPackOpener {
     // Ensure ~6+ epics across the box among rare+ slots.
     final epicDefs = catalog.pool(setCode, Rarity.epic);
     if (epicDefs.isEmpty) return;
-    var epics = all.where((c) {
-      final d = catalog.byId[c.cardId];
-      return d?.rarity == Rarity.epic;
-    }).length;
     var guard = 0;
-    while (epics < 6 && guard < 40) {
+    while (guard < 40) {
+      final epics = all.where((c) {
+        final d = catalog.byId[c.cardId];
+        return d?.rarity == Rarity.epic;
+      }).length;
+      if (epics >= 6) break;
       guard++;
       final idx = _rng.nextInt(all.length);
       all[idx] = _instantiate(epicDefs[_rng.nextInt(epicDefs.length)], foil: true);
-      epics++;
     }
 
     // ~2 alt/showcase arts per box
     final show = catalog.pool(setCode, Rarity.showcase);
     if (show.isEmpty) return;
-    var showCount = all.where((c) => catalog.byId[c.cardId]?.rarity == Rarity.showcase).length;
     guard = 0;
-    while (showCount < 2 && guard < 20) {
+    while (guard < 20) {
+      final showCount =
+          all.where((c) => catalog.byId[c.cardId]?.rarity == Rarity.showcase).length;
+      if (showCount >= 2) break;
       guard++;
       final idx = _rng.nextInt(all.length);
       all[idx] = _instantiate(show[_rng.nextInt(show.length)], foil: true);
-      showCount++;
     }
   }
 }
