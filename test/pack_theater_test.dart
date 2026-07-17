@@ -21,7 +21,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('PackRipTheater builds with Fast chip and close control',
+  testWidgets('PackRipTheater builds with fast bolt and close control',
       (tester) async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
@@ -64,8 +64,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.byType(PackRipTheater), findsOneWidget);
-    expect(find.text('Fast'), findsOneWidget);
+    expect(find.byIcon(Icons.bolt_rounded), findsOneWidget);
     expect(find.byIcon(Icons.close_rounded), findsOneWidget);
+    expect(find.text('Keep all'), findsNothing);
     expect(find.textContaining('Swipe down'), findsOneWidget);
   });
 }

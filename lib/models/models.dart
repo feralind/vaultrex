@@ -206,6 +206,7 @@ class SealedProduct {
     565604,
     565606,
     593294,
+    646039,
     635366,
     635368,
     635369,
@@ -549,13 +550,16 @@ class OnlineListing {
     required this.ask,
     required this.listedDay,
     this.status = OnlineListingStatus.active,
-  });
+    int? listedAtMs,
+  }) : listedAtMs = listedAtMs ?? DateTime.now().millisecondsSinceEpoch;
 
   final String id;
   final String ownedInstanceId;
   double ask;
   final int listedDay;
   OnlineListingStatus status;
+  /// Wall-clock ms when listed (for offline catch-up).
+  final int listedAtMs;
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -563,6 +567,7 @@ class OnlineListing {
         'ask': ask,
         'listedDay': listedDay,
         'status': status.name,
+        'listedAtMs': listedAtMs,
       };
 
   factory OnlineListing.fromJson(Map<String, dynamic> j) => OnlineListing(
@@ -573,6 +578,8 @@ class OnlineListing {
         status: OnlineListingStatus.values.byName(
           j['status'] as String? ?? 'active',
         ),
+        listedAtMs: j['listedAtMs'] as int? ??
+            DateTime.now().millisecondsSinceEpoch,
       );
 }
 

@@ -343,6 +343,7 @@ mixin _ShopActions on _GameNotifierBase {
       ownedInstanceId: instanceId,
       ask: ask,
       listedDay: state.day,
+      listedAtMs: DateTime.now().millisecondsSinceEpoch,
     );
     final updated = state.collection
         .map((c) => c.instanceId == instanceId ? c.copyWith(listedAsk: ask) : c)

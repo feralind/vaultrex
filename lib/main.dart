@@ -92,7 +92,8 @@ class HomeShell extends ConsumerStatefulWidget {
   ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends ConsumerState<HomeShell> {
+class _HomeShellState extends ConsumerState<HomeShell>
+    with WidgetsBindingObserver {
   int _index = 3; // land on Instapacks like RC after collect choose
   bool _lastRipPrompted = false;
   bool _lastRipDialogOpen = false;
@@ -117,7 +118,21 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptLastRip());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.read(gameProvider.notifier).catchUpOnlineSales();
+    }
   }
 
   void _maybePromptLastRip() {
@@ -182,12 +197,21 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       final has = next.lastRip?.isNotEmpty == true;
       if (!has) {
         _lastRipPrompted = false;
-        return;
-      }
-      if (!had && has) {
+      } else if (!had && has) {
         _lastRipPrompted = false;
         WidgetsBinding.instance
             .addPostFrameCallback((_) => _maybePromptLastRip());
+      }
+      final msg = next.message;
+      if (msg != null &&
+          msg != prev?.message &&
+          msg.startsWith('While you were away:')) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg)),
+          );
+        });
       }
     });
 

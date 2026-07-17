@@ -200,7 +200,9 @@ class SettingsScreen extends ConsumerWidget {
           tileColor: CC.card,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           title: const Text('Advance day'),
-          subtitle: const Text('Restock Instapacks & resolve listings'),
+          subtitle: const Text(
+            'Restock shop · listings also update when you return',
+          ),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => ref.read(gameProvider.notifier).advanceDay(),
         ),

@@ -266,7 +266,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
           child: listings.isEmpty
               ? Center(
                   child: Text(
-                    'No listings match — try Advance Day in Settings.',
+                    'No listings match — try Advance Day in Settings to restock the shop.',
                     style: AppText.jakarta(color: CC.inkMuted),
                     textAlign: TextAlign.center,
                   ),

@@ -106,6 +106,7 @@ class GameState {
     this.binders = const [],
     this.recentlyKeptIds = const {},
     this.marketOffers = const [],
+    this.lastPlayedAtMs,
   });
 
   final bool ready;
@@ -131,6 +132,8 @@ class GameState {
   /// Session-only: instance ids just kept from a rip (for entrance pulse).
   final Set<String> recentlyKeptIds;
   final List<MarketOffer> marketOffers;
+  /// Wall-clock ms of last session tick (listing catch-up).
+  final int? lastPlayedAtMs;
 
   factory GameState.loading() => GameState(
         ready: false,
@@ -154,6 +157,7 @@ class GameState {
         binders: const [],
         recentlyKeptIds: const {},
         marketOffers: const [],
+        lastPlayedAtMs: null,
       );
 
   GameState copyWith({
@@ -181,6 +185,7 @@ class GameState {
     List<Binder>? binders,
     Set<String>? recentlyKeptIds,
     List<MarketOffer>? marketOffers,
+    int? lastPlayedAtMs,
   }) {
     return GameState(
       ready: ready ?? this.ready,
@@ -205,6 +210,7 @@ class GameState {
       binders: binders ?? this.binders,
       recentlyKeptIds: recentlyKeptIds ?? this.recentlyKeptIds,
       marketOffers: marketOffers ?? this.marketOffers,
+      lastPlayedAtMs: lastPlayedAtMs ?? this.lastPlayedAtMs,
     );
   }
 
@@ -226,6 +232,7 @@ class GameState {
         'valueHistory': valueHistory.map((e) => e.toJson()).toList(),
         'binders': binders.map((e) => e.toJson()).toList(),
         'marketOffers': marketOffers.map((e) => e.toJson()).toList(),
+        'lastPlayedAtMs': lastPlayedAtMs,
       };
 
   factory GameState.fromJson(Map<String, dynamic> j) {
@@ -255,6 +262,7 @@ class GameState {
         binders: const [],
         recentlyKeptIds: const {},
         marketOffers: const [],
+        lastPlayedAtMs: null,
       );
     }
     final fid = (j['franchiseId'] as String?) == 'pokemon'
@@ -306,6 +314,7 @@ class GameState {
       marketOffers: (j['marketOffers'] as List? ?? [])
           .map((e) => MarketOffer.fromJson(e as Map<String, dynamic>))
           .toList(),
+      lastPlayedAtMs: j['lastPlayedAtMs'] as int?,
     );
   }
 }
@@ -439,6 +448,7 @@ class GameNotifier extends _GameNotifierBase
       binders: const [],
       recentlyKeptIds: const {},
       marketOffers: const [],
+      lastPlayedAtMs: DateTime.now().millisecondsSinceEpoch,
     );
   }
 
@@ -490,6 +500,7 @@ class GameNotifier extends _GameNotifierBase
         if (state.valueHistory.isEmpty) {
           _recordCollectionValue(force: true);
         }
+        await catchUpOnlineSales();
         await _persist();
         return;
       } catch (_) {
@@ -523,8 +534,10 @@ class GameNotifier extends _GameNotifierBase
       binders: const [],
       recentlyKeptIds: const {},
       marketOffers: const [],
+      lastPlayedAtMs: DateTime.now().millisecondsSinceEpoch,
     );
     state = fresh;
+    await catchUpOnlineSales();
     await _persist();
   }
 
@@ -1072,6 +1085,136 @@ class GameNotifier extends _GameNotifierBase
     }
   }
 
+  /// Shared online-listing fill used by Advance Day and wall-clock catch-up.
+  ({
+    PlayerStats player,
+    List<OwnedCard> collection,
+    List<OnlineListing> online,
+    int soldCount,
+  }) _tryFillOnlineListings({
+    required PlayerStats player,
+    required List<OwnedCard> collection,
+    required List<OnlineListing> online,
+    required List<MarketEvent> events,
+    double chanceMult = 1.0,
+  }) {
+    var p = player;
+    var coll = [...collection];
+    var listings = [...online];
+    final soldIds = <String>[];
+    for (final listing
+        in listings.where((l) => l.status == OnlineListingStatus.active)) {
+      OwnedCard? card;
+      for (final c in coll) {
+        if (c.instanceId == listing.ownedInstanceId) {
+          card = c;
+          break;
+        }
+      }
+      if (card == null) continue;
+      final def = _catalog.byId[card.cardId];
+      if (def == null) continue;
+      final fair = Pricing.fairValue(def, card, events: events);
+      final ratio = listing.ask / max(0.01, fair);
+      var chance = ratio <= 0.95
+          ? 0.62
+          : ratio <= 1.05
+              ? 0.48
+              : ratio <= 1.15
+                  ? 0.22
+                  : ratio <= 1.3
+                      ? 0.08
+                      : 0.02;
+      chance = (chance * chanceMult).clamp(0.0, 1.0);
+      if (_rng.nextDouble() < chance) {
+        final fee = listing.ask * Pricing.platformFeeRate(p);
+        p = p.copyWith(
+          cash: p.cash + listing.ask - fee,
+          cardsSold: p.cardsSold + 1,
+          xp: p.xp + 3,
+        );
+        soldIds.add(listing.id);
+        coll = coll
+            .where((c) => c.instanceId != listing.ownedInstanceId)
+            .toList();
+      }
+    }
+    listings = listings
+        .map((l) {
+          if (soldIds.contains(l.id)) {
+            l.status = OnlineListingStatus.sold;
+          }
+          return l;
+        })
+        .where((l) => l.status == OnlineListingStatus.active)
+        .toList();
+    return (
+      player: p,
+      collection: coll,
+      online: listings,
+      soldCount: soldIds.length,
+    );
+  }
+
+  static const _catchUpWindowMs = 20 * 60 * 60 * 1000; // 20 hours
+  static const _catchUpMaxChecks = 3;
+  static const _catchUpChanceMult = 0.85;
+
+  /// Resolve missed listing sale rolls from real elapsed time (no background).
+  Future<int> catchUpOnlineSales({int? nowMs}) async {
+    if (!state.ready) return 0;
+    final now = nowMs ?? DateTime.now().millisecondsSinceEpoch;
+    final last = state.lastPlayedAtMs;
+    if (last == null) {
+      state = state.copyWith(lastPlayedAtMs: now);
+      await _persist();
+      return 0;
+    }
+    final elapsed = now - last;
+    final checks =
+        max(0, min(_catchUpMaxChecks, elapsed ~/ _catchUpWindowMs));
+    if (checks <= 0) {
+      state = state.copyWith(lastPlayedAtMs: now);
+      await _persist();
+      return 0;
+    }
+
+    var player = state.player;
+    var collection = [...state.collection];
+    var online = [...state.onlineListings];
+    var soldTotal = 0;
+    for (var i = 0; i < checks; i++) {
+      if (online.isEmpty) break;
+      final fill = _tryFillOnlineListings(
+        player: player,
+        collection: collection,
+        online: online,
+        events: state.events,
+        chanceMult: _catchUpChanceMult,
+      );
+      player = fill.player;
+      collection = fill.collection;
+      online = fill.online;
+      soldTotal += fill.soldCount;
+    }
+
+    state = state.copyWith(
+      player: player,
+      collection: collection,
+      onlineListings: online,
+      lastPlayedAtMs: now,
+      message: soldTotal > 0
+          ? 'While you were away: $soldTotal listing(s) sold.'
+          : state.message,
+    );
+    if (soldTotal > 0) {
+      _recordCollectionValue();
+      _checkAchievements();
+    }
+    await _persist();
+    return soldTotal;
+  }
+
   Future<void> advanceDay() async {
     var events = state.events
         .map((e) => e.copyWith(turnsLeft: e.turnsLeft - 1))
@@ -1097,48 +1240,16 @@ class GameNotifier extends _GameNotifierBase
     }).toList();
 
     // Online listing fills — fair asks sell, bargains not auto-instant.
-    var player = state.player;
-    var collection = [...state.collection];
-    var online = [...state.onlineListings];
-    final soldIds = <String>[];
-    for (final listing in online.where((l) => l.status == OnlineListingStatus.active)) {
-      final card = collection.firstWhere((c) => c.instanceId == listing.ownedInstanceId);
-      final def = _catalog.byId[card.cardId];
-      if (def == null) continue;
-      final fair = Pricing.fairValue(def, card, events: events);
-      final ratio = listing.ask / max(0.01, fair);
-      var chance = ratio <= 0.95
-          ? 0.62
-          : ratio <= 1.05
-              ? 0.48
-              : ratio <= 1.15
-                  ? 0.22
-                  : ratio <= 1.3
-                      ? 0.08
-                      : 0.02;
-      if (_rng.nextDouble() < chance) {
-        final fee = listing.ask * Pricing.platformFeeRate(player);
-        player = player.copyWith(
-          cash: player.cash + listing.ask - fee,
-          cardsSold: player.cardsSold + 1,
-          xp: player.xp + 3,
-        );
-        soldIds.add(listing.id);
-        collection = collection
-            .where((c) => c.instanceId != listing.ownedInstanceId)
-            .toList();
-      }
-    }
-    online = online
-        .map((l) {
-          if (soldIds.contains(l.id)) {
-            l.status = OnlineListingStatus.sold;
-          }
-          return l;
-        })
-        .where((l) => l.status == OnlineListingStatus.active)
-        .toList();
-
+    final fill = _tryFillOnlineListings(
+      player: state.player,
+      collection: state.collection,
+      online: state.onlineListings,
+      events: events,
+    );
+    var player = fill.player;
+    var collection = fill.collection;
+    var online = fill.online;
+    final soldCount = fill.soldCount;
     // Auctions resolve
     var auctions = [...state.auctions];
     final finished = <AuctionLot>[];
@@ -1270,8 +1381,8 @@ class GameNotifier extends _GameNotifierBase
     }
 
     final msgParts = <String>[];
-    if (soldIds.isNotEmpty) {
-      msgParts.add('sold ${soldIds.length} online listing(s)');
+    if (soldCount > 0) {
+      msgParts.add('sold $soldCount online listing(s)');
     }
     if (offerUpdates > 0) {
       msgParts.add('$offerUpdates offer(s) updated');
@@ -1291,6 +1402,7 @@ class GameNotifier extends _GameNotifierBase
       sealedListings: sealed,
       market: market,
       marketOffers: offers,
+      lastPlayedAtMs: nowMs,
       message: dayMsg,
     );
     state = _sanitizeEconomy(next);

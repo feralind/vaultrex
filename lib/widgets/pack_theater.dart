@@ -366,6 +366,7 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
                   children: [
                     if (_phase == _RipPhase.sealed || inReveal)
                       IconButton(
+                        tooltip: 'Keep remaining & close',
                         onPressed: _closeEnabled
                             ? () => _closeOrKeepAll(keepRemaining: true)
                             : null,
@@ -373,20 +374,6 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
                       )
                     else
                       const SizedBox(width: 48),
-                    if (inReveal)
-                      TextButton(
-                        onPressed: _closeEnabled
-                            ? () => _closeOrKeepAll(keepRemaining: true)
-                            : null,
-                        child: Text(
-                          'Keep all',
-                          style: AppText.jakarta(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: _closeEnabled ? CC.accent : CC.inkMuted,
-                          ),
-                        ),
-                      ),
                     Expanded(
                       child: inReveal
                           ? Row(
@@ -398,22 +385,16 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
                                   color: CC.inkMuted,
                                 ),
                                 const SizedBox(width: 6),
-                                Text(
-                                  'Kept',
-                                  style: AppText.jakarta(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: CC.inkMuted,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
                                 Container(
-                                  width: 24,
+                                  constraints: const BoxConstraints(minWidth: 24),
                                   height: 24,
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 6),
                                   alignment: Alignment.center,
                                   decoration: const BoxDecoration(
                                     color: CC.candy,
-                                    shape: BoxShape.circle,
+                                    borderRadius:
+                                        BorderRadius.all(Radius.circular(12)),
                                   ),
                                   child: Text(
                                     '$_keptCount',
@@ -429,25 +410,14 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
                           : const SizedBox.shrink(),
                     ),
                     if (inReveal || _phase == _RipPhase.sealed)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 4),
-                        child: FilterChip(
-                          label: Text(
-                            'Fast',
-                            style: AppText.jakarta(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          selected: _fastRip,
-                          onSelected: (_) => _toggleFastRip(),
-                          visualDensity: VisualDensity.compact,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
+                      IconButton(
+                        tooltip: _fastRip ? 'Fast rip on' : 'Fast rip off',
+                        onPressed: _toggleFastRip,
+                        icon: Icon(
+                          Icons.bolt_rounded,
+                          color: _fastRip ? CC.accent : CC.inkMuted,
                         ),
-                      ),
-                    if (inReveal)
-                      CandyBalance(candyBal)
+                      )
                     else
                       const SizedBox(width: 8),
                   ],
@@ -507,7 +477,16 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
             if (inReveal && _deciding)
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
-                child: Row(
+                child: Column(
+                  children: [
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: CandyBalance(candyBal),
+                      ),
+                    ),
+                    Row(
                   children: [
                     Expanded(
                       child: SizedBox(
@@ -562,6 +541,8 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
                         ),
                       ),
                     ),
+                  ],
+                ),
                   ],
                 ),
               )
