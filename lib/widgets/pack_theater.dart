@@ -196,8 +196,9 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
 
   void _onTearUpdate(DragUpdateDetails d) {
     if (_phase != _RipPhase.sealed || _sessionBusy) return;
-    final down = math.max(0.0, d.delta.dy) + d.delta.dx.abs() * 0.1;
-    _dragAccum = (_dragAccum + down).clamp(0.0, 220.0);
+    // Vertical swipe drives tear; downward motion only.
+    final across = math.max(0.0, d.delta.dy) + d.delta.dx.abs() * 0.15;
+    _dragAccum = (_dragAccum + across).clamp(0.0, 220.0);
     setState(() => _tear = (_dragAccum / 150).clamp(0.0, 1.0));
     if (_tear >= 1) _openPack();
   }
@@ -555,8 +556,8 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
   }
 }
 
-/// Center V-peel from the top seal — matches reference samples 032–046.
-/// [tear] 0..1 = user rip; 1..2 = flaps peel clear and pack dissolves.
+/// Diagonal wrapper tear — vertical swipe, candy-wrapper flaps peel sideways.
+/// [tear] 0..1 = user rip; 1..2 = flaps fly clear and pack dissolves.
 class _PackPeelStage extends StatelessWidget {
   const _PackPeelStage({
     required this.tear,
@@ -579,17 +580,16 @@ class _PackPeelStage extends StatelessWidget {
     final t = tear.clamp(0.0, 1.0);
     final exit = (tear - 1.0).clamp(0.0, 1.0);
     final peel = Curves.easeOutCubic.transform(t);
-    final clear = Curves.easeOutCubic.transform(exit);
-    final packOpacity =
-        Curves.easeInCubic.transform((1.0 - clear * 1.05).clamp(0.0, 1.0));
+    final stripFly = Curves.easeOutCubic.transform(exit);
+    final packFade =
+        Curves.easeInCubic.transform((1.0 - stripFly * 1.05).clamp(0.0, 1.0));
     final cardReveal = Curves.easeOutCubic.transform(
-      ((peel - 0.06) / 0.5 + clear * 0.65).clamp(0.0, 1.0),
+      ((peel - 0.06) / 0.5 + stripFly * 0.65).clamp(0.0, 1.0),
     );
-    final torn = peel > 0.03;
+    final torn = peel > 0.05;
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Reference: pack ~55–65% of viewport height, centered.
         const targetPackW = 340.0;
         const targetPackH = 500.0;
         final availW = constraints.maxWidth * 0.72;
@@ -597,7 +597,6 @@ class _PackPeelStage extends StatelessWidget {
         final scale = math.min(availW / targetPackW, availH / targetPackH);
         final packW = targetPackW * scale;
         final packH = targetPackH * scale;
-        // Card nearly fills pack mouth — same scale into reveal.
         final cardW = packW * 0.90;
         final cardH = packH * 0.86;
 
@@ -606,10 +605,6 @@ class _PackPeelStage extends StatelessWidget {
               width: packW,
               height: packH,
             );
-
-        final flapOutX = clear * packW * 0.85;
-        final flapOutY = clear * packH * 0.42;
-        final flapSpin = clear * 0.55;
 
         return Stack(
           fit: StackFit.expand,
@@ -638,89 +633,82 @@ class _PackPeelStage extends StatelessWidget {
                   alignment: Alignment.center,
                   clipBehavior: Clip.none,
                   children: [
-                    // Card back revealed through the V.
+                    // Inner wrapper / card back briefly under the flaps.
                     if (cardReveal > 0.02)
                       Opacity(
                         opacity: cardReveal.clamp(0.0, 1.0),
                         child: Transform.scale(
-                          scale: 0.96 + clear * 0.04,
+                          scale: 0.96 + stripFly * 0.04,
                           child: _CardBack(width: cardW, height: cardH),
                         ),
                       ),
 
                     // Intact sealed pack.
-                    if (!torn && packOpacity > 0.02)
-                      Opacity(
-                        opacity: packOpacity,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            packArt(),
-                            // Faint center seam (reference idle frames).
-                            IgnorePointer(
-                              child: CustomPaint(
-                                size: Size(packW, packH),
-                                painter: const _CenterSeamPainter(),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    if (!torn && packFade > 0.02)
+                      Opacity(opacity: packFade, child: packArt()),
 
-                    // Lower pack remnant under the V.
-                    if (torn && packOpacity > 0.02)
-                      Opacity(
-                        opacity: packOpacity * (1.0 - clear * 0.9),
-                        child: ClipPath(
-                          clipper: _PackRemnantClipper(progress: peel),
-                          child: packArt(),
-                        ),
-                      ),
-
-                    // Left flap — curls out, silver lining faces camera.
-                    if (torn && packOpacity > 0.01)
+                    // Right/upper flap — peels open to the right.
+                    if (torn)
                       Transform.translate(
                         offset: Offset(
-                          -peel * packW * 0.06 - flapOutX,
-                          peel * packH * 0.03 + flapOutY,
+                          stripFly * packW * 0.55,
+                          -stripFly * packH * 0.15,
                         ),
                         child: Transform.rotate(
-                          angle: -peel * 0.22 - flapSpin,
-                          alignment: Alignment.topCenter,
+                          alignment: Alignment.topRight,
+                          angle: peel * 0.18 + stripFly * 0.75,
                           child: Opacity(
-                            opacity:
-                                (packOpacity * (1.0 - clear * 0.95)).clamp(0.0, 1.0),
-                            child: _FoilFlap(
+                            opacity: packFade,
+                            child: SizedBox(
                               width: packW,
                               height: packH,
-                              side: -1,
-                              peel: peel,
-                              art: packArt(),
+                              child: ClipPath(
+                                clipper: _DiagonalFlapClipper(
+                                  keepLeft: false,
+                                  progress: peel,
+                                ),
+                                child: packArt(),
+                              ),
                             ),
                           ),
                         ),
                       ),
 
-                    // Right flap.
-                    if (torn && packOpacity > 0.01)
+                    // Left/lower flap — peels open to the left.
+                    if (torn)
                       Transform.translate(
                         offset: Offset(
-                          peel * packW * 0.06 + flapOutX,
-                          peel * packH * 0.03 + flapOutY,
+                          -stripFly * packW * 0.55,
+                          stripFly * packH * 0.15,
                         ),
                         child: Transform.rotate(
-                          angle: peel * 0.22 + flapSpin,
-                          alignment: Alignment.topCenter,
+                          alignment: Alignment.bottomLeft,
+                          angle: -peel * 0.18 - stripFly * 0.75,
                           child: Opacity(
-                            opacity:
-                                (packOpacity * (1.0 - clear * 0.95)).clamp(0.0, 1.0),
-                            child: _FoilFlap(
+                            opacity: packFade,
+                            child: SizedBox(
                               width: packW,
                               height: packH,
-                              side: 1,
-                              peel: peel,
-                              art: packArt(),
+                              child: ClipPath(
+                                clipper: _DiagonalFlapClipper(
+                                  keepLeft: true,
+                                  progress: peel,
+                                ),
+                                child: packArt(),
+                              ),
                             ),
+                          ),
+                        ),
+                      ),
+
+                    // Diagonal tear slash on top.
+                    if (torn)
+                      IgnorePointer(
+                        child: CustomPaint(
+                          size: Size(packW, packH),
+                          painter: _DiagonalTearPainter(
+                            progress: peel.clamp(0.0, 1.0),
+                            glow: 0.55 + peel * 0.45,
                           ),
                         ),
                       ),
@@ -735,22 +723,30 @@ class _PackPeelStage extends StatelessWidget {
                   behavior: HitTestBehavior.opaque,
                   onVerticalDragUpdate: onTearUpdate,
                   onVerticalDragEnd: (_) => onTearEnd?.call(),
-                  onHorizontalDragUpdate: onTearUpdate,
-                  onHorizontalDragEnd: (_) => onTearEnd?.call(),
                   child: showHint
                       ? AnimatedOpacity(
                           opacity: t < 0.15 ? 1 : (1 - t * 1.2).clamp(0.0, 1.0),
                           duration: const Duration(milliseconds: 160),
                           child: Align(
                             alignment: const Alignment(0, -0.78),
-                            child: Text(
-                              'Swipe down to rip',
-                              style: AppText.jakarta(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
-                                color: Colors.white.withValues(alpha: 0.92),
-                                letterSpacing: 0.2,
-                              ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.keyboard_arrow_down_rounded,
+                                  size: 28,
+                                  color: Colors.white.withValues(alpha: 0.92),
+                                ),
+                                Text(
+                                  'Swipe down to rip',
+                                  style: AppText.jakarta(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 16,
+                                    color: Colors.white.withValues(alpha: 0.92),
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         )
@@ -764,188 +760,96 @@ class _PackPeelStage extends StatelessWidget {
   }
 }
 
-class _CenterSeamPainter extends CustomPainter {
-  const _CenterSeamPainter();
+/// Clips a rectangle along a diagonal line from top-right to bottom-left.
+/// [keepLeft] = true keeps the left/lower flap, false keeps the right/upper.
+class _DiagonalFlapClipper extends CustomClipper<Path> {
+  _DiagonalFlapClipper({required this.keepLeft, this.progress = 1.0});
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    final x = size.width * 0.5;
-    final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.22)
-      ..strokeWidth = 1.2
-      ..style = PaintingStyle.stroke;
-    canvas.drawLine(
-      Offset(x, size.height * 0.06),
-      Offset(x, size.height * 0.94),
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-/// One half of the torn front foil: pack art + silver underside.
-class _FoilFlap extends StatelessWidget {
-  const _FoilFlap({
-    required this.width,
-    required this.height,
-    required this.side,
-    required this.peel,
-    required this.art,
-  });
-
-  final double width;
-  final double height;
-  /// -1 left, +1 right.
-  final int side;
-  final double peel;
-  final Widget art;
-
-  @override
-  Widget build(BuildContext context) {
-    final curl = Curves.easeOutCubic.transform(peel.clamp(0.0, 1.0));
-    return SizedBox(
-      width: width,
-      height: height,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          ClipPath(
-            clipper: _FlapClipper(side: side, progress: curl),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: side < 0 ? Alignment.centerRight : Alignment.centerLeft,
-                  end: side < 0 ? Alignment.centerLeft : Alignment.centerRight,
-                  colors: const [
-                    Color(0xFFF0F2F5),
-                    Color(0xFFC5CCD6),
-                    Color(0xFF9AA3B0),
-                  ],
-                  stops: const [0.0, 0.5, 1.0],
-                ),
-              ),
-              child: const SizedBox.expand(),
-            ),
-          ),
-          ClipPath(
-            clipper: _FlapClipper(side: side, progress: curl),
-            child: Opacity(
-              opacity: (1.0 - curl * 0.62).clamp(0.28, 1.0),
-              child: art,
-            ),
-          ),
-          IgnorePointer(
-            child: CustomPaint(
-              size: Size(width, height),
-              painter: _FlapEdgePainter(side: side, progress: curl),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FlapClipper extends CustomClipper<Path> {
-  _FlapClipper({required this.side, required this.progress});
-
-  final int side;
+  final bool keepLeft;
   final double progress;
 
   @override
   Path getClip(Size size) {
-    final p = progress.clamp(0.04, 1.0);
-    final midX = size.width * 0.5;
-    final depth = size.height * (0.14 + p * 0.82);
-    final spread = size.width * (0.06 + p * 0.46);
+    final p = progress.clamp(0.0, 1.0);
+    final start = Offset(size.width * 0.78, 0);
+    final end = Offset(
+      size.width * 0.78 - size.width * 0.62 * p,
+      size.height * p,
+    );
     final path = Path();
-    if (side < 0) {
+    if (keepLeft) {
       path
         ..moveTo(0, 0)
-        ..lineTo(midX, 0)
-        ..lineTo(midX - spread * 0.12, depth * 0.1)
-        ..lineTo(midX - spread, depth)
-        ..lineTo(0, depth * (0.5 + p * 0.4))
+        ..lineTo(start.dx, start.dy)
+        ..lineTo(end.dx, end.dy)
+        ..lineTo(0, size.height)
         ..close();
     } else {
       path
         ..moveTo(size.width, 0)
-        ..lineTo(midX, 0)
-        ..lineTo(midX + spread * 0.12, depth * 0.1)
-        ..lineTo(midX + spread, depth)
-        ..lineTo(size.width, depth * (0.5 + p * 0.4))
+        ..lineTo(start.dx, start.dy)
+        ..lineTo(end.dx, end.dy)
+        ..lineTo(size.width, size.height)
         ..close();
     }
     return path;
   }
 
   @override
-  bool shouldReclip(covariant _FlapClipper old) =>
-      old.side != side || old.progress != progress;
+  bool shouldReclip(covariant _DiagonalFlapClipper oldClipper) =>
+      oldClipper.progress != progress || oldClipper.keepLeft != keepLeft;
 }
 
-class _PackRemnantClipper extends CustomClipper<Path> {
-  _PackRemnantClipper({required this.progress});
+/// Diagonal jagged tear line, top-right to bottom-left, growing with [progress].
+class _DiagonalTearPainter extends CustomPainter {
+  _DiagonalTearPainter({required this.progress, required this.glow});
 
   final double progress;
-
-  @override
-  Path getClip(Size size) {
-    final p = progress.clamp(0.0, 1.0);
-    final midX = size.width * 0.5;
-    final depth = size.height * (0.14 + p * 0.82);
-    final spread = size.width * (0.06 + p * 0.46);
-    final outer = Path()..addRect(Offset.zero & size);
-    final v = Path()
-      ..moveTo(midX, 0)
-      ..lineTo(midX - spread, depth)
-      ..lineTo(midX + spread, depth)
-      ..close();
-    return Path.combine(PathOperation.difference, outer, v);
-  }
-
-  @override
-  bool shouldReclip(covariant _PackRemnantClipper old) =>
-      old.progress != progress;
-}
-
-class _FlapEdgePainter extends CustomPainter {
-  _FlapEdgePainter({required this.side, required this.progress});
-
-  final int side;
-  final double progress;
+  final double glow;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final p = progress.clamp(0.04, 1.0);
-    final midX = size.width * 0.5;
-    final depth = size.height * (0.14 + p * 0.82);
-    final spread = size.width * (0.06 + p * 0.46);
-    final edge = Path();
-    if (side < 0) {
-      edge
-        ..moveTo(midX, 0)
-        ..lineTo(midX - spread, depth);
-    } else {
-      edge
-        ..moveTo(midX, 0)
-        ..lineTo(midX + spread, depth);
+    final p = progress.clamp(0.0, 1.0);
+    final start = Offset(size.width * 0.78, 0);
+    final end = Offset(
+      size.width * 0.78 - size.width * 0.62 * p,
+      size.height * p,
+    );
+    const segs = 18;
+    final path = Path()..moveTo(start.dx, start.dy);
+    for (var i = 1; i <= segs; i++) {
+      final t = i / segs;
+      final x = start.dx + (end.dx - start.dx) * t;
+      final y = start.dy + (end.dy - start.dy) * t;
+      final perp = Offset(-(end.dy - start.dy), end.dx - start.dx);
+      final perpLen = perp.distance == 0 ? 1.0 : perp.distance;
+      final n = Offset(perp.dx / perpLen, perp.dy / perpLen);
+      final zig = math.sin(i * 1.9) * 4.5 + (i.isEven ? -2.0 : 2.0);
+      path.lineTo(x + n.dx * zig, y + n.dy * zig);
     }
+
     canvas.drawPath(
-      edge,
+      path,
       Paint()
-        ..color = Colors.white.withValues(alpha: 0.45)
+        ..color = CC.accent.withValues(alpha: 0.3 * glow)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 7
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.95 * glow)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.4
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5),
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
     );
   }
 
   @override
-  bool shouldRepaint(covariant _FlapEdgePainter old) =>
-      old.side != side || old.progress != progress;
+  bool shouldRepaint(covariant _DiagonalTearPainter oldDelegate) =>
+      oldDelegate.progress != progress || oldDelegate.glow != glow;
 }
 
 class _PackBody extends StatelessWidget {
@@ -1049,7 +953,7 @@ class _FoilPackFallback extends StatelessWidget {
                   )
                 : Image.asset(
                     'assets/logos/riftbound.png',
-                    width: 120,
+                    height: 108,
                     fit: BoxFit.contain,
                     errorBuilder: (_, _, _) =>
                         const RiftMark(size: 72, framed: false),
@@ -1125,12 +1029,13 @@ class _CardBack extends StatelessWidget {
                     ),
                   ),
                 )
-              : ColoredBox(
+                  : ColoredBox(
                   color: const Color(0xFF0C1428),
                   child: Center(
                     child: Image.asset(
                       'assets/logos/riftbound.png',
-                      width: width * 0.55,
+                      width: width * 0.42,
+                      height: width * 0.42,
                       fit: BoxFit.contain,
                     ),
                   ),

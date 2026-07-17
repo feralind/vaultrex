@@ -95,6 +95,7 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen>
                       selected: active == g.id,
                       logoAsset: g.logoAsset,
                       color: g.color,
+                      logoScale: g.logoScale,
                       locked: !g.enabled,
                       onTap: g.enabled
                           ? () async {
@@ -440,6 +441,7 @@ class _GameIcon extends StatelessWidget {
     required this.selected,
     required this.logoAsset,
     required this.color,
+    this.logoScale = 1,
     this.onTap,
     this.locked = false,
   });
@@ -447,11 +449,13 @@ class _GameIcon extends StatelessWidget {
   final bool selected;
   final String logoAsset;
   final Color color;
+  final double logoScale;
   final VoidCallback? onTap;
   final bool locked;
 
   @override
   Widget build(BuildContext context) {
+    final markH = 40 * logoScale;
     return InkWell(
       onTap: locked ? null : onTap,
       borderRadius: BorderRadius.circular(12),
@@ -474,7 +478,11 @@ class _GameIcon extends StatelessWidget {
                       ]
                     : null,
               ),
-              child: GameBrandLogo(asset: logoAsset, height: 40, width: 72),
+              child: GameBrandLogo(
+                asset: logoAsset,
+                height: markH,
+                width: logoScale > 1 ? markH : 72,
+              ),
             ),
             const SizedBox(height: 6),
             AnimatedContainer(

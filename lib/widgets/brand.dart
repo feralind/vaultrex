@@ -144,6 +144,7 @@ class GamePickTile extends StatelessWidget {
     required this.accent,
     required this.selected,
     required this.enabled,
+    this.logoScale = 1,
     this.onTap,
   });
 
@@ -152,6 +153,7 @@ class GamePickTile extends StatelessWidget {
   final Color accent;
   final bool selected;
   final bool enabled;
+  final double logoScale;
   final VoidCallback? onTap;
 
   @override
@@ -187,7 +189,10 @@ class GamePickTile extends StatelessWidget {
                           ]
                         : null,
                   ),
-                  child: GameBrandLogo(asset: logoAsset, height: 72),
+                  child: GameBrandLogo(
+                    asset: logoAsset,
+                    height: 72 * logoScale,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 Text(

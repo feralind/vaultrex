@@ -46,6 +46,8 @@ class GameOption {
     required this.enabled,
     required this.color,
     required this.logoAsset,
+    /// Visual weight vs wordmark logos (icon marks need a bump).
+    this.logoScale = 1,
   });
 
   final String id;
@@ -53,6 +55,7 @@ class GameOption {
   final bool enabled;
   final Color color;
   final String logoAsset;
+  final double logoScale;
 }
 
 const kGames = [
@@ -60,8 +63,10 @@ const kGames = [
     id: 'riftbound',
     name: 'Riftbound',
     enabled: true,
-    color: Color(0xFF5B8CFF),
+    color: Color(0xFFF4820A),
     logoAsset: 'assets/logos/riftbound.png',
+    // Square icon mark — scale up to balance Pokémon / other wordmarks.
+    logoScale: 1.22,
   ),
   GameOption(
     id: 'pokemon',

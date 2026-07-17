@@ -441,6 +441,7 @@ class _CollectPage extends StatelessWidget {
                   accent: g.color,
                   selected: selected == g.id,
                   enabled: g.enabled,
+                  logoScale: g.logoScale,
                   onTap: () => onSelect(g.id),
                 );
               },
