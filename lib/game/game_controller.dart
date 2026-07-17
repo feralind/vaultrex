@@ -37,7 +37,27 @@ const _sellerNames = [
   'LaneSharkLGS',
   'TrendWatcherTCG',
   'BulkBaron',
+  'SleeveSniper',
+  'HoloHarbor',
+  'MintCornerCo',
+  'BinderBunny',
+  'ChaseCatcher',
+  'FoilFoxCards',
+  'SlabStacker',
+  'PullRatePete',
+  'CaseCrackChris',
+  'NMOnlyNick',
+  'BudgetBinder',
+  'AltArtAnnie',
+  'GradeGate',
+  'ShipFastSam',
+  'CompsChecker',
+  'VaultFlipVince',
 ];
+
+enum _MarketTier { hot, mid, budget }
+
+enum _OfferDecision { accept, counter, reject }
 
 const upgrades = [
   UpgradeDef(
@@ -85,6 +105,7 @@ class GameState {
     this.valueHistory = const [],
     this.binders = const [],
     this.recentlyKeptIds = const {},
+    this.marketOffers = const [],
   });
 
   final bool ready;
@@ -109,6 +130,7 @@ class GameState {
   final List<Binder> binders;
   /// Session-only: instance ids just kept from a rip (for entrance pulse).
   final Set<String> recentlyKeptIds;
+  final List<MarketOffer> marketOffers;
 
   factory GameState.loading() => GameState(
         ready: false,
@@ -131,6 +153,7 @@ class GameState {
         valueHistory: const [],
         binders: const [],
         recentlyKeptIds: const {},
+        marketOffers: const [],
       );
 
   GameState copyWith({
@@ -157,6 +180,7 @@ class GameState {
     List<CollectionValuePoint>? valueHistory,
     List<Binder>? binders,
     Set<String>? recentlyKeptIds,
+    List<MarketOffer>? marketOffers,
   }) {
     return GameState(
       ready: ready ?? this.ready,
@@ -180,6 +204,7 @@ class GameState {
       valueHistory: valueHistory ?? this.valueHistory,
       binders: binders ?? this.binders,
       recentlyKeptIds: recentlyKeptIds ?? this.recentlyKeptIds,
+      marketOffers: marketOffers ?? this.marketOffers,
     );
   }
 
@@ -200,6 +225,7 @@ class GameState {
         'lastRipPaid': lastRipPaid,
         'valueHistory': valueHistory.map((e) => e.toJson()).toList(),
         'binders': binders.map((e) => e.toJson()).toList(),
+        'marketOffers': marketOffers.map((e) => e.toJson()).toList(),
       };
 
   factory GameState.fromJson(Map<String, dynamic> j) {
@@ -210,7 +236,7 @@ class GameState {
         ready: true,
         catalogLoaded: true,
         franchiseId: 'riftbound',
-        player: PlayerStats(cash: 500),
+        player: const PlayerStats(cash: 350, candy: 25000),
         collection: const [],
         unopened: const [],
         sealedListings: const [],
@@ -228,6 +254,7 @@ class GameState {
         valueHistory: const [],
         binders: const [],
         recentlyKeptIds: const {},
+        marketOffers: const [],
       );
     }
     final fid = (j['franchiseId'] as String?) == 'pokemon'
@@ -276,6 +303,9 @@ class GameState {
           .map((e) => Binder.fromJson(e as Map<String, dynamic>))
           .toList(),
       recentlyKeptIds: const {},
+      marketOffers: (j['marketOffers'] as List? ?? [])
+          .map((e) => MarketOffer.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
   }
 }
@@ -408,6 +438,7 @@ class GameNotifier extends _GameNotifierBase
       ],
       binders: const [],
       recentlyKeptIds: const {},
+      marketOffers: const [],
     );
   }
 
@@ -470,7 +501,7 @@ class GameNotifier extends _GameNotifierBase
       ready: true,
       catalogLoaded: true,
       franchiseId: gameId,
-      player: sharedWallet ?? const PlayerStats(cash: 500),
+      player: sharedWallet ?? const PlayerStats(cash: 350, candy: 25000),
       collection: const [],
       unopened: const [],
       sealedListings: _generateSealedShop(const []),
@@ -491,6 +522,7 @@ class GameNotifier extends _GameNotifierBase
       ],
       binders: const [],
       recentlyKeptIds: const {},
+      marketOffers: const [],
     );
     state = fresh;
     await _persist();
@@ -664,38 +696,67 @@ class GameNotifier extends _GameNotifierBase
     final rawWeighted = [...pool]
       ..sort((a, b) => b.marketPrice.compareTo(a.marketPrice));
 
-    // Hot chase: top ~20 by spot, 2–6 competing asks.
+    // Hot chase: top ~20 by spot, 3–7 competing asks.
     final hot = rawWeighted.take(min(20, rawWeighted.length)).toList();
     for (final c in hot) {
-      final n = 2 + _rng.nextInt(5); // 2–6
+      final n = 3 + _rng.nextInt(5); // 3–7
       final usedConds = <Condition>{};
+      final usedPairs = <String>{};
       for (var i = 0; i < n; i++) {
         final listing = _makeMarketListing(
           c,
           graded: false,
           preferUnusedCondition: usedConds,
+          usedSellerPairs: usedPairs,
+          tier: _MarketTier.hot,
         );
         usedConds.add(listing.condition);
+        usedPairs.add('${listing.sellerType.name}|${listing.sellerAlias}');
         out.add(listing);
       }
     }
 
-    // Mid: next ~40 with 1–2 asks.
+    // Mid: next ~40 with 2–3 asks.
     final mid = rawWeighted.skip(hot.length).take(40).toList();
     for (final c in mid) {
-      final n = 1 + (_rng.nextDouble() < 0.35 ? 1 : 0);
+      final n = 2 + (_rng.nextDouble() < 0.4 ? 1 : 0); // 2–3
+      final usedPairs = <String>{};
       for (var i = 0; i < n; i++) {
-        out.add(_makeMarketListing(c, graded: false));
+        final listing = _makeMarketListing(
+          c,
+          graded: false,
+          usedSellerPairs: usedPairs,
+          tier: _MarketTier.mid,
+        );
+        usedPairs.add('${listing.sellerType.name}|${listing.sellerAlias}');
+        out.add(listing);
       }
     }
 
-    // Budget long-tail: sample ~30 lower-priced real cards.
+    // Warm: next ~30 with 1–2 asks.
+    final warm = rawWeighted.skip(hot.length + mid.length).take(30).toList();
+    for (final c in warm) {
+      final n = 1 + (_rng.nextDouble() < 0.45 ? 1 : 0);
+      final usedPairs = <String>{};
+      for (var i = 0; i < n; i++) {
+        final listing = _makeMarketListing(
+          c,
+          graded: false,
+          usedSellerPairs: usedPairs,
+          tier: _MarketTier.mid,
+        );
+        usedPairs.add('${listing.sellerType.name}|${listing.sellerAlias}');
+        out.add(listing);
+      }
+    }
+
+    // Budget long-tail: sample ~40 lower-priced real cards.
     final budgetPool = rawWeighted.where((c) => c.marketPrice < 8).toList()
       ..shuffle(_rng);
     final seen = out.map((m) => m.cardId).toSet();
-    for (final c in budgetPool.take(30)) {
+    for (final c in budgetPool.take(40)) {
       if (seen.contains(c.id) && _rng.nextDouble() < 0.6) continue;
-      out.add(_makeMarketListing(c, graded: false));
+      out.add(_makeMarketListing(c, graded: false, tier: _MarketTier.budget));
       seen.add(c.id);
     }
 
@@ -704,20 +765,39 @@ class GameNotifier extends _GameNotifierBase
       ..sort((a, b) => b.marketPrice.compareTo(a.marketPrice));
     final slabHot = slabPool.take(min(12, slabPool.length)).toList();
     for (final c in slabHot) {
-      final n = 2 + _rng.nextInt(3);
+      final n = 3 + _rng.nextInt(3); // 3–5
+      final usedPairs = <String>{};
       for (var i = 0; i < n; i++) {
-        out.add(_makeMarketListing(c, graded: true));
+        final listing = _makeMarketListing(
+          c,
+          graded: true,
+          usedSellerPairs: usedPairs,
+          tier: _MarketTier.hot,
+        );
+        usedPairs.add('${listing.sellerType.name}|${listing.sellerAlias}');
+        out.add(listing);
       }
     }
-    for (final c in slabPool.skip(slabHot.length).take(10)) {
-      out.add(_makeMarketListing(c, graded: true));
+    for (final c in slabPool.skip(slabHot.length).take(12)) {
+      final n = 1 + (_rng.nextDouble() < 0.5 ? 1 : 0); // 1–2
+      final usedPairs = <String>{};
+      for (var i = 0; i < n; i++) {
+        final listing = _makeMarketListing(
+          c,
+          graded: true,
+          usedSellerPairs: usedPairs,
+          tier: _MarketTier.hot,
+        );
+        usedPairs.add('${listing.sellerType.name}|${listing.sellerAlias}');
+        out.add(listing);
+      }
     }
 
     out.shuffle(_rng);
-    return out.take(min(120, out.length)).toList();
+    return out.take(min(180, out.length)).toList();
   }
 
-  /// Keep bargains; replace ~35%+ so the shop feels alive. Cap 120.
+  /// Keep bargains; replace ~35%+ so the shop feels alive. Cap 180.
   List<MarketListing> _churnSinglesMarket(List<MarketListing> current) {
     final valid =
         current.where((m) => _catalog.byId.containsKey(m.cardId)).toList();
@@ -746,15 +826,17 @@ class GameNotifier extends _GameNotifierBase
     final replaceN = max(drop.length, (valid.length * 0.35).round());
     final next = [...keep, ...fresh.take(replaceN)];
     next.shuffle(_rng);
-    return next.take(min(120, next.length)).toList();
+    return next.take(min(180, next.length)).toList();
   }
 
   MarketListing _makeMarketListing(
     CardDef c, {
     required bool graded,
     Set<Condition>? preferUnusedCondition,
+    Set<String>? usedSellerPairs,
+    _MarketTier tier = _MarketTier.mid,
   }) {
-    final seller = SellerType.values[_rng.nextInt(SellerType.values.length)];
+    final seller = _pickSellerType(tier: tier, graded: graded);
     final foil = _rng.nextDouble() < 0.35 && c.foilMarketPrice != null;
     Condition cond;
     if (graded) {
@@ -796,14 +878,14 @@ class GameNotifier extends _GameNotifierBase
       price = base * gradeMult * 1.2;
     }
 
-    // Tighter to spot — less gamey seller noise.
-    if (seller == SellerType.clueless) price *= 0.78 + _rng.nextDouble() * 0.12;
-    if (seller == SellerType.scammy) price *= 0.85 + _rng.nextDouble() * 0.12;
-    if (seller == SellerType.serious) price *= 0.97 + _rng.nextDouble() * 0.08;
-    if (seller == SellerType.goblin) price *= 0.9 + _rng.nextDouble() * 0.15;
-    price *= 0.97 + _rng.nextDouble() * 0.06;
+    // Slightly soft asks — deals exist, not 20%+ steals every day.
+    if (seller == SellerType.clueless) price *= 0.88 + _rng.nextDouble() * 0.08;
+    if (seller == SellerType.scammy) price *= 0.92 + _rng.nextDouble() * 0.08;
+    if (seller == SellerType.serious) price *= 0.98 + _rng.nextDouble() * 0.07;
+    if (seller == SellerType.goblin) price *= 0.94 + _rng.nextDouble() * 0.10;
+    price *= 0.98 + _rng.nextDouble() * 0.05;
 
-    final alias = _sellerNames[_rng.nextInt(_sellerNames.length)];
+    final alias = _pickSellerAlias(seller, usedSellerPairs);
     final gradeLabel = graded
         ? 'PSA ${grade >= 10 ? '10' : grade.toStringAsFixed(grade % 1 == 0 ? 0 : 1)}'
         : null;
@@ -833,6 +915,39 @@ class GameNotifier extends _GameNotifierBase
       salesCount: sales,
       shipsInDays: seller.shipsInDays,
     );
+  }
+
+  SellerType _pickSellerType({
+    required _MarketTier tier,
+    required bool graded,
+  }) {
+    final r = _rng.nextDouble();
+    if (graded || tier == _MarketTier.hot) {
+      if (r < 0.45) return SellerType.serious;
+      if (r < 0.70) return SellerType.goblin;
+      if (r < 0.88) return SellerType.clueless;
+      return SellerType.scammy;
+    }
+    if (tier == _MarketTier.budget) {
+      if (r < 0.45) return SellerType.clueless;
+      if (r < 0.70) return SellerType.goblin;
+      if (r < 0.88) return SellerType.serious;
+      return SellerType.scammy;
+    }
+    return SellerType.values[_rng.nextInt(SellerType.values.length)];
+  }
+
+  String _pickSellerAlias(SellerType seller, Set<String>? usedPairs) {
+    if (usedPairs == null || usedPairs.isEmpty) {
+      return _sellerNames[_rng.nextInt(_sellerNames.length)];
+    }
+    final shuffled = [..._sellerNames]..shuffle(_rng);
+    for (final alias in shuffled) {
+      final key = '${seller.name}|$alias';
+      if (!usedPairs.contains(key)) return alias;
+    }
+    // Exhausted unique pairs — pick any alias (still try a fresh name).
+    return _sellerNames[_rng.nextInt(_sellerNames.length)];
   }
 
   List<AuctionLot> _generateAuctions() {
@@ -935,6 +1050,28 @@ class GameNotifier extends _GameNotifierBase
     await _persist();
   }
 
+  /// Seller response when a pending offer is evaluated on Advance Day.
+  _OfferDecision _sellerOfferDecision(SellerType seller, double offerOverAsk) {
+    switch (seller) {
+      case SellerType.clueless:
+        if (offerOverAsk >= 0.86) return _OfferDecision.accept;
+        if (_rng.nextDouble() < 0.40) return _OfferDecision.counter;
+        return _OfferDecision.reject;
+      case SellerType.serious:
+        if (offerOverAsk >= 0.95) return _OfferDecision.accept;
+        // Serious counters once (at ~98% ask) then rejects lowballs.
+        if (offerOverAsk >= 0.88) return _OfferDecision.counter;
+        return _OfferDecision.reject;
+      case SellerType.goblin:
+        if (offerOverAsk >= 0.90) return _OfferDecision.accept;
+        if (_rng.nextDouble() < 0.55) return _OfferDecision.counter;
+        return _OfferDecision.reject;
+      case SellerType.scammy:
+        if (offerOverAsk >= 0.88) return _OfferDecision.accept;
+        return _OfferDecision.reject;
+    }
+  }
+
   Future<void> advanceDay() async {
     var events = state.events
         .map((e) => e.copyWith(turnsLeft: e.turnsLeft - 1))
@@ -959,7 +1096,7 @@ class GameNotifier extends _GameNotifierBase
       return g;
     }).toList();
 
-    // Online listing fills — easier near-fair asks (app tempo, not grind).
+    // Online listing fills — fair asks sell, bargains not auto-instant.
     var player = state.player;
     var collection = [...state.collection];
     var online = [...state.onlineListings];
@@ -971,11 +1108,11 @@ class GameNotifier extends _GameNotifierBase
       final fair = Pricing.fairValue(def, card, events: events);
       final ratio = listing.ask / max(0.01, fair);
       var chance = ratio <= 0.95
-          ? 0.92
+          ? 0.62
           : ratio <= 1.05
-              ? 0.68
+              ? 0.48
               : ratio <= 1.15
-                  ? 0.28
+                  ? 0.22
                   : ratio <= 1.3
                       ? 0.08
                       : 0.02;
@@ -1048,13 +1185,103 @@ class GameNotifier extends _GameNotifierBase
 
     final sealed = _generateSealedShop(events);
     await _applySpotRefresh();
-    var market = _churnSinglesMarket(state.market);
+
+    // Resolve pending market offers before listings churn.
+    var market = [...state.market];
+    var offers = [...state.marketOffers];
+    var offerUpdates = 0;
+    final acceptedListingIds = <String>{};
+    final nextDay = state.day + 1;
+
+    for (final o in offers) {
+      if (o.status != MarketOfferStatus.pending) continue;
+
+      if (nextDay > o.expiresOnDay) {
+        o.status = MarketOfferStatus.expired;
+        player = player.copyWith(cash: player.cash + o.offerAmount);
+        offerUpdates++;
+        continue;
+      }
+
+      final listingIdx = market.indexWhere((m) => m.id == o.listingId);
+      if (listingIdx < 0) {
+        o.status = MarketOfferStatus.cancelled;
+        player = player.copyWith(cash: player.cash + o.offerAmount);
+        offerUpdates++;
+        continue;
+      }
+      final listing = market[listingIdx];
+      final ratio = o.offerAmount / max(0.01, listing.price);
+      final decision = _sellerOfferDecision(listing.sellerType, ratio);
+
+      if (decision == _OfferDecision.accept) {
+        o.status = MarketOfferStatus.accepted;
+        collection.add(_ownedFromMarketListing(listing));
+        acceptedListingIds.add(listing.id);
+        offerUpdates++;
+      } else if (decision == _OfferDecision.counter) {
+        final counterMult = switch (listing.sellerType) {
+          SellerType.clueless => 0.92,
+          SellerType.serious => 0.98,
+          SellerType.goblin => 0.94,
+          SellerType.scammy => 0.95,
+        };
+        o.counterAmount = double.parse(
+          max(o.offerAmount + 0.01, listing.price * counterMult)
+              .toStringAsFixed(2),
+        );
+        // Soft-counter never above ask.
+        if (o.counterAmount! >= listing.price) {
+          o.counterAmount =
+              double.parse((listing.price - 0.01).toStringAsFixed(2));
+        }
+        if (o.counterAmount! <= o.offerAmount) {
+          o.status = MarketOfferStatus.rejected;
+          player = player.copyWith(cash: player.cash + o.offerAmount);
+        } else {
+          o.status = MarketOfferStatus.countered;
+        }
+        offerUpdates++;
+      } else {
+        o.status = MarketOfferStatus.rejected;
+        player = player.copyWith(cash: player.cash + o.offerAmount);
+        offerUpdates++;
+      }
+    }
+
+    if (acceptedListingIds.isNotEmpty) {
+      market = market.where((m) => !acceptedListingIds.contains(m.id)).toList();
+    }
+
+    market = _churnSinglesMarket(market);
     if (_marketNeedsRegen(market)) {
       market = _generateSinglesMarket();
     }
 
+    // Refund open offers whose listing vanished in churn.
+    final liveIds = market.map((m) => m.id).toSet();
+    for (final o in offers) {
+      if (!o.isOpen) continue;
+      if (!liveIds.contains(o.listingId)) {
+        o.status = MarketOfferStatus.cancelled;
+        player = player.copyWith(cash: player.cash + o.offerAmount);
+        offerUpdates++;
+      }
+    }
+
+    final msgParts = <String>[];
+    if (soldIds.isNotEmpty) {
+      msgParts.add('sold ${soldIds.length} online listing(s)');
+    }
+    if (offerUpdates > 0) {
+      msgParts.add('$offerUpdates offer(s) updated');
+    }
+    final dayMsg = msgParts.isEmpty
+        ? 'Day $nextDay — shop restocked.'
+        : 'Day $nextDay — ${msgParts.join('; ')}.';
+
     var next = state.copyWith(
-      day: state.day + 1,
+      day: nextDay,
       player: player,
       collection: collection,
       onlineListings: online,
@@ -1063,9 +1290,8 @@ class GameNotifier extends _GameNotifierBase
       events: events,
       sealedListings: sealed,
       market: market,
-      message: soldIds.isEmpty
-          ? 'Day ${state.day + 1} — shop restocked.'
-          : 'Day ${state.day + 1} — sold ${soldIds.length} online listing(s).',
+      marketOffers: offers,
+      message: dayMsg,
     );
     state = _sanitizeEconomy(next);
     _checkAchievements();

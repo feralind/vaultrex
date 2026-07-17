@@ -12,11 +12,6 @@ bool isAssetImageUrl(String url) =>
 String normalizeAssetPath(String url) =>
     url.startsWith('asset:') ? url.substring('asset:'.length) : url;
 
-bool _isPngAsset(String url) {
-  final path = normalizeAssetPath(url).toLowerCase();
-  return path.endsWith('.png') || path.endsWith('.webp');
-}
-
 /// Product photo with studio white/light background knocked out so only the
 /// pack / box / deck silhouette remains transparent.
 class KnockoutProductImage extends StatefulWidget {
@@ -66,7 +61,8 @@ class _KnockoutProductImageState extends State<KnockoutProductImage> {
   }
 
   Future<void> _load() async {
-    final key = '${widget.url}@${widget.threshold}';
+    // v2: fringe choke also runs on assets that already have alpha.
+    final key = 'v2:${widget.url}@${widget.threshold}';
     final cached = _cache[key];
     if (cached != null) {
       setState(() {
@@ -98,28 +94,19 @@ class _KnockoutProductImageState extends State<KnockoutProductImage> {
       final w = src.width;
       final h = src.height;
 
-      // Local / Scrydex PNGs already ship with an alpha channel — keep them
-      // as-is so cream/light pack art isn't eaten by white knockout.
-      final skipKnockout = _hasMeaningfulAlpha(pixels) ||
-          (isAssetImageUrl(widget.url) && _isPngAsset(widget.url));
-
-      final ui.Image out;
-      if (skipKnockout) {
-        out = await _imageFromRgba(pixels, w, h);
+      final hasAlpha = _hasMeaningfulAlpha(pixels);
+      late final Uint8List processed;
+      if (kIsWeb) {
+        processed = hasAlpha
+            ? _fringeChokePixels(_PixelJob(pixels, w, h, widget.threshold))
+            : _knockoutPixels(_PixelJob(pixels, w, h, widget.threshold));
       } else {
-        late final Uint8List knocked;
-        if (kIsWeb) {
-          knocked = _knockoutPixels(
-            _PixelJob(pixels, w, h, widget.threshold),
-          );
-        } else {
-          knocked = await compute(
-            _knockoutPixels,
-            _PixelJob(pixels, w, h, widget.threshold),
-          );
-        }
-        out = await _imageFromRgba(knocked, w, h);
+        processed = await compute(
+          hasAlpha ? _fringeChokePixels : _knockoutPixels,
+          _PixelJob(pixels, w, h, widget.threshold),
+        );
       }
+      final out = await _imageFromRgba(processed, w, h);
 
       _cache[key] = out;
       if (!mounted) return;
@@ -184,36 +171,35 @@ class _KnockoutProductImageState extends State<KnockoutProductImage> {
       );
     }
     if (_error != null || _image == null) {
+      // Prefer caller error widget — never flash raw white-bg product JPG/PNG.
+      if (widget.error != null) {
+        return SizedBox(
+          width: widget.width,
+          height: widget.height,
+          child: widget.error,
+        );
+      }
       if (isAssetImageUrl(widget.url)) {
         return SizedBox(
           width: widget.width,
           height: widget.height,
-          child: widget.error ??
-              Image.asset(
-                normalizeAssetPath(widget.url),
-                width: widget.width,
-                height: widget.height,
-                fit: widget.fit,
-                errorBuilder: (_, _, _) =>
-                    widget.placeholder ?? const SizedBox.shrink(),
-              ),
+          child: widget.placeholder ?? const SizedBox.shrink(),
         );
       }
       // Last-resort visual: multiply blend hides white on dark UI.
       return SizedBox(
         width: widget.width,
         height: widget.height,
-        child: widget.error ??
-            CachedNetworkImage(
-              imageUrl: widget.url,
-              width: widget.width,
-              height: widget.height,
-              fit: widget.fit,
-              color: Colors.white,
-              colorBlendMode: BlendMode.multiply,
-              errorWidget: (_, _, _) =>
-                  widget.placeholder ?? const SizedBox.shrink(),
-            ),
+        child: CachedNetworkImage(
+          imageUrl: widget.url,
+          width: widget.width,
+          height: widget.height,
+          fit: widget.fit,
+          color: Colors.white,
+          colorBlendMode: BlendMode.multiply,
+          errorWidget: (_, _, _) =>
+              widget.placeholder ?? const SizedBox.shrink(),
+        ),
       );
     }
 
@@ -335,6 +321,126 @@ Uint8List _knockoutPixels(_PixelJob job) {
       if (touchesClear) {
         bytes[i + 3] = (a * 0.35).round().clamp(0, 255);
       }
+    }
+  }
+
+  return bytes;
+}
+
+/// Cheap fringe cleanup for assets that already have transparency: clear
+/// near-white / light-gray pixels on the border or touching transparency.
+Uint8List _fringeChokePixels(_PixelJob job) {
+  final bytes = job.pixels;
+  final w = job.width;
+  final h = job.height;
+  const chromaMax = 30;
+  const whiteFloor = 205;
+  const borderPx = 14;
+
+  bool isNearWhite(int i) {
+    final a = bytes[i + 3];
+    if (a < 12) return true;
+    final r = bytes[i];
+    final g = bytes[i + 1];
+    final b = bytes[i + 2];
+    final minC = math.min(r, math.min(g, b));
+    final maxC = math.max(r, math.max(g, b));
+    if (maxC - minC > chromaMax) return false;
+    return minC >= whiteFloor;
+  }
+
+  int borderDist(int x, int y) {
+    final left = x;
+    final top = y;
+    final right = w - 1 - x;
+    final bottom = h - 1 - y;
+    return math.min(math.min(left, top), math.min(right, bottom));
+  }
+
+  // Pass 1: clear near-white within border band.
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      final i = (y * w + x) * 4;
+      if (bytes[i + 3] < 12) continue;
+      if (borderDist(x, y) > borderPx) continue;
+      if (isNearWhite(i)) bytes[i + 3] = 0;
+    }
+  }
+
+  // Pass 2: edge flood of near-white / clear from borders.
+  final visited = Uint8List(w * h);
+  final queue = <int>[];
+
+  void tryPush(int x, int y) {
+    if (x < 0 || y < 0 || x >= w || y >= h) return;
+    final idx = y * w + x;
+    if (visited[idx] != 0) return;
+    final i = idx * 4;
+    if (!isNearWhite(i)) return;
+    visited[idx] = 1;
+    queue.add(idx);
+  }
+
+  for (var x = 0; x < w; x++) {
+    tryPush(x, 0);
+    tryPush(x, h - 1);
+  }
+  for (var y = 0; y < h; y++) {
+    tryPush(0, y);
+    tryPush(w - 1, y);
+  }
+
+  var q = 0;
+  while (q < queue.length) {
+    final idx = queue[q++];
+    final i = idx * 4;
+    bytes[i + 3] = 0;
+    final x = idx % w;
+    final y = idx ~/ w;
+    tryPush(x - 1, y);
+    tryPush(x + 1, y);
+    tryPush(x, y - 1);
+    tryPush(x, y + 1);
+  }
+
+  // Pass 3: peel near-white touching transparency (2px).
+  for (var pass = 0; pass < 2; pass++) {
+    final kill = <int>[];
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        final idx = y * w + x;
+        final i = idx * 4;
+        final a = bytes[i + 3];
+        if (a < 20) continue;
+        final r = bytes[i];
+        final g = bytes[i + 1];
+        final b = bytes[i + 2];
+        final minC = math.min(r, math.min(g, b));
+        final maxC = math.max(r, math.max(g, b));
+        if (maxC - minC > chromaMax || minC < 200) continue;
+        var touch = false;
+        for (final n in [idx - 1, idx + 1, idx - w, idx + w]) {
+          if (n < 0 || n >= w * h) continue;
+          if (bytes[n * 4 + 3] < 20) {
+            touch = true;
+            break;
+          }
+        }
+        if (touch) kill.add(i);
+      }
+    }
+    for (final i in kill) {
+      bytes[i + 3] = 0;
+    }
+  }
+
+  // Harden soft alpha haze.
+  for (var i = 3; i < bytes.length; i += 4) {
+    final a = bytes[i];
+    if (a < 40) {
+      bytes[i] = 0;
+    } else if (a > 220) {
+      bytes[i] = 255;
     }
   }
 

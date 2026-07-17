@@ -11,6 +11,7 @@ import '../theme/app_theme.dart';
 import '../widgets/brand.dart';
 import '../widgets/cash_top_up_sheet.dart';
 import '../widgets/game_widgets.dart';
+import '../widgets/knockout_image.dart';
 import '../widgets/live_ambient.dart';
 import '../ui/featured_pack_detail.dart';
 import '../ui/pack_detail.dart';
@@ -423,11 +424,12 @@ class _HeroFanPack extends StatelessWidget {
     return SizedBox(
       width: width,
       height: height,
-      child: Image.asset(
-        asset,
+      child: KnockoutProductImage(
+        url: asset,
+        width: width,
+        height: height,
         fit: BoxFit.contain,
-        filterQuality: FilterQuality.high,
-        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+        error: const SizedBox.shrink(),
       ),
     );
   }
@@ -596,11 +598,10 @@ class _FeaturedTileState extends State<_FeaturedTile>
                             hitUrl != null ? 36 : 18,
                             8,
                           ),
-                          child: Image.asset(
-                            pack.assetPath,
+                          child: KnockoutProductImage(
+                            url: pack.assetPath,
                             fit: BoxFit.contain,
-                            filterQuality: FilterQuality.high,
-                            errorBuilder: (_, _, _) => PackVisual(
+                            error: PackVisual(
                               title: pack.tier.label,
                               colors: pack.tier.bloomColors,
                               width: 110,

@@ -4,24 +4,28 @@ mixin _RipSession on _GameNotifierBase {
   /// Opens a sealed pack into [lastRip] without adding to collection yet.
   /// Keep / Exchange decide each card during the theater.
   /// When [packId] is null, opens the oldest pack in inventory.
-  Future<void> openPack({String? packId}) async {
-    if (_shopBusy) return;
+  /// Returns false if the pack was not opened (busy / unfinished rip / missing).
+  Future<bool> openPack({String? packId}) async {
+    if (_shopBusy) {
+      state = state.copyWith(message: 'Shop busy — try again.');
+      return false;
+    }
     if (state.lastRip?.isNotEmpty == true) {
       state = state.copyWith(message: 'Finish current rip first.');
-      return;
+      return false;
     }
     _shopBusy = true;
     try {
       if (state.unopened.isEmpty) {
         state = state.copyWith(message: 'No packs to open.');
-        return;
+        return false;
       }
       final idx = packId == null
           ? 0
           : state.unopened.indexWhere((p) => p.id == packId);
       if (idx < 0) {
         state = state.copyWith(message: 'Pack not found.');
-        return;
+        return false;
       }
       final pack = state.unopened[idx];
       final remain = [...state.unopened]..removeAt(idx);
@@ -38,6 +42,7 @@ mixin _RipSession on _GameNotifierBase {
       );
       _checkAchievements();
       await _persist();
+      return true;
     } finally {
       _shopBusy = false;
     }
@@ -151,7 +156,8 @@ mixin _RipSession on _GameNotifierBase {
           return;
         }
         final fair = fairFor(card);
-        final candyGain = (fair * 100).round().clamp(1, 999999);
+        // Buylist-style exchange (~70% of fair) — keep full fair in collection.
+        final candyGain = (fair * 0.70 * 100).round().clamp(1, 999999);
         final player = state.player.copyWith(
           candy: state.player.candy + candyGain,
           cardsSold: state.player.cardsSold + 1,

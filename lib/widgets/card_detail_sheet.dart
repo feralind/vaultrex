@@ -68,6 +68,7 @@ class CardDetailSheet extends StatefulWidget {
     required this.def,
     required this.allMarket,
     required this.onBuy,
+    this.onOffer,
   })  : mode = CardDetailMode.buy,
         owned = null,
         fairPrice = null,
@@ -88,7 +89,8 @@ class CardDetailSheet extends StatefulWidget {
     this.suggestedAsk,
   })  : mode = CardDetailMode.owned,
         listing = null,
-        onBuy = null;
+        onBuy = null,
+        onOffer = null;
 
   final CardDetailMode mode;
   final MarketListing? listing;
@@ -98,6 +100,7 @@ class CardDetailSheet extends StatefulWidget {
   final double? fairPrice;
   final double? suggestedAsk;
   final Future<void> Function(String id)? onBuy;
+  final Future<void> Function(String listingId, double amount)? onOffer;
   final Future<void> Function(double ask)? onListForSale;
   final Future<void> Function()? onCancelListing;
   final Future<void> Function()? onSendToPsa;
@@ -544,6 +547,27 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
           ),
         ),
       ),
+      if (widget.onOffer != null) ...[
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: () => _showMakeOfferSheet(context, primary),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+              side: const BorderSide(color: CC.line),
+            ),
+            child: Text(
+              'MAKE OFFER',
+              style: AppText.jakarta(
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.5,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ),
+      ],
       const SizedBox(height: 22),
       Text(
         'All listings · ${buyList.length}',
@@ -635,12 +659,29 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
                     color: const Color(0xFF34D399),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
+                if (widget.onOffer != null)
+                  OutlinedButton(
+                    onPressed: () => _showMakeOfferSheet(context, m),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(56, 36),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      side: const BorderSide(color: CC.line),
+                    ),
+                    child: Text(
+                      'Offer',
+                      style: AppText.jakarta(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                const SizedBox(width: 6),
                 FilledButton(
                   onPressed: () => widget.onBuy!(m.id),
                   style: FilledButton.styleFrom(
-                    minimumSize: const Size(64, 36),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    minimumSize: const Size(56, 36),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
                     backgroundColor: CC.accent,
                   ),
                   child: Text(
@@ -657,6 +698,125 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
         );
       }),
     ];
+  }
+
+  Future<void> _showMakeOfferSheet(
+    BuildContext context,
+    MarketListing listing,
+  ) async {
+    if (widget.onOffer == null) return;
+    final ask = listing.price;
+    final fair = _guideBase;
+    var amount = double.parse((ask * 0.90).clamp(0.99, ask - 0.01).toStringAsFixed(2));
+    final minOffer = 0.99;
+    final maxOffer = double.parse((ask - 0.01).toStringAsFixed(2));
+    if (maxOffer < minOffer) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ask too low to offer — use Buy Now.')),
+        );
+      }
+      return;
+    }
+    amount = amount.clamp(minOffer, maxOffer);
+
+    final submitted = await showModalBottomSheet<double>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: CC.bgElevated,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModal) {
+            final pct = (amount / ask * 100).toStringAsFixed(0);
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                16,
+                20,
+                20 + MediaQuery.viewInsetsOf(ctx).bottom,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: CC.line,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Make offer',
+                    style: AppText.jakarta(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 20,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Ask \$${ask.toStringAsFixed(2)} · fair ~\$${fair.toStringAsFixed(2)}',
+                    style: AppText.jakarta(color: CC.inkMuted, fontSize: 13),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Cash is escrowed until the seller responds on Advance Day.',
+                    style: AppText.jakarta(color: CC.inkMuted, fontSize: 12),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    '\$${amount.toStringAsFixed(2)}  ($pct% of ask)',
+                    style: AppText.jakarta(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 22,
+                      color: const Color(0xFF34D399),
+                    ),
+                  ),
+                  Slider(
+                    value: amount,
+                    min: minOffer,
+                    max: maxOffer,
+                    divisions: math.max(1, ((maxOffer - minOffer) * 100).round()),
+                    activeColor: CC.accent,
+                    onChanged: (v) => setModal(() {
+                      amount = double.parse(v.toStringAsFixed(2));
+                    }),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(ctx, amount),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: CC.accent,
+                        minimumSize: const Size.fromHeight(50),
+                      ),
+                      child: Text(
+                        'SUBMIT OFFER · ESCROW',
+                        style: AppText.jakarta(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (submitted == null || !context.mounted) return;
+    await widget.onOffer!(listing.id, submitted);
   }
 
   List<Widget> _buildOwnedActions() {

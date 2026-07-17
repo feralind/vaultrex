@@ -189,18 +189,23 @@ class SealedProduct {
   final String imageUrlSmall;
   final int? packsPerBox;
 
-  /// Bundled transparent cutouts (skip runtime knockout).
+  /// Bundled transparent cutouts (prefer over JPG / CDN).
   static const Set<int> _localPngIds = {
-    635366,
-    635368,
-    635459,
-    661934,
-    678150,
-    678766,
-  };
-
-  /// Bundled HD TCGPlayer product shots under assets/sealed/.
-  static const Set<int> _localJpgIds = {
+    493975,
+    493976,
+    496927,
+    501256,
+    501257,
+    504467,
+    534087,
+    543843,
+    543846,
+    544170,
+    565602,
+    565603,
+    565604,
+    565606,
+    593294,
     635366,
     635368,
     635369,
@@ -212,6 +217,8 @@ class SealedProduct {
     635458,
     635459,
     635460,
+    649413,
+    649421,
     661934,
     661937,
     661939,
@@ -233,6 +240,9 @@ class SealedProduct {
     690175,
     696523,
   };
+
+  /// Legacy JPG product shots (prefer PNG cutouts when both exist).
+  static const Set<int> _localJpgIds = <int>{};
 
   /// Prefer local HD / transparent cutouts over CDN JPGs.
   String get displayArtUrl {
@@ -566,6 +576,53 @@ class OnlineListing {
       );
 }
 
+/// Player offer on an NPC [MarketListing] (cash escrowed until resolved).
+class MarketOffer {
+  MarketOffer({
+    required this.id,
+    required this.listingId,
+    required this.offerAmount,
+    required this.createdDay,
+    required this.expiresOnDay,
+    this.counterAmount,
+    this.status = MarketOfferStatus.pending,
+  });
+
+  final String id;
+  final String listingId;
+  final double offerAmount;
+  double? counterAmount;
+  MarketOfferStatus status;
+  final int createdDay;
+  final int expiresOnDay;
+
+  bool get isOpen =>
+      status == MarketOfferStatus.pending ||
+      status == MarketOfferStatus.countered;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'listingId': listingId,
+        'offerAmount': offerAmount,
+        'counterAmount': counterAmount,
+        'status': status.name,
+        'createdDay': createdDay,
+        'expiresOnDay': expiresOnDay,
+      };
+
+  factory MarketOffer.fromJson(Map<String, dynamic> j) => MarketOffer(
+        id: j['id'] as String,
+        listingId: j['listingId'] as String,
+        offerAmount: (j['offerAmount'] as num).toDouble(),
+        counterAmount: (j['counterAmount'] as num?)?.toDouble(),
+        status: MarketOfferStatus.values.byName(
+          j['status'] as String? ?? 'pending',
+        ),
+        createdDay: j['createdDay'] as int? ?? 1,
+        expiresOnDay: j['expiresOnDay'] as int? ?? 3,
+      );
+}
+
 class GradingJob {
   GradingJob({
     required this.id,
@@ -730,8 +787,8 @@ class UpgradeDef {
 
 class PlayerStats {
   const PlayerStats({
-    this.cash = 500,
-    this.candy = 50000,
+    this.cash = 350,
+    this.candy = 25000,
     this.xp = 0,
     this.businessLevel = 1,
     this.packsOpened = 0,

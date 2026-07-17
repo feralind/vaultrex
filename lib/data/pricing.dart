@@ -85,7 +85,7 @@ class Pricing {
   }
 
   static double platformFeeRate(PlayerStats player) {
-    if (player.ownedUpgrades.contains('fee_cut')) return 0.08;
-    return 0.12;
+    if (player.ownedUpgrades.contains('fee_cut')) return 0.10;
+    return 0.14;
   }
 }

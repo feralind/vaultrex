@@ -137,12 +137,47 @@ mixin _ShopActions on _GameNotifierBase {
   }
 
   Future<void> buyMarketListing(String id) async {
-    final listing = state.market.firstWhere((m) => m.id == id);
-    if (state.player.cash < listing.price) {
-      state = state.copyWith(message: 'Not enough cash.');
-      return;
+    if (_shopBusy) return;
+    _shopBusy = true;
+    try {
+      final listing = state.market.firstWhere((m) => m.id == id);
+      if (state.player.cash < listing.price) {
+        state = state.copyWith(message: 'Not enough cash.');
+        return;
+      }
+      final owned = _ownedFromMarketListing(listing);
+      var player =
+          state.player.copyWith(cash: state.player.cash - listing.price);
+      // Cancel/refund any open offers on this listing.
+      final offers = [...state.marketOffers];
+      var refund = 0.0;
+      for (final o in offers) {
+        if (o.listingId == id && o.isOpen) {
+          refund += o.offerAmount;
+          o.status = MarketOfferStatus.cancelled;
+        }
+      }
+      if (refund > 0) {
+        player = player.copyWith(cash: player.cash + refund);
+      }
+      state = state.copyWith(
+        player: player,
+        collection: [...state.collection, owned],
+        market: state.market.where((m) => m.id != id).toList(),
+        marketOffers: offers,
+        message: listing.isFake
+            ? 'Bought… looks suspicious. Might be fake.'
+            : 'Purchased ${listing.title}.',
+      );
+      _recordCollectionValue();
+      await _persist();
+    } finally {
+      _shopBusy = false;
     }
-    final owned = OwnedCard(
+  }
+
+  OwnedCard _ownedFromMarketListing(MarketListing listing) {
+    return OwnedCard(
       instanceId: _uuid.v4(),
       cardId: listing.cardId,
       foil: listing.foil,
@@ -157,17 +192,143 @@ mixin _ShopActions on _GameNotifierBase {
       grade: listing.grade,
       gradingCompany: listing.gradingCompany,
     );
-    final player =
-        state.player.copyWith(cash: state.player.cash - listing.price);
-    state = state.copyWith(
-      player: player,
-      collection: [...state.collection, owned],
-      market: state.market.where((m) => m.id != id).toList(),
-      message: listing.isFake
-          ? 'Bought… looks suspicious. Might be fake.'
-          : 'Purchased ${listing.title}.',
+  }
+
+  /// Escrow cash and queue a pending offer (resolves on Advance Day).
+  Future<void> submitMarketOffer(String listingId, double amount) async {
+    MarketListing? listing;
+    for (final m in state.market) {
+      if (m.id == listingId) {
+        listing = m;
+        break;
+      }
+    }
+    if (listing == null) {
+      state = state.copyWith(message: 'Listing no longer available.');
+      return;
+    }
+    final offer = double.parse(amount.toStringAsFixed(2));
+    if (offer < 0.99) {
+      state = state.copyWith(message: 'Offer must be at least \$0.99.');
+      return;
+    }
+    if (offer >= listing.price) {
+      state = state.copyWith(
+        message: 'Offer must be under ask — use Buy Now for full price.',
+      );
+      return;
+    }
+    final hasActive = state.marketOffers.any(
+      (o) => o.listingId == listingId && o.isOpen,
     );
-    _recordCollectionValue();
+    if (hasActive) {
+      state = state.copyWith(message: 'You already have an offer on this listing.');
+      return;
+    }
+    if (state.player.cash < offer) {
+      state = state.copyWith(message: 'Not enough cash to escrow this offer.');
+      return;
+    }
+    final o = MarketOffer(
+      id: _uuid.v4(),
+      listingId: listingId,
+      offerAmount: offer,
+      createdDay: state.day,
+      expiresOnDay: state.day + 2,
+    );
+    state = state.copyWith(
+      player: state.player.copyWith(cash: state.player.cash - offer),
+      marketOffers: [...state.marketOffers, o],
+      message:
+          'Offer \$${offer.toStringAsFixed(2)} sent (escrowed). Resolves on Advance Day.',
+    );
+    await _persist();
+  }
+
+  Future<void> cancelMarketOffer(String offerId) async {
+    final offers = [...state.marketOffers];
+    final idx = offers.indexWhere((o) => o.id == offerId);
+    if (idx < 0) return;
+    final o = offers[idx];
+    if (o.status != MarketOfferStatus.pending &&
+        o.status != MarketOfferStatus.countered) {
+      return;
+    }
+    o.status = MarketOfferStatus.cancelled;
+    state = state.copyWith(
+      player: state.player.copyWith(cash: state.player.cash + o.offerAmount),
+      marketOffers: offers,
+      message: 'Offer cancelled — escrow refunded.',
+    );
+    await _persist();
+  }
+
+  Future<void> acceptMarketCounter(String offerId) async {
+    if (_shopBusy) return;
+    _shopBusy = true;
+    try {
+      final offers = [...state.marketOffers];
+      final idx = offers.indexWhere((o) => o.id == offerId);
+      if (idx < 0) return;
+      final o = offers[idx];
+      if (o.status != MarketOfferStatus.countered || o.counterAmount == null) {
+        state = state.copyWith(message: 'No counter to accept.');
+        return;
+      }
+      MarketListing? listing;
+      for (final m in state.market) {
+        if (m.id == o.listingId) {
+          listing = m;
+          break;
+        }
+      }
+      if (listing == null) {
+        o.status = MarketOfferStatus.cancelled;
+        state = state.copyWith(
+          player: state.player.copyWith(cash: state.player.cash + o.offerAmount),
+          marketOffers: offers,
+          message: 'Listing gone — escrow refunded.',
+        );
+        await _persist();
+        return;
+      }
+      final counter = o.counterAmount!;
+      final remaining = max(0.0, counter - o.offerAmount);
+      if (state.player.cash < remaining) {
+        state = state.copyWith(
+          message:
+              'Need \$${remaining.toStringAsFixed(2)} more to accept counter.',
+        );
+        return;
+      }
+      final owned = _ownedFromMarketListing(listing);
+      o.status = MarketOfferStatus.accepted;
+      state = state.copyWith(
+        player: state.player.copyWith(cash: state.player.cash - remaining),
+        collection: [...state.collection, owned],
+        market: state.market.where((m) => m.id != listing!.id).toList(),
+        marketOffers: offers,
+        message: 'Accepted counter — purchased ${listing.title}.',
+      );
+      _recordCollectionValue();
+      await _persist();
+    } finally {
+      _shopBusy = false;
+    }
+  }
+
+  Future<void> declineMarketCounter(String offerId) async {
+    final offers = [...state.marketOffers];
+    final idx = offers.indexWhere((o) => o.id == offerId);
+    if (idx < 0) return;
+    final o = offers[idx];
+    if (o.status != MarketOfferStatus.countered) return;
+    o.status = MarketOfferStatus.cancelled;
+    state = state.copyWith(
+      player: state.player.copyWith(cash: state.player.cash + o.offerAmount),
+      marketOffers: offers,
+      message: 'Counter declined — escrow refunded.',
+    );
     await _persist();
   }
 

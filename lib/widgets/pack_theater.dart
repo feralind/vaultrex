@@ -26,7 +26,16 @@ Future<void> showPackTheater(
   final notifier = ref.read(gameProvider.notifier);
   if (!alreadyOpened) {
     try {
-      await notifier.openPack(packId: packId);
+      final opened = await notifier.openPack(packId: packId);
+      if (!opened) {
+        if (!context.mounted) return;
+        final msg = ref.read(gameProvider).message ??
+            'Could not open pack — try again.';
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(content: Text(msg)),
+        );
+        return;
+      }
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(

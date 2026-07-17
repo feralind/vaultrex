@@ -12,6 +12,7 @@ import '../theme/app_theme.dart';
 import '../widgets/brand.dart';
 import '../widgets/fake_google_pay_sheet.dart';
 import '../widgets/game_widgets.dart';
+import '../widgets/knockout_image.dart';
 import '../widgets/pack_theater.dart';
 
 Future<void> showFeaturedPackDetail(
@@ -302,6 +303,7 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                       child: FilledButton(
                         onPressed: _busy ||
                                 notifier.isShopBusy ||
+                                state.lastRip?.isNotEmpty == true ||
                                 state.player.cash < pack.priceUsd
                             ? null
                             : () => _buy(PaymentMethod.cash),
@@ -316,6 +318,7 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                       child: OutlinedButton(
                         onPressed: _busy ||
                                 notifier.isShopBusy ||
+                                state.lastRip?.isNotEmpty == true ||
                                 state.player.candy < candy
                             ? null
                             : () => _buy(PaymentMethod.candy),
@@ -562,13 +565,12 @@ class _HeroStage extends StatelessWidget {
                 );
               },
             ),
-          Image.asset(
-            pack.assetPath,
+          KnockoutProductImage(
+            url: pack.assetPath,
             width: 168,
             height: 236,
             fit: BoxFit.contain,
-            filterQuality: FilterQuality.high,
-            errorBuilder: (_, _, _) => PackVisual(
+            error: PackVisual(
               title: pack.tier.label,
               colors: pack.tier.bloomColors,
               width: 140,
@@ -603,8 +605,8 @@ class _ExchangeBanner extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Guaranteed candy exchange — keep what you love, '
-              'exchange the rest (≥50% candy if you exchange the full rip).',
+              'Exchange leftover pulls for Candy at ~70% of fair value '
+              '(keep chase cards for full collection value).',
               style: AppText.jakarta(
                 fontSize: 12,
                 height: 1.35,

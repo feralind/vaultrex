@@ -109,8 +109,9 @@ void main() {
     expect(container.read(gameProvider).lastRip, isNotEmpty);
 
     final unopenedBefore = container.read(gameProvider).unopened.length;
-    await container.read(gameProvider.notifier).openPack();
+    final opened = await container.read(gameProvider.notifier).openPack();
 
+    expect(opened, isFalse);
     expect(container.read(gameProvider).unopened.length, unopenedBefore);
     expect(
       container.read(gameProvider).message,

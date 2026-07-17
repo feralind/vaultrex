@@ -95,6 +95,7 @@ class HomeShell extends ConsumerStatefulWidget {
 class _HomeShellState extends ConsumerState<HomeShell> {
   int _index = 3; // land on Instapacks like RC after collect choose
   bool _lastRipPrompted = false;
+  bool _lastRipDialogOpen = false;
   final _kept = <int, Widget>{};
 
   static Widget _create(int i) => switch (i) {
@@ -120,44 +121,76 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   }
 
   void _maybePromptLastRip() {
-    if (!mounted || _lastRipPrompted) return;
+    if (!mounted || _lastRipDialogOpen) return;
     final state = ref.read(gameProvider);
     if (!state.ready) return;
     _showLastRipDialogIfNeeded(state);
   }
 
   void _showLastRipDialogIfNeeded(GameState state) {
+    if (_lastRipDialogOpen) return;
+    if (state.lastRip?.isNotEmpty != true) {
+      _lastRipPrompted = false;
+      return;
+    }
     if (_lastRipPrompted) return;
     _lastRipPrompted = true;
-    if (state.lastRip?.isNotEmpty != true) return;
+    _lastRipDialogOpen = true;
 
     showDialog<void>(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         title: const Text('Unfinished rip'),
         content: const Text('You still have cards from an open pack.'),
         actions: [
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              ref.read(gameProvider.notifier).finalizeRip(keepRemaining: true);
+              await ref
+                  .read(gameProvider.notifier)
+                  .finalizeRip(keepRemaining: true);
+              _lastRipDialogOpen = false;
+              _lastRipPrompted = false;
             },
             child: const Text('Keep all'),
           ),
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
-              showPackTheater(context, ref, alreadyOpened: true);
+              _lastRipDialogOpen = false;
+              // Keep prompted while theater is active; clear if rip ends empty.
+              showPackTheater(context, ref, alreadyOpened: true).whenComplete(() {
+                if (!mounted) return;
+                final still = ref.read(gameProvider).lastRip?.isNotEmpty == true;
+                _lastRipPrompted = still;
+              });
             },
             child: const Text('Resume'),
           ),
         ],
       ),
-    );
+    ).whenComplete(() {
+      _lastRipDialogOpen = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<GameState>(gameProvider, (prev, next) {
+      final had = prev?.lastRip?.isNotEmpty == true;
+      final has = next.lastRip?.isNotEmpty == true;
+      if (!has) {
+        _lastRipPrompted = false;
+        return;
+      }
+      if (!had && has) {
+        _lastRipPrompted = false;
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => _maybePromptLastRip());
+      }
+    });
+
     final ready = ref.watch(gameProvider.select((s) => s.ready));
     if (ready && !_lastRipPrompted) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptLastRip());

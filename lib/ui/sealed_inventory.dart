@@ -108,22 +108,28 @@ class _SealedInventorySheetState extends ConsumerState<SealedInventorySheet> {
 
   Future<void> _openOne(_PackGroup group) async {
     if (_busy) return;
+    final state = ref.read(gameProvider);
+    if (state.lastRip?.isNotEmpty == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Finish current rip first.')),
+      );
+      return;
+    }
     setState(() => _busy = true);
     try {
       final pack = group.packs.first;
       final imageUrl = group.imageUrl;
-      // Navigator context (not ScaffoldMessenger) — required to host pack theater.
       final navContext = Navigator.of(context, rootNavigator: true).context;
       Navigator.pop(context);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!navContext.mounted) return;
-        showPackTheater(
-          navContext,
-          ref,
-          packId: pack.id,
-          packImageUrl: imageUrl,
-        );
-      });
+      // Await theater so a second Open can't stack another dialog.
+      await Future<void>.delayed(Duration.zero);
+      if (!navContext.mounted) return;
+      await showPackTheater(
+        navContext,
+        ref,
+        packId: pack.id,
+        packImageUrl: imageUrl,
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }

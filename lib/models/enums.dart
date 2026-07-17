@@ -33,6 +33,15 @@ enum FactoryDefect { offCenter, bentCorner, whitening, printLine, miscut }
 
 enum OnlineListingStatus { active, sold, cancelled }
 
+enum MarketOfferStatus {
+  pending,
+  accepted,
+  countered,
+  rejected,
+  expired,
+  cancelled,
+}
+
 extension RarityX on Rarity {
   String get label => switch (this) {
         Rarity.common => 'Common',
