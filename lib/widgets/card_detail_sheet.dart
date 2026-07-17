@@ -1,11 +1,11 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../data/price_history.dart';
 import '../models/enums.dart';
 import '../models/models.dart';
+import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import 'foil_slab.dart';
 import 'game_widgets.dart';
@@ -48,6 +48,7 @@ Widget buildCardDetailSlab({
       url: def.displayArtUrl,
       // Soften foil on thumbs — chromatic bands read as streaks when tiny.
       foil: foil && !tiny,
+      autoPlay: !tiny,
       width: artW ?? double.infinity,
       height: artH ?? double.infinity,
       radius: tiny ? 2 : 4,
@@ -281,7 +282,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
                       ? 'Fair value'
                       : 'Slab ask')
                   : 'Market price',
-              style: GoogleFonts.plusJakartaSans(
+              style: AppText.jakarta(
                 color: CC.inkMuted,
                 fontWeight: FontWeight.w600,
                 fontSize: 12,
@@ -290,7 +291,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
             const SizedBox(height: 4),
             Text(
               '\$${guide.toStringAsFixed(2)}',
-              style: GoogleFonts.plusJakartaSans(
+              style: AppText.jakarta(
                 fontWeight: FontWeight.w800,
                 fontSize: 28,
                 color: const Color(0xFF34D399),
@@ -309,7 +310,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
                     setState(() => _showFullChart = !_showFullChart),
                 child: Text(
                   _showFullChart ? 'Collapse chart' : 'Full chart · 90d',
-                  style: GoogleFonts.plusJakartaSans(
+                  style: AppText.jakarta(
                     fontWeight: FontWeight.w700,
                     color: CC.accent,
                     fontSize: 13,
@@ -321,7 +322,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
               const SizedBox(height: 4),
               Text(
                 _foil ? 'Foil · Condition' : 'Raw · Condition',
-                style: GoogleFonts.plusJakartaSans(
+                style: AppText.jakarta(
                   fontWeight: FontWeight.w800,
                   fontSize: 14,
                 ),
@@ -349,7 +350,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
                 'PSA ${_grade! >= 10 ? '10' : _grade!.toStringAsFixed(_grade! % 1 == 0 ? 0 : 1)}'
                 ' · ${psaGradeDescriptor(_grade!)}'
                 '${_foil ? ' · Foil' : ''}',
-                style: GoogleFonts.plusJakartaSans(
+                style: AppText.jakarta(
                   fontWeight: FontWeight.w700,
                   fontSize: 14,
                 ),
@@ -367,11 +368,11 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
   }
 
   Widget _buildHero() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (_graded && _grade != null)
-          buildCardDetailSlab(
+    final heroTag = widget.owned != null
+        ? 'card-art-${widget.owned!.instanceId}'
+        : 'card-art-buy-${def.id}';
+    final art = _graded && _grade != null
+        ? buildCardDetailSlab(
             foil: _foil,
             grade: _grade!,
             company: _company,
@@ -379,14 +380,22 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
             width: 132,
             compact: false,
           )
-        else
-          CardArt(
+        : CardArt(
             url: def.displayArtUrl,
             foil: _foil,
+            autoPlay: true,
             width: 126,
             height: 176,
             radius: 12,
-          ),
+          );
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Hero(
+          tag: heroTag,
+          child: art,
+        ),
         const SizedBox(width: 14),
         Expanded(
           child: Column(
@@ -405,7 +414,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
               const SizedBox(height: 10),
               Text(
                 def.name,
-                style: GoogleFonts.plusJakartaSans(
+                style: AppText.jakarta(
                   fontWeight: FontWeight.w800,
                   fontSize: 20,
                   height: 1.15,
@@ -416,7 +425,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
                 const SizedBox(height: 4),
                 Text(
                   '${def.setCode} ${def.number}',
-                  style: GoogleFonts.plusJakartaSans(
+                  style: AppText.jakarta(
                     color: CC.inkMuted,
                     fontWeight: FontWeight.w700,
                     fontSize: 14,
@@ -426,7 +435,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
               const SizedBox(height: 8),
               Text(
                 def.setName,
-                style: GoogleFonts.plusJakartaSans(
+                style: AppText.jakarta(
                   color: CC.inkMuted,
                   fontSize: 12,
                 ),
@@ -465,7 +474,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
           ),
           child: Text(
             'BUY NOW  ·  \$${primary.price.toStringAsFixed(2)}',
-            style: GoogleFonts.plusJakartaSans(
+            style: AppText.jakarta(
               fontWeight: FontWeight.w800,
               letterSpacing: 0.5,
               fontSize: 15,
@@ -476,7 +485,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
       const SizedBox(height: 22),
       Text(
         'Buy Now',
-        style: GoogleFonts.plusJakartaSans(
+        style: AppText.jakarta(
           fontWeight: FontWeight.w800,
           fontSize: 16,
         ),
@@ -484,7 +493,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
       const SizedBox(height: 4),
       Text(
         'Simulated sellers · Riftbound singles',
-        style: GoogleFonts.plusJakartaSans(
+        style: AppText.jakarta(
           color: CC.inkMuted,
           fontSize: 12,
         ),
@@ -521,7 +530,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
                   ),
                   child: Text(
                     platform.$1,
-                    style: GoogleFonts.plusJakartaSans(
+                    style: AppText.jakarta(
                       fontWeight: FontWeight.w900,
                       fontSize: 11,
                       color: platform.$2,
@@ -537,13 +546,13 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
                         m.graded && m.grade != null
                             ? 'PSA ${m.grade! >= 10 ? '10' : m.grade!.toStringAsFixed(m.grade! % 1 == 0 ? 0 : 1)}'
                             : m.condition.label,
-                        style: GoogleFonts.plusJakartaSans(
+                        style: AppText.jakarta(
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       Text(
                         '${m.sellerAlias ?? m.sellerType.label} · ${platform.$3}',
-                        style: GoogleFonts.plusJakartaSans(
+                        style: AppText.jakarta(
                           fontSize: 11,
                           color: CC.inkMuted,
                         ),
@@ -553,7 +562,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
                 ),
                 Text(
                   '\$${m.price.toStringAsFixed(2)}',
-                  style: GoogleFonts.plusJakartaSans(
+                  style: AppText.jakarta(
                     fontWeight: FontWeight.w800,
                     color: const Color(0xFF34D399),
                   ),
@@ -568,7 +577,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
                   ),
                   child: Text(
                     'BUY',
-                    style: GoogleFonts.plusJakartaSans(
+                    style: AppText.jakarta(
                       fontWeight: FontWeight.w800,
                       fontSize: 12,
                     ),
@@ -590,7 +599,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
     return [
       Text(
         'Your card',
-        style: GoogleFonts.plusJakartaSans(
+        style: AppText.jakarta(
           fontWeight: FontWeight.w800,
           fontSize: 16,
         ),
@@ -600,7 +609,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
         listed
             ? 'Listed on the market · manage below'
             : 'Ownership actions · list or grade',
-        style: GoogleFonts.plusJakartaSans(
+        style: AppText.jakarta(
           color: CC.inkMuted,
           fontSize: 12,
         ),
@@ -620,7 +629,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
             children: [
               Text(
                 'LISTED FOR SALE',
-                style: GoogleFonts.plusJakartaSans(
+                style: AppText.jakarta(
                   fontWeight: FontWeight.w800,
                   fontSize: 11,
                   letterSpacing: 0.8,
@@ -630,7 +639,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
               const SizedBox(height: 6),
               Text(
                 '\$${owned.listedAsk!.toStringAsFixed(2)}',
-                style: GoogleFonts.plusJakartaSans(
+                style: AppText.jakarta(
                   fontWeight: FontWeight.w800,
                   fontSize: 22,
                   color: const Color(0xFF34D399),
@@ -639,7 +648,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
               const SizedBox(height: 4),
               Text(
                 'Active online listing',
-                style: GoogleFonts.plusJakartaSans(
+                style: AppText.jakarta(
                   color: CC.inkMuted,
                   fontSize: 12,
                 ),
@@ -661,7 +670,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
             ),
             child: Text(
               'CANCEL LISTING',
-              style: GoogleFonts.plusJakartaSans(
+              style: AppText.jakarta(
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.4,
               ),
@@ -694,7 +703,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
             ),
             child: Text(
               'LIST FOR SALE',
-              style: GoogleFonts.plusJakartaSans(
+              style: AppText.jakarta(
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.5,
                 fontSize: 15,
@@ -718,7 +727,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
           ),
           child: Text(
             'Send to PSA · \$${GradingCompany.psa.fee}',
-            style: GoogleFonts.plusJakartaSans(
+            style: AppText.jakarta(
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -754,7 +763,7 @@ class _OwnershipFoilBadge extends StatelessWidget {
       ),
       child: Text(
         foil ? 'Your copy · Foil' : 'Your copy · Raw',
-        style: GoogleFonts.plusJakartaSans(
+        style: AppText.jakarta(
           fontWeight: FontWeight.w800,
           fontSize: 12,
         ),
@@ -778,7 +787,7 @@ class _TagChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: GoogleFonts.plusJakartaSans(
+        style: AppText.jakarta(
           fontWeight: FontWeight.w800,
           fontSize: 10,
           letterSpacing: 0.6,
@@ -811,7 +820,7 @@ class _FoilRawToggle extends StatelessWidget {
             child: Text(
               label,
               textAlign: TextAlign.center,
-              style: GoogleFonts.plusJakartaSans(
+              style: AppText.jakarta(
                 fontWeight: FontWeight.w800,
                 fontSize: 12,
               ),
@@ -877,7 +886,7 @@ class _PriceSparkline extends StatelessWidget {
         children: [
           Text(
             'Price history (\$)',
-            style: GoogleFonts.plusJakartaSans(
+            style: AppText.jakarta(
               fontWeight: FontWeight.w700,
               fontSize: 11,
               color: CC.inkMuted,
@@ -896,7 +905,7 @@ class _PriceSparkline extends StatelessWidget {
                     children: [
                       Text(
                         _money(maxV),
-                        style: GoogleFonts.plusJakartaSans(
+                        style: AppText.jakarta(
                           fontSize: 9,
                           fontWeight: FontWeight.w700,
                           color: CC.inkMuted,
@@ -904,7 +913,7 @@ class _PriceSparkline extends StatelessWidget {
                       ),
                       Text(
                         _money(midV),
-                        style: GoogleFonts.plusJakartaSans(
+                        style: AppText.jakarta(
                           fontSize: 9,
                           fontWeight: FontWeight.w600,
                           color: CC.inkMuted,
@@ -912,7 +921,7 @@ class _PriceSparkline extends StatelessWidget {
                       ),
                       Text(
                         _money(minV),
-                        style: GoogleFonts.plusJakartaSans(
+                        style: AppText.jakarta(
                           fontSize: 9,
                           fontWeight: FontWeight.w700,
                           color: CC.inkMuted,
@@ -943,7 +952,7 @@ class _PriceSparkline extends StatelessWidget {
               children: [
                 Text(
                   _dateLabel(points.first.date),
-                  style: GoogleFonts.plusJakartaSans(
+                  style: AppText.jakarta(
                     fontSize: 9,
                     fontWeight: FontWeight.w700,
                     color: CC.inkMuted,
@@ -951,7 +960,7 @@ class _PriceSparkline extends StatelessWidget {
                 ),
                 Text(
                   _dateLabel(points[points.length ~/ 2].date),
-                  style: GoogleFonts.plusJakartaSans(
+                  style: AppText.jakarta(
                     fontSize: 9,
                     fontWeight: FontWeight.w600,
                     color: CC.inkMuted,
@@ -959,7 +968,7 @@ class _PriceSparkline extends StatelessWidget {
                 ),
                 Text(
                   _dateLabel(points.last.date),
-                  style: GoogleFonts.plusJakartaSans(
+                  style: AppText.jakarta(
                     fontSize: 9,
                     fontWeight: FontWeight.w700,
                     color: CC.inkMuted,
@@ -1077,7 +1086,7 @@ class _CondChip extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: GoogleFonts.plusJakartaSans(
+                style: AppText.jakarta(
                   fontWeight: FontWeight.w800,
                   fontSize: 12,
                 ),
@@ -1085,7 +1094,7 @@ class _CondChip extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 price == null ? '—' : '\$${price!.toStringAsFixed(0)}',
-                style: GoogleFonts.plusJakartaSans(
+                style: AppText.jakarta(
                   fontWeight: FontWeight.w700,
                   fontSize: 12,
                   color: const Color(0xFF34D399),

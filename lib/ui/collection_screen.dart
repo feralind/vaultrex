@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../game/game_controller.dart';
 import '../models/enums.dart';
 import '../models/models.dart';
+import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import '../widgets/card_detail_sheet.dart';
 import '../widgets/game_widgets.dart';
@@ -25,11 +25,19 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen>
   late final TabController _tabs;
   String _set = 'ALL';
   String _query = '';
+  int _tabIndex = 1;
 
   @override
   void initState() {
     super.initState();
     _tabs = TabController(length: 5, vsync: this, initialIndex: 1);
+    _tabIndex = _tabs.index;
+    _tabs.addListener(() {
+      if (_tabs.indexIsChanging) return;
+      if (_tabIndex != _tabs.index) {
+        setState(() => _tabIndex = _tabs.index);
+      }
+    });
   }
 
   @override
@@ -75,7 +83,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen>
                   children: [
                     Text(
                       'Collector',
-                      style: GoogleFonts.plusJakartaSans(
+                      style: AppText.jakarta(
                         fontWeight: FontWeight.w800,
                         fontSize: 18,
                       ),
@@ -95,14 +103,14 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen>
                 children: [
                   Text(
                     '$unique cards',
-                    style: GoogleFonts.plusJakartaSans(
+                    style: AppText.jakarta(
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
                     ),
                   ),
                   Text(
                     '\$${value.toStringAsFixed(2)} value',
-                    style: GoogleFonts.plusJakartaSans(
+                    style: AppText.jakarta(
                       color: CC.inkMuted,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -121,8 +129,8 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen>
           indicatorWeight: 3,
           labelColor: CC.ink,
           unselectedLabelColor: CC.inkMuted,
-          labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14),
-          unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 14),
+          labelStyle: AppText.jakarta(fontWeight: FontWeight.w700, fontSize: 14),
+          unselectedLabelStyle: AppText.jakarta(fontWeight: FontWeight.w500, fontSize: 14),
           dividerColor: Colors.transparent,
           tabs: const [
             Tab(text: 'Insights'),
@@ -133,20 +141,29 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen>
           ],
         ),
         Expanded(
-          child: TabBarView(
-            controller: _tabs,
-            children: [
-              _InsightsTab(value: value, count: unique),
-              _CardsTab(
-                set: _set,
-                query: _query,
-                onSet: (s) => setState(() => _set = s),
-                onQuery: (q) => setState(() => _query = q),
-              ),
-              _SetsTab(),
-              const _BindersTab(),
-              const _VaultTab(),
-            ],
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, anim) => FadeTransition(
+              opacity: anim,
+              child: child,
+            ),
+            child: KeyedSubtree(
+              key: ValueKey(_tabIndex),
+              child: switch (_tabIndex) {
+                0 => _InsightsTab(value: value, count: unique),
+                1 => _CardsTab(
+                    set: _set,
+                    query: _query,
+                    onSet: (s) => setState(() => _set = s),
+                    onQuery: (q) => setState(() => _query = q),
+                  ),
+                2 => _SetsTab(),
+                3 => const _BindersTab(),
+                _ => const _VaultTab(),
+              },
+            ),
           ),
         ),
       ],
@@ -172,19 +189,26 @@ class _InsightsTab extends ConsumerWidget {
       children: [
         Text(
           'Your collection',
-          style: GoogleFonts.plusJakartaSans(
+          style: AppText.jakarta(
             fontSize: 28,
             fontWeight: FontWeight.w800,
             letterSpacing: -0.5,
           ),
         ),
         const SizedBox(height: 8),
-        Text(
-          '\$${value.toStringAsFixed(2)}',
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 36,
-            fontWeight: FontWeight.w800,
-          ),
+        TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: value),
+          duration: const Duration(milliseconds: 420),
+          curve: Curves.easeOutCubic,
+          builder: (context, v, _) {
+            return Text(
+              '\$${v.toStringAsFixed(2)}',
+              style: AppText.jakarta(
+                fontSize: 36,
+                fontWeight: FontWeight.w800,
+              ),
+            );
+          },
         ),
         const SizedBox(height: 18),
         PortfolioValueChart(points: series, height: 172),
@@ -230,7 +254,7 @@ class _InsightStat extends StatelessWidget {
         children: [
           Text(
             label,
-            style: GoogleFonts.plusJakartaSans(
+            style: AppText.jakarta(
               color: CC.inkMuted,
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -239,7 +263,7 @@ class _InsightStat extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             value,
-            style: GoogleFonts.plusJakartaSans(
+            style: AppText.jakarta(
               fontWeight: FontWeight.w800,
               fontSize: 18,
             ),
@@ -312,7 +336,7 @@ class _CreateNewBinderTile extends StatelessWidget {
             children: [
               Text(
                 'Create New',
-                style: GoogleFonts.plusJakartaSans(
+                style: AppText.jakarta(
                   fontWeight: FontWeight.w800,
                   fontSize: 16,
                 ),
@@ -390,7 +414,7 @@ class _BinderTile extends StatelessWidget {
                     binder.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.plusJakartaSans(
+                    style: AppText.jakarta(
                       fontWeight: FontWeight.w800,
                       fontSize: 14,
                     ),
@@ -398,7 +422,7 @@ class _BinderTile extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     '${binder.cardCount} card${binder.cardCount == 1 ? '' : 's'}',
-                    style: GoogleFonts.plusJakartaSans(
+                    style: AppText.jakarta(
                       color: CC.inkMuted,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -449,7 +473,7 @@ class _CardsTab extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
           child: Text(
             'All cards',
-            style: GoogleFonts.plusJakartaSans(
+            style: AppText.jakarta(
               fontSize: 28,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.5,
@@ -463,10 +487,10 @@ class _CardsTab extends ConsumerWidget {
               Expanded(
                 child: TextField(
                   onChanged: onQuery,
-                  style: GoogleFonts.plusJakartaSans(fontSize: 14),
+                  style: AppText.jakarta(fontSize: 14),
                   decoration: InputDecoration(
                     hintText: 'Search cards',
-                    hintStyle: GoogleFonts.plusJakartaSans(color: CC.inkMuted),
+                    hintStyle: AppText.jakarta(color: CC.inkMuted),
                     prefixIcon: const Icon(Icons.search, color: CC.inkMuted),
                     filled: true,
                     fillColor: CC.card,
@@ -500,7 +524,7 @@ class _CardsTab extends ConsumerWidget {
                       onSelected: (_) => onSet(s),
                       selectedColor: CC.accent.withValues(alpha: 0.25),
                       backgroundColor: CC.card,
-                      labelStyle: GoogleFonts.plusJakartaSans(
+                      labelStyle: AppText.jakarta(
                         fontWeight: FontWeight.w600,
                         color: CC.ink,
                         fontSize: 12,
@@ -520,7 +544,7 @@ class _CardsTab extends ConsumerWidget {
                     children: [
                       Text(
                         'No cards yet',
-                        style: GoogleFonts.plusJakartaSans(
+                        style: AppText.jakarta(
                           fontWeight: FontWeight.w800,
                           fontSize: 18,
                         ),
@@ -528,7 +552,7 @@ class _CardsTab extends ConsumerWidget {
                       const SizedBox(height: 6),
                       Text(
                         'Open Instapacks to add cards here.',
-                        style: GoogleFonts.plusJakartaSans(color: CC.inkMuted),
+                        style: AppText.jakarta(color: CC.inkMuted),
                       ),
                     ],
                   ),
@@ -635,12 +659,12 @@ class _SetsTab extends ConsumerWidget {
             children: [
               Text(
                 name,
-                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800),
+                style: AppText.jakarta(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 4),
               Text(
                 '$owned / ${all.length}',
-                style: GoogleFonts.plusJakartaSans(color: CC.inkMuted, fontSize: 12),
+                style: AppText.jakarta(color: CC.inkMuted, fontSize: 12),
               ),
               const SizedBox(height: 8),
               ClipRRect(
@@ -688,7 +712,7 @@ class _VaultTab extends StatelessWidget {
       children: [
         Text(
           'Vault',
-          style: GoogleFonts.plusJakartaSans(
+          style: AppText.jakarta(
             fontSize: 28,
             fontWeight: FontWeight.w800,
             letterSpacing: -0.5,
@@ -697,7 +721,7 @@ class _VaultTab extends StatelessWidget {
         const SizedBox(height: 6),
         Text(
           'Sealed product you own stays here until you rip or sell it.',
-          style: GoogleFonts.plusJakartaSans(
+          style: AppText.jakarta(
             color: CC.inkMuted,
             fontSize: 13,
             height: 1.4,
@@ -708,7 +732,7 @@ class _VaultTab extends StatelessWidget {
         const SizedBox(height: 12),
         Text(
           'Tip: booster boxes go straight to inventory — they never auto-open.',
-          style: GoogleFonts.plusJakartaSans(
+          style: AppText.jakarta(
             color: CC.inkMuted,
             fontSize: 12,
           ),

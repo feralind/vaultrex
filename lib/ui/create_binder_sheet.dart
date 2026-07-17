@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 
+import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 
 /// Result from [showCreateBinderSheet].
@@ -171,7 +171,7 @@ class _CreateBinderSheetState extends State<_CreateBinderSheet> {
                           const SizedBox(height: 18),
                           Text(
                             'Name',
-                            style: GoogleFonts.plusJakartaSans(
+                            style: AppText.jakarta(
                               fontWeight: FontWeight.w700,
                               fontSize: 13,
                             ),
@@ -179,14 +179,14 @@ class _CreateBinderSheetState extends State<_CreateBinderSheet> {
                           const SizedBox(height: 8),
                           TextField(
                             controller: _nameCtrl,
-                            style: GoogleFonts.plusJakartaSans(
+                            style: AppText.jakarta(
                               fontWeight: FontWeight.w600,
                               fontSize: 15,
                             ),
                             textInputAction: TextInputAction.done,
                             decoration: InputDecoration(
                               hintText: 'Binder name',
-                              hintStyle: GoogleFonts.plusJakartaSans(
+                              hintStyle: AppText.jakarta(
                                 color: CC.inkMuted,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -213,7 +213,7 @@ class _CreateBinderSheetState extends State<_CreateBinderSheet> {
                           const SizedBox(height: 18),
                           Text(
                             'Color',
-                            style: GoogleFonts.plusJakartaSans(
+                            style: AppText.jakarta(
                               fontWeight: FontWeight.w700,
                               fontSize: 13,
                             ),
@@ -236,7 +236,7 @@ class _CreateBinderSheetState extends State<_CreateBinderSheet> {
                                 child: TextField(
                                   controller: _hexCtrl,
                                   onChanged: _applyHex,
-                                  style: GoogleFonts.plusJakartaSans(
+                                  style: AppText.jakarta(
                                     fontWeight: FontWeight.w700,
                                     fontSize: 14,
                                     letterSpacing: 0.6,
@@ -249,7 +249,7 @@ class _CreateBinderSheetState extends State<_CreateBinderSheet> {
                                   ],
                                   decoration: InputDecoration(
                                     prefixText: '# ',
-                                    prefixStyle: GoogleFonts.plusJakartaSans(
+                                    prefixStyle: AppText.jakarta(
                                       color: CC.inkMuted,
                                       fontWeight: FontWeight.w700,
                                     ),
@@ -292,7 +292,7 @@ class _CreateBinderSheetState extends State<_CreateBinderSheet> {
                                 ),
                                 child: Text(
                                   'Clear',
-                                  style: GoogleFonts.plusJakartaSans(
+                                  style: AppText.jakarta(
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
@@ -324,7 +324,7 @@ class _CreateBinderSheetState extends State<_CreateBinderSheet> {
                                 Expanded(
                                   child: Text(
                                     'Only you can see this binder',
-                                    style: GoogleFonts.plusJakartaSans(
+                                    style: AppText.jakarta(
                                       fontWeight: FontWeight.w600,
                                       fontSize: 13,
                                       color: CC.inkMuted,
@@ -348,7 +348,7 @@ class _CreateBinderSheetState extends State<_CreateBinderSheet> {
                               ),
                               child: Text(
                                 'Create Binder',
-                                style: GoogleFonts.plusJakartaSans(
+                                style: AppText.jakarta(
                                   fontWeight: FontWeight.w800,
                                   fontSize: 15,
                                   letterSpacing: 0.4,

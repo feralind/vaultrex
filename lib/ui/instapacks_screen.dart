@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../data/featured_packs.dart';
 import '../data/onboarding.dart';
 import '../data/riftbound_catalog.dart';
 import '../game/game_controller.dart';
 import '../models/models.dart';
+import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import '../widgets/brand.dart';
 import '../widgets/game_widgets.dart';
@@ -93,7 +93,7 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen> {
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
               child: Text(
                 'Featured Packs',
-                style: GoogleFonts.plusJakartaSans(
+                style: AppText.jakarta(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
                   letterSpacing: -0.3,
@@ -128,7 +128,7 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: Text(
                 'Riftbound Sealed',
-                style: GoogleFonts.plusJakartaSans(
+                style: AppText.jakarta(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
                   letterSpacing: -0.3,
@@ -229,7 +229,7 @@ class _InstapacksHeroState extends State<_InstapacksHero>
                     Text(
                       'Instapacks',
                       textAlign: TextAlign.center,
-                      style: GoogleFonts.plusJakartaSans(
+                      style: AppText.jakarta(
                         fontSize: 32,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.8,
@@ -239,7 +239,7 @@ class _InstapacksHeroState extends State<_InstapacksHero>
                     Text(
                       'Rip packs whenever you want. A digital pack ripping experience where you pull REAL cards.',
                       textAlign: TextAlign.center,
-                      style: GoogleFonts.plusJakartaSans(
+                      style: AppText.jakarta(
                         color: CC.inkMuted,
                         height: 1.4,
                         fontSize: 13,
@@ -248,7 +248,7 @@ class _InstapacksHeroState extends State<_InstapacksHero>
                     const SizedBox(height: 10),
                     Text(
                       'Learn more →',
-                      style: GoogleFonts.plusJakartaSans(
+                      style: AppText.jakarta(
                         color: CC.accentHot,
                         fontWeight: FontWeight.w700,
                         fontSize: 13,
@@ -598,7 +598,7 @@ class _FeaturedTileState extends State<_FeaturedTile>
                       pack.name,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.plusJakartaSans(
+                      style: AppText.jakarta(
                         fontWeight: FontWeight.w700,
                         fontSize: 13,
                         height: 1.2,
@@ -610,7 +610,7 @@ class _FeaturedTileState extends State<_FeaturedTile>
                       children: [
                         Text(
                           '\$${pack.priceUsd.toStringAsFixed(2)}',
-                          style: GoogleFonts.plusJakartaSans(
+                          style: AppText.jakarta(
                             fontWeight: FontWeight.w800,
                             fontSize: 14,
                           ),
@@ -622,7 +622,7 @@ class _FeaturedTileState extends State<_FeaturedTile>
                           candy >= 1000
                               ? '${(candy / 1000).toStringAsFixed(candy % 1000 == 0 ? 0 : 1)}K'
                               : '$candy',
-                          style: GoogleFonts.plusJakartaSans(
+                          style: AppText.jakarta(
                             fontWeight: FontWeight.w700,
                             fontSize: 12,
                             color: CC.candy,
@@ -702,6 +702,7 @@ class _ChasePreviewCard extends StatelessWidget {
         ),
         child: CardArt(
           url: url,
+          autoPlay: false,
           width: cardW,
           height: cardH,
           radius: 7,
@@ -825,6 +826,7 @@ class _InstaTileState extends State<_InstaTile> with TickerProviderStateMixin {
                           ),
                           child: LayoutBuilder(
                             builder: (context, constraints) {
+                              // Height-only pack fit — review Flip ratios if art clips.
                               final maxH = constraints.maxHeight;
                               final maxW = constraints.maxWidth;
                               var h = maxH * 0.94;
@@ -883,7 +885,7 @@ class _InstaTileState extends State<_InstaTile> with TickerProviderStateMixin {
                               child: Text(
                                 'Sold out',
                                 textAlign: TextAlign.center,
-                                style: GoogleFonts.plusJakartaSans(
+                                style: AppText.jakarta(
                                   fontWeight: FontWeight.w800,
                                   fontSize: 13,
                                 ),
@@ -904,7 +906,7 @@ class _InstaTileState extends State<_InstaTile> with TickerProviderStateMixin {
                       shortName,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.plusJakartaSans(
+                      style: AppText.jakarta(
                         fontWeight: FontWeight.w700,
                         fontSize: 13,
                         height: 1.2,
@@ -916,7 +918,7 @@ class _InstaTileState extends State<_InstaTile> with TickerProviderStateMixin {
                       children: [
                         Text(
                           '\$${listing.price.toStringAsFixed(2)}',
-                          style: GoogleFonts.plusJakartaSans(
+                          style: AppText.jakarta(
                             fontWeight: FontWeight.w800,
                             fontSize: 14,
                           ),
@@ -928,7 +930,7 @@ class _InstaTileState extends State<_InstaTile> with TickerProviderStateMixin {
                           candy >= 1000
                               ? '${(candy / 1000).toStringAsFixed(candy % 1000 == 0 ? 0 : 1)}K'
                               : '$candy',
-                          style: GoogleFonts.plusJakartaSans(
+                          style: AppText.jakarta(
                             fontWeight: FontWeight.w700,
                             fontSize: 12,
                             color: CC.candy,

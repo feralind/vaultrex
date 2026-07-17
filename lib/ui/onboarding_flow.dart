@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../data/onboarding.dart';
+import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import '../widgets/brand.dart';
 
@@ -179,7 +179,7 @@ class _IntroPage extends StatelessWidget {
           const SizedBox(height: 20),
           Text(
             'Vaultrex',
-            style: GoogleFonts.plusJakartaSans(
+            style: AppText.jakarta(
               fontSize: 34,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.8,
@@ -188,7 +188,7 @@ class _IntroPage extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             'Built for collectors',
-            style: GoogleFonts.plusJakartaSans(
+            style: AppText.jakarta(
               fontSize: 18,
               fontWeight: FontWeight.w700,
             ),
@@ -197,7 +197,7 @@ class _IntroPage extends StatelessWidget {
           Text(
             'Rip packs, track your collection, and chase the cards you want.',
             textAlign: TextAlign.center,
-            style: GoogleFonts.plusJakartaSans(
+            style: AppText.jakarta(
               color: CC.inkMuted,
               height: 1.45,
               fontSize: 14,
@@ -365,7 +365,7 @@ class _RipPacksPageState extends State<_RipPacksPage>
               const SizedBox(height: 20),
               Text(
                 'Rip real cards',
-                style: GoogleFonts.plusJakartaSans(
+                style: AppText.jakarta(
                   fontSize: 28,
                   fontWeight: FontWeight.w800,
                   letterSpacing: -0.5,
@@ -374,7 +374,7 @@ class _RipPacksPageState extends State<_RipPacksPage>
               const SizedBox(height: 8),
               Text(
                 'Real cards in every Instapack!',
-                style: GoogleFonts.plusJakartaSans(
+                style: AppText.jakarta(
                   fontWeight: FontWeight.w600,
                   fontSize: 16,
                 ),
@@ -383,7 +383,7 @@ class _RipPacksPageState extends State<_RipPacksPage>
               Text(
                 'Ship them or exchange them for Candy to buy more packs.',
                 textAlign: TextAlign.center,
-                style: GoogleFonts.plusJakartaSans(
+                style: AppText.jakarta(
                   color: CC.inkMuted,
                   height: 1.4,
                 ),
@@ -411,7 +411,7 @@ class _CollectPage extends StatelessWidget {
         children: [
           Text(
             'What do you collect?',
-            style: GoogleFonts.plusJakartaSans(
+            style: AppText.jakarta(
               fontSize: 26,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.4,
@@ -420,7 +420,7 @@ class _CollectPage extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             'So we can personalize your home page.',
-            style: GoogleFonts.plusJakartaSans(color: CC.inkMuted),
+            style: AppText.jakarta(color: CC.inkMuted),
           ),
           const SizedBox(height: 18),
           Expanded(

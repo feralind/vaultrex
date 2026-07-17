@@ -9,11 +9,14 @@ class FoilChromatic extends StatefulWidget {
     required this.child,
     this.enabled = true,
     this.intensity = 0.65,
+    this.autoPlay = true,
   });
 
   final Widget child;
   final bool enabled;
   final double intensity;
+  /// When false (grids/lists), keep a static foil wash — no continuous ticker.
+  final bool autoPlay;
 
   @override
   State<FoilChromatic> createState() => _FoilChromaticState();
@@ -29,7 +32,23 @@ class _FoilChromaticState extends State<FoilChromatic>
     _c = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 4200),
-    )..repeat();
+    );
+    if (widget.autoPlay) {
+      _c.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant FoilChromatic oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.autoPlay != oldWidget.autoPlay) {
+      if (widget.autoPlay) {
+        _c.repeat();
+      } else {
+        _c.stop();
+        _c.value = 0;
+      }
+    }
   }
 
   @override
@@ -47,7 +66,6 @@ class _FoilChromaticState extends State<FoilChromatic>
       builder: (context, child) {
         final t = _c.value;
         final twinkle = 0.55 + 0.45 * (0.5 + 0.5 * sin(t * pi * 2));
-        final twinkle2 = 0.45 + 0.55 * (0.5 + 0.5 * sin(t * pi * 2 + 1.7));
         // Slow diagonal sweep across the card face (−1.2 → 1.4).
         final sweep = -1.2 + 2.6 * t;
         return Stack(
@@ -59,7 +77,7 @@ class _FoilChromaticState extends State<FoilChromatic>
             Positioned.fill(
               child: IgnorePointer(
                 child: Opacity(
-                  opacity: i * 0.38,
+                  opacity: i * 0.24,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(8),
@@ -81,7 +99,7 @@ class _FoilChromaticState extends State<FoilChromatic>
                 ),
               ),
             ),
-            // Radial burst glints (FeeBay-style specular pops).
+            // Radial burst glint (single layer — quieter than dual glints).
             Positioned.fill(
               child: IgnorePointer(
                 child: Opacity(
@@ -101,31 +119,6 @@ class _FoilChromaticState extends State<FoilChromatic>
                           Colors.transparent,
                         ],
                         stops: const [0.0, 0.18, 1.0],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Positioned.fill(
-              child: IgnorePointer(
-                child: Opacity(
-                  opacity: i * 0.35 * twinkle2,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      gradient: RadialGradient(
-                        center: Alignment(
-                          0.45 + 0.4 * cos(t * pi * 2 + 0.8),
-                          0.25 + 0.35 * sin(t * pi * 2 + 0.8),
-                        ),
-                        radius: 0.32,
-                        colors: [
-                          const Color(0xAAFFFFFF),
-                          const Color(0x66A78BFA),
-                          Colors.transparent,
-                        ],
-                        stops: const [0.0, 0.22, 1.0],
                       ),
                     ),
                   ),
@@ -302,7 +295,6 @@ class SlabCase extends StatefulWidget {
 class _SlabCaseState extends State<SlabCase> with TickerProviderStateMixin {
   late final AnimationController _emerge;
   late final AnimationController _shine;
-  late final Listenable _tick;
 
   @override
   void initState() {
@@ -317,7 +309,6 @@ class _SlabCaseState extends State<SlabCase> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(milliseconds: 3600),
     )..repeat();
-    _tick = Listenable.merge([_emerge, _shine]);
   }
 
   @override
@@ -354,256 +345,253 @@ class _SlabCaseState extends State<SlabCase> with TickerProviderStateMixin {
     // Sweep on mid+ thumbs; skip only tiny peeks.
     final showShine = !compact && widget.width >= 72;
 
+    final slabCore = SizedBox(
+      width: widget.width,
+      child: AspectRatio(
+        aspectRatio: kPsaSlabAspect,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final w = constraints.maxWidth;
+            final s = w / 168.0;
+            final pad = (4.5 * s).clamp(2.5, 6.0);
+            final gap = (3.5 * s).clamp(2.0, 5.0);
+            final radius = (4.0 * s).clamp(2.5, 5.0);
+
+            return Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(radius),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.28),
+                    blurRadius: compact ? 6 : 14,
+                    offset: Offset(0, compact ? 3 : 8),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(radius),
+                clipBehavior: Clip.antiAlias,
+                child: Stack(
+                  fit: StackFit.expand,
+                  clipBehavior: Clip.hardEdge,
+                  children: [
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(radius),
+                        border: Border.all(
+                          color: const Color(0xFF94A3B8).withValues(alpha: 0.9),
+                          width: (1.2 * s).clamp(0.8, 1.5),
+                        ),
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            const Color(0xFFE8EEF5).withValues(alpha: 0.55),
+                            const Color(0xFFCBD5E1).withValues(alpha: 0.35),
+                            const Color(0xFFF1F5F9).withValues(alpha: 0.5),
+                          ],
+                        ),
+                      ),
+                      child: Padding(
+                        padding: EdgeInsets.all(pad),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Flexible(
+                              flex: compact ? 30 : 34,
+                              child: _PsaLabel(
+                                width: w,
+                                compact: compact,
+                                setLine: setLine,
+                                numberLine: numberLine,
+                                nameLine: nameLine,
+                                descriptor: descriptor,
+                                gradeLabel: gradeLabel,
+                                cert: cert,
+                                psaRed: _psaRed,
+                                labelWhite: _labelWhite,
+                                ink: _ink,
+                              ),
+                            ),
+                            SizedBox(height: gap),
+                            Flexible(
+                              flex: compact ? 62 : 66,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.7),
+                                  borderRadius: BorderRadius.circular(2),
+                                  border: Border.all(
+                                    color: const Color(0xFF94A3B8),
+                                    width: 0.7,
+                                  ),
+                                ),
+                                child: Padding(
+                                  padding: EdgeInsets.all(
+                                    (2.2 * s).clamp(1.2, 3.0),
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(1.5),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: SizedBox.expand(
+                                      child: widget.child,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    // Continuous shine isolated so PSA label doesn't repaint.
+                    if (showShine)
+                      Positioned.fill(
+                        child: RepaintBoundary(
+                          child: IgnorePointer(
+                            child: AnimatedBuilder(
+                              animation: _shine,
+                              builder: (context, _) {
+                                final shineT = _shine.value;
+                                return ClipRRect(
+                                  borderRadius: BorderRadius.circular(radius),
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      Transform.rotate(
+                                        angle: -0.55,
+                                        child: Align(
+                                          alignment: Alignment(
+                                            -1.6 + 3.4 * shineT,
+                                            0,
+                                          ),
+                                          child: Container(
+                                            width: w * 0.55,
+                                            height: w * 2.4,
+                                            decoration: BoxDecoration(
+                                              gradient: LinearGradient(
+                                                begin: Alignment.centerLeft,
+                                                end: Alignment.centerRight,
+                                                colors: [
+                                                  Colors.transparent,
+                                                  Colors.white.withValues(
+                                                    alpha: 0.06,
+                                                  ),
+                                                  Colors.white.withValues(
+                                                    alpha: 0.38,
+                                                  ),
+                                                  Colors.white.withValues(
+                                                    alpha: 0.06,
+                                                  ),
+                                                  Colors.transparent,
+                                                ],
+                                                stops: const [
+                                                  0.0,
+                                                  0.32,
+                                                  0.5,
+                                                  0.68,
+                                                  1.0,
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      Transform.rotate(
+                                        angle: -0.55,
+                                        child: Align(
+                                          alignment: Alignment(
+                                            -1.9 +
+                                                3.6 *
+                                                    ((shineT + 0.38) % 1.0),
+                                            0.15,
+                                          ),
+                                          child: Container(
+                                            width: w * 0.22,
+                                            height: w * 2.2,
+                                            decoration: BoxDecoration(
+                                              gradient: LinearGradient(
+                                                begin: Alignment.centerLeft,
+                                                end: Alignment.centerRight,
+                                                colors: [
+                                                  Colors.transparent,
+                                                  Colors.white.withValues(
+                                                    alpha: 0.22,
+                                                  ),
+                                                  Colors.transparent,
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      Align(
+                                        alignment: Alignment.topCenter,
+                                        child: Container(
+                                          height: w * 0.22,
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              begin: Alignment.topCenter,
+                                              end: Alignment.bottomCenter,
+                                              colors: [
+                                                Colors.white.withValues(
+                                                  alpha: 0.14,
+                                                ),
+                                                Colors.transparent,
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (widget.cracking)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(radius),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.5),
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
     return AnimatedBuilder(
-      animation: _tick,
+      animation: _emerge,
       builder: (context, child) {
         final curved =
             Curves.easeOutCubic.transform(_emerge.value.clamp(0.0, 1.0));
         final dy = (1 - curved) * (compact ? 8.0 : 24.0);
         final emergeScale = 0.94 + 0.06 * curved;
-        final shineT = _shine.value;
         return Opacity(
           opacity: curved,
           child: Transform.translate(
             offset: Offset(0, dy),
             child: Transform.scale(
               scale: emergeScale,
-              child: SizedBox(
-                width: widget.width,
-                child: AspectRatio(
-                  aspectRatio: kPsaSlabAspect,
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final w = constraints.maxWidth;
-                      final s = w / 168.0;
-                      final pad = (4.5 * s).clamp(2.5, 6.0);
-                      final gap = (3.5 * s).clamp(2.0, 5.0);
-                      final radius = (4.0 * s).clamp(2.5, 5.0);
-
-                      return Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(radius),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.28),
-                              blurRadius: compact ? 6 : 14,
-                              offset: Offset(0, compact ? 3 : 8),
-                            ),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(radius),
-                          clipBehavior: Clip.antiAlias,
-                          child: Stack(
-                            fit: StackFit.expand,
-                            clipBehavior: Clip.hardEdge,
-                            children: [
-                              DecoratedBox(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(radius),
-                                  border: Border.all(
-                                    color: const Color(0xFF94A3B8)
-                                        .withValues(alpha: 0.9),
-                                    width: (1.2 * s).clamp(0.8, 1.5),
-                                  ),
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [
-                                      const Color(0xFFE8EEF5)
-                                          .withValues(alpha: 0.55),
-                                      const Color(0xFFCBD5E1)
-                                          .withValues(alpha: 0.35),
-                                      const Color(0xFFF1F5F9)
-                                          .withValues(alpha: 0.5),
-                                    ],
-                                  ),
-                                ),
-                                child: Padding(
-                                  padding: EdgeInsets.all(pad),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      Flexible(
-                                        flex: compact ? 30 : 34,
-                                        child: _PsaLabel(
-                                          width: w,
-                                          compact: compact,
-                                          setLine: setLine,
-                                          numberLine: numberLine,
-                                          nameLine: nameLine,
-                                          descriptor: descriptor,
-                                          gradeLabel: gradeLabel,
-                                          cert: cert,
-                                          psaRed: _psaRed,
-                                          labelWhite: _labelWhite,
-                                          ink: _ink,
-                                        ),
-                                      ),
-                                      SizedBox(height: gap),
-                                      Flexible(
-                                        flex: compact ? 62 : 66,
-                                        child: DecoratedBox(
-                                          decoration: BoxDecoration(
-                                            color: Colors.white
-                                                .withValues(alpha: 0.7),
-                                            borderRadius:
-                                                BorderRadius.circular(2),
-                                            border: Border.all(
-                                              color: const Color(0xFF94A3B8),
-                                              width: 0.7,
-                                            ),
-                                          ),
-                                          child: Padding(
-                                            padding: EdgeInsets.all(
-                                              (2.2 * s).clamp(1.2, 3.0),
-                                            ),
-                                            child: ClipRRect(
-                                              borderRadius:
-                                                  BorderRadius.circular(1.5),
-                                              clipBehavior: Clip.antiAlias,
-                                              child: SizedBox.expand(
-                                                child: widget.child,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              if (showShine)
-                                Positioned.fill(
-                                  child: IgnorePointer(
-                                    child: ClipRRect(
-                                      borderRadius:
-                                          BorderRadius.circular(radius),
-                                      child: Stack(
-                                        fit: StackFit.expand,
-                                        children: [
-                                          // Broad soft diagonal glare across plastic case.
-                                          Transform.rotate(
-                                            angle: -0.55,
-                                            child: Align(
-                                              alignment: Alignment(
-                                                -1.6 + 3.4 * shineT,
-                                                0,
-                                              ),
-                                              child: Container(
-                                                width: w * 0.55,
-                                                height: w * 2.4,
-                                                decoration: BoxDecoration(
-                                                  gradient: LinearGradient(
-                                                    begin: Alignment.centerLeft,
-                                                    end: Alignment.centerRight,
-                                                    colors: [
-                                                      Colors.transparent,
-                                                      Colors.white.withValues(
-                                                        alpha: 0.06,
-                                                      ),
-                                                      Colors.white.withValues(
-                                                        alpha: 0.38,
-                                                      ),
-                                                      Colors.white.withValues(
-                                                        alpha: 0.06,
-                                                      ),
-                                                      Colors.transparent,
-                                                    ],
-                                                    stops: const [
-                                                      0.0,
-                                                      0.32,
-                                                      0.5,
-                                                      0.68,
-                                                      1.0,
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          // Narrower secondary glint (offset phase).
-                                          Transform.rotate(
-                                            angle: -0.55,
-                                            child: Align(
-                                              alignment: Alignment(
-                                                -1.9 +
-                                                    3.6 *
-                                                        ((shineT + 0.38) % 1.0),
-                                                0.15,
-                                              ),
-                                              child: Container(
-                                                width: w * 0.22,
-                                                height: w * 2.2,
-                                                decoration: BoxDecoration(
-                                                  gradient: LinearGradient(
-                                                    begin: Alignment.centerLeft,
-                                                    end: Alignment.centerRight,
-                                                    colors: [
-                                                      Colors.transparent,
-                                                      Colors.white.withValues(
-                                                        alpha: 0.22,
-                                                      ),
-                                                      Colors.transparent,
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          // Soft top-edge plastic specular (static).
-                                          Align(
-                                            alignment: Alignment.topCenter,
-                                            child: Container(
-                                              height: w * 0.22,
-                                              decoration: BoxDecoration(
-                                                gradient: LinearGradient(
-                                                  begin: Alignment.topCenter,
-                                                  end: Alignment.bottomCenter,
-                                                  colors: [
-                                                    Colors.white.withValues(
-                                                      alpha: 0.14,
-                                                    ),
-                                                    Colors.transparent,
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              if (widget.cracking)
-                                Positioned.fill(
-                                  child: IgnorePointer(
-                                    child: DecoratedBox(
-                                      decoration: BoxDecoration(
-                                        borderRadius:
-                                            BorderRadius.circular(radius),
-                                        border: Border.all(
-                                          color: Colors.white
-                                              .withValues(alpha: 0.5),
-                                          width: 2,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
+              child: child,
             ),
           ),
         );
       },
+      child: slabCore,
     );
   }
 }

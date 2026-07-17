@@ -20,14 +20,13 @@ class FlipLayout {
     return 5;
   }
 
-  /// Card tile: art + 2-line name + set + price. Narrower cells need more height.
+  /// Card tile: art-dominant + name + set/price row.
   static double collectionAspectRatio(BuildContext context) {
     final cols = collectionCrossAxisCount(context);
-    // Tall enough for TCG art (or PSA slab) + labels without clipping.
     return switch (cols) {
-      3 => 0.42,
-      4 => 0.40,
-      _ => 0.44,
+      3 => 0.58,
+      4 => 0.56,
+      _ => 0.60,
     };
   }
 

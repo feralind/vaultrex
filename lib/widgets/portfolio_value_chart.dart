@@ -2,9 +2,9 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../models/models.dart';
+import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 
 /// Rare Candy–style portfolio line chart: axes, dashed grid, dollar + date labels.
@@ -103,7 +103,7 @@ class PortfolioValueChart extends StatelessWidget {
                       for (final label in yLabels)
                         Text(
                           label,
-                          style: GoogleFonts.plusJakartaSans(
+                          style: AppText.jakarta(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
                             color: CC.inkMuted,
@@ -136,7 +136,7 @@ class PortfolioValueChart extends StatelessWidget {
               children: [
                 Text(
                   _dateLabel(series.first.date),
-                  style: GoogleFonts.plusJakartaSans(
+                  style: AppText.jakarta(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
                     color: CC.inkMuted,
@@ -144,7 +144,7 @@ class PortfolioValueChart extends StatelessWidget {
                 ),
                 Text(
                   _dateLabel(mid.date),
-                  style: GoogleFonts.plusJakartaSans(
+                  style: AppText.jakarta(
                     fontSize: 10,
                     fontWeight: FontWeight.w500,
                     color: CC.inkMuted,
@@ -152,7 +152,7 @@ class PortfolioValueChart extends StatelessWidget {
                 ),
                 Text(
                   _dateLabel(series.last.date),
-                  style: GoogleFonts.plusJakartaSans(
+                  style: AppText.jakarta(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
                     color: CC.inkMuted,

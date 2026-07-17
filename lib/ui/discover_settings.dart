@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../data/onboarding.dart';
 import '../game/game_controller.dart';
+import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import 'sealed_inventory.dart';
 
@@ -17,7 +17,7 @@ class DiscoverScreen extends ConsumerWidget {
       children: [
         Text(
           'Discover',
-          style: GoogleFonts.plusJakartaSans(
+          style: AppText.jakarta(
             fontSize: 30,
             fontWeight: FontWeight.w800,
             letterSpacing: -0.6,
@@ -26,7 +26,7 @@ class DiscoverScreen extends ConsumerWidget {
         const SizedBox(height: 6),
         Text(
           'Riftbound drops, trends, and collector tips.',
-          style: GoogleFonts.plusJakartaSans(color: CC.inkMuted),
+          style: AppText.jakarta(color: CC.inkMuted),
         ),
         const SizedBox(height: 18),
         Builder(
@@ -90,7 +90,7 @@ class DiscoverScreen extends ConsumerWidget {
         children: [
           Text(
             title,
-            style: GoogleFonts.plusJakartaSans(
+            style: AppText.jakarta(
               fontWeight: FontWeight.w800,
               fontSize: 16,
             ),
@@ -98,7 +98,7 @@ class DiscoverScreen extends ConsumerWidget {
           const SizedBox(height: 6),
           Text(
             body,
-            style: GoogleFonts.plusJakartaSans(
+            style: AppText.jakarta(
               color: CC.inkMuted,
               height: 1.4,
             ),
@@ -119,7 +119,7 @@ class SettingsScreen extends ConsumerWidget {
       children: [
         Text(
           'Settings',
-          style: GoogleFonts.plusJakartaSans(
+          style: AppText.jakarta(
             fontSize: 30,
             fontWeight: FontWeight.w800,
             letterSpacing: -0.6,
@@ -152,7 +152,7 @@ class SettingsScreen extends ConsumerWidget {
         const SizedBox(height: 18),
         Text(
           'Legal',
-          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800),
+          style: AppText.jakarta(fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 8),
         Text(
@@ -160,7 +160,7 @@ class SettingsScreen extends ConsumerWidget {
           'Riftbound names and related IP belong to Riot Games. '
           'Prices from TCGCSV/TCGplayer public data. '
           'Not affiliated with Riot Games.',
-          style: GoogleFonts.plusJakartaSans(
+          style: AppText.jakarta(
             color: CC.inkMuted,
             height: 1.45,
             fontSize: 13,

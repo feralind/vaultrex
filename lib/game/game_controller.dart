@@ -76,6 +76,7 @@ class GameState {
     required this.migrationNotice,
     this.valueHistory = const [],
     this.binders = const [],
+    this.recentlyKeptIds = const {},
   });
 
   final bool ready;
@@ -96,6 +97,8 @@ class GameState {
   final String? migrationNotice;
   final List<CollectionValuePoint> valueHistory;
   final List<Binder> binders;
+  /// Session-only: instance ids just kept from a rip (for entrance pulse).
+  final Set<String> recentlyKeptIds;
 
   factory GameState.loading() => GameState(
         ready: false,
@@ -116,6 +119,7 @@ class GameState {
         migrationNotice: null,
         valueHistory: const [],
         binders: const [],
+        recentlyKeptIds: const {},
       );
 
   GameState copyWith({
@@ -140,6 +144,7 @@ class GameState {
     bool clearMigration = false,
     List<CollectionValuePoint>? valueHistory,
     List<Binder>? binders,
+    Set<String>? recentlyKeptIds,
   }) {
     return GameState(
       ready: ready ?? this.ready,
@@ -161,6 +166,7 @@ class GameState {
           clearMigration ? null : (migrationNotice ?? this.migrationNotice),
       valueHistory: valueHistory ?? this.valueHistory,
       binders: binders ?? this.binders,
+      recentlyKeptIds: recentlyKeptIds ?? this.recentlyKeptIds,
     );
   }
 
@@ -204,6 +210,7 @@ class GameState {
             'Save upgraded to Riftbound. Parody inventory was reset.',
         valueHistory: const [],
         binders: const [],
+        recentlyKeptIds: const {},
       );
     }
     return GameState(
@@ -245,6 +252,7 @@ class GameState {
       binders: (j['binders'] as List? ?? [])
           .map((e) => Binder.fromJson(e as Map<String, dynamic>))
           .toList(),
+      recentlyKeptIds: const {},
     );
   }
 }
@@ -315,6 +323,7 @@ class GameNotifier extends Notifier<GameState> {
         CollectionValuePoint(date: DateTime.now(), value: 0),
       ],
       binders: const [],
+      recentlyKeptIds: const {},
     );
     state = fresh;
     await _persist();
@@ -755,6 +764,7 @@ class GameNotifier extends Notifier<GameState> {
       collection: [...state.collection, card],
       lastRip: rip.where((c) => c.instanceId != instanceId).toList(),
       message: 'Kept for collection.',
+      recentlyKeptIds: {...state.recentlyKeptIds, instanceId},
     );
     _recordCollectionValue();
     await _persist();
@@ -798,12 +808,22 @@ class GameNotifier extends Notifier<GameState> {
         collection: [...state.collection, ...rip],
         clearLastRip: true,
         message: 'Cards added to collection.',
+        recentlyKeptIds: {
+          ...state.recentlyKeptIds,
+          ...rip.map((c) => c.instanceId),
+        },
       );
       _recordCollectionValue();
     } else {
       state = state.copyWith(clearLastRip: true);
     }
     await _persist();
+  }
+
+  void acknowledgeRecentlyKept(String instanceId) {
+    if (!state.recentlyKeptIds.contains(instanceId)) return;
+    final next = {...state.recentlyKeptIds}..remove(instanceId);
+    state = state.copyWith(recentlyKeptIds: next);
   }
 
   Future<void> openBoxBurst(String setCode) async {

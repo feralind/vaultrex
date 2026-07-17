@@ -2,12 +2,12 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../data/featured_packs.dart';
 import '../game/game_controller.dart';
 import '../models/enums.dart';
 import '../models/models.dart';
+import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import '../widgets/brand.dart';
 import '../widgets/game_widgets.dart';
@@ -109,7 +109,7 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                 ),
                 title: Text(
                   pack.tier.label,
-                  style: GoogleFonts.plusJakartaSans(
+                  style: AppText.jakarta(
                     fontWeight: FontWeight.w700,
                     fontSize: 15,
                   ),
@@ -136,7 +136,7 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                       Text(
                         pack.name,
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.plusJakartaSans(
+                        style: AppText.jakarta(
                           fontSize: 26,
                           fontWeight: FontWeight.w800,
                           letterSpacing: -0.6,
@@ -146,7 +146,7 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                       Text(
                         'Buy for \$${pack.priceUsd.toStringAsFixed(2)}  ·  or buy for ${_fmtCandy(candy)} Candy',
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.plusJakartaSans(
+                        style: AppText.jakarta(
                           color: CC.inkMuted,
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -156,7 +156,7 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                       Text(
                         pack.blurb,
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.plusJakartaSans(
+                        style: AppText.jakarta(
                           color: CC.inkMuted,
                           fontSize: 13,
                           height: 1.45,
@@ -165,7 +165,7 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                       const SizedBox(height: 22),
                       Text(
                         'Top Hits',
-                        style: GoogleFonts.plusJakartaSans(
+                        style: AppText.jakarta(
                           fontWeight: FontWeight.w800,
                           fontSize: 17,
                         ),
@@ -173,15 +173,56 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                       const SizedBox(height: 4),
                       Text(
                         'Chase cards weighted into this pack — odds shown per hit.',
-                        style: GoogleFonts.plusJakartaSans(
+                        style: AppText.jakarta(
                           color: CC.inkMuted,
                           fontSize: 12,
                         ),
                       ),
                       const SizedBox(height: 12),
-                      _TopHitsScroller(
-                        hits: hits,
-                        oddsFor: _oddsFor,
+                      ShowcaseCardRow(
+                        itemCount: hits.length,
+                        itemBuilder: (context, i) {
+                          final c = hits[i];
+                          final odds = _oddsFor(c);
+                          const cardW = 168.0;
+                          const cardH = cardW * (3.5 / 2.5);
+                          return SizedBox(
+                            width: cardW,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                CardArt(
+                                  url: c.displayArtUrl,
+                                  autoPlay: false,
+                                  width: cardW,
+                                  height: cardH,
+                                  radius: 12,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  c.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                  style: AppText.jakarta(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                if (odds > 0)
+                                  Text(
+                                    '${odds.toStringAsFixed(odds >= 10 ? 0 : 1)}%',
+                                    style: AppText.jakarta(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w800,
+                                      color: CC.accentHot,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
                       const SizedBox(height: 8),
                       Align(
@@ -190,7 +231,7 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                           onPressed: () => _showAllCards(context, notifier),
                           child: Text(
                             'View all cards →',
-                            style: GoogleFonts.plusJakartaSans(
+                            style: AppText.jakarta(
                               fontWeight: FontWeight.w700,
                               color: CC.accentHot,
                             ),
@@ -202,7 +243,7 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                       const SizedBox(height: 22),
                       Text(
                         'Pull Rates by Pack Value',
-                        style: GoogleFonts.plusJakartaSans(
+                        style: AppText.jakarta(
                           fontWeight: FontWeight.w800,
                           fontSize: 17,
                         ),
@@ -210,7 +251,7 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                       const SizedBox(height: 4),
                       Text(
                         'Approximate odds for the highlight slot EV band.',
-                        style: GoogleFonts.plusJakartaSans(
+                        style: AppText.jakarta(
                           color: CC.inkMuted,
                           fontSize: 12,
                         ),
@@ -272,7 +313,7 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                             const SizedBox(width: 8),
                             Text(
                               'BUY WITH  ${_fmtCandy(candy)} CANDY',
-                              style: GoogleFonts.plusJakartaSans(
+                              style: AppText.jakarta(
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: 0.3,
                               ),
@@ -347,7 +388,7 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                       Expanded(
                         child: Text(
                           'All cards in ${pack.name}',
-                          style: GoogleFonts.plusJakartaSans(
+                          style: AppText.jakarta(
                             fontWeight: FontWeight.w800,
                             fontSize: 16,
                           ),
@@ -355,7 +396,7 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                       ),
                       Text(
                         '${cards.length}',
-                        style: GoogleFonts.plusJakartaSans(color: CC.inkMuted),
+                        style: AppText.jakarta(color: CC.inkMuted),
                       ),
                     ],
                   ),
@@ -372,6 +413,7 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                         contentPadding: EdgeInsets.zero,
                         leading: CardArt(
                           url: c.thumbArtUrl,
+                          autoPlay: false,
                           width: 44,
                           height: 56,
                           radius: 6,
@@ -380,21 +422,21 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                           c.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.plusJakartaSans(
+                          style: AppText.jakarta(
                             fontWeight: FontWeight.w700,
                             fontSize: 13,
                           ),
                         ),
                         subtitle: Text(
                           '${c.setCode} · ${c.rarity.label}',
-                          style: GoogleFonts.plusJakartaSans(
+                          style: AppText.jakarta(
                             fontSize: 11,
                             color: CC.inkMuted,
                           ),
                         ),
                         trailing: Text(
                           '\$${c.marketPrice.toStringAsFixed(2)}',
-                          style: GoogleFonts.plusJakartaSans(
+                          style: AppText.jakarta(
                             fontWeight: FontWeight.w800,
                             fontSize: 13,
                           ),
@@ -529,7 +571,7 @@ class _ExchangeBanner extends StatelessWidget {
             child: Text(
               'Guaranteed candy exchange — keep what you love, '
               'exchange the rest (≥50% candy if you exchange the full rip).',
-              style: GoogleFonts.plusJakartaSans(
+              style: AppText.jakarta(
                 fontSize: 12,
                 height: 1.35,
                 fontWeight: FontWeight.w600,
@@ -556,7 +598,7 @@ class _PullRateRow extends StatelessWidget {
             width: 92,
             child: Text(
               row.tierLabel,
-              style: GoogleFonts.plusJakartaSans(
+              style: AppText.jakarta(
                 fontWeight: FontWeight.w700,
                 fontSize: 13,
               ),
@@ -565,7 +607,7 @@ class _PullRateRow extends StatelessWidget {
           Expanded(
             child: Text(
               row.priceRangeLabel,
-              style: GoogleFonts.plusJakartaSans(
+              style: AppText.jakarta(
                 color: CC.inkMuted,
                 fontSize: 12,
               ),
@@ -573,7 +615,7 @@ class _PullRateRow extends StatelessWidget {
           ),
           Text(
             '${row.percent.toStringAsFixed(0)}%',
-            style: GoogleFonts.plusJakartaSans(
+            style: AppText.jakarta(
               fontWeight: FontWeight.w800,
               fontSize: 14,
               color: CC.accentHot,
@@ -585,73 +627,3 @@ class _PullRateRow extends StatelessWidget {
   }
 }
 
-/// Horizontal chase-card scroller: full card aspect, no clip, swipe through all hits.
-class _TopHitsScroller extends StatelessWidget {
-  const _TopHitsScroller({
-    required this.hits,
-    required this.oddsFor,
-  });
-
-  final List<CardDef> hits;
-  final double Function(CardDef) oddsFor;
-
-  // ~2× prior tiles, true TCG aspect (2.5∶3.5) so art isn't cropped.
-  static const double cardW = 168;
-  static const double cardH = cardW * (3.5 / 2.5); // 235.2
-  static const double rowH = cardH + 8 + 18 + 18 + 16; // art + gap + name + odds + pad
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: rowH,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
-        itemCount: hits.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 14),
-        itemBuilder: (context, i) {
-          final c = hits[i];
-          final odds = oddsFor(c);
-          return SizedBox(
-            width: cardW,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                CardArt(
-                  url: c.displayArtUrl,
-                  width: cardW,
-                  height: cardH,
-                  radius: 12,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  c.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (odds > 0)
-                  Text(
-                    '${odds.toStringAsFixed(odds >= 10 ? 0 : 1)}%',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      color: CC.accentHot,
-                    ),
-                  ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-}

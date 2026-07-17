@@ -5,11 +5,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../game/game_controller.dart';
 import '../models/enums.dart';
 import '../models/models.dart';
+import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import 'brand.dart';
 import 'foil_slab.dart';
@@ -60,18 +60,29 @@ Future<void> showPackTheater(
     useRootNavigator: true,
     barrierDismissible: false,
     barrierColor: Colors.black.withValues(alpha: 0.55),
-    pageBuilder: (dialogContext, anim, secondary) {
+    transitionDuration: const Duration(milliseconds: 260),
+    transitionBuilder: (context, anim, secondary, child) {
+      final curved = CurvedAnimation(
+        parent: anim,
+        curve: Curves.easeOutCubic,
+      );
       return FadeTransition(
-        opacity: anim,
-        child: PackRipTheater(
-          pulls: List<OwnedCard>.from(pulls),
-          packImageUrl: packImageUrl,
-          onDone: () {
-            if (dialogContext.mounted) {
-              Navigator.of(dialogContext, rootNavigator: true).pop();
-            }
-          },
+        opacity: curved,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.98, end: 1.0).animate(curved),
+          child: child,
         ),
+      );
+    },
+    pageBuilder: (dialogContext, anim, secondary) {
+      return PackRipTheater(
+        pulls: List<OwnedCard>.from(pulls),
+        packImageUrl: packImageUrl,
+        onDone: () {
+          if (dialogContext.mounted) {
+            Navigator.of(dialogContext, rootNavigator: true).pop();
+          }
+        },
       );
     },
   );
@@ -107,6 +118,7 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
   double _swipeDx = 0;
 
   late final AnimationController _burst;
+  late final AnimationController _impact;
   late final AnimationController _flip;
   late final AnimationController _glowPulse;
 
@@ -116,6 +128,10 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
     _burst = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1000),
+    );
+    _impact = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 150),
     );
     _flip = AnimationController(
       vsync: this,
@@ -130,6 +146,7 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
   @override
   void dispose() {
     _burst.dispose();
+    _impact.dispose();
     _flip.dispose();
     _glowPulse.dispose();
     super.dispose();
@@ -162,6 +179,9 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
       _tear = 1;
     });
     await _burst.forward(from: 0);
+    if (!mounted) return;
+    HapticFeedback.lightImpact();
+    await _impact.forward(from: 0);
     if (!mounted) return;
     // Skip preload lineup — cards already emerged from the pack mouth.
     setState(() {
@@ -271,7 +291,7 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
                           'Card ${_cardIndex + 1}/${widget.pulls.length}',
                       },
                       textAlign: TextAlign.center,
-                      style: GoogleFonts.plusJakartaSans(
+                      style: AppText.jakarta(
                         fontSize: 17,
                         fontWeight: FontWeight.w800,
                       ),
@@ -292,16 +312,22 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
                     },
                   ),
                 _RipPhase.bursting => AnimatedBuilder(
-                    animation: _burst,
+                    animation: Listenable.merge([_burst, _impact]),
                     builder: (context, _) {
                       final t = Curves.easeOutCubic.transform(_burst.value);
                       // Finish top tear → strip flies off; cards rise from mouth.
                       final peel = 1.0 + t;
+                      final impactT =
+                          Curves.easeOutBack.transform(_impact.value);
+                      // 1.0 → ~1.06 → 1.0
+                      final impactScale =
+                          1.0 + 0.06 * math.sin(impactT * math.pi);
                       return _PackPeelStage(
                         tear: peel.clamp(0.0, 2.0),
                         imageUrl: widget.packImageUrl,
                         showHint: false,
                         interactive: false,
+                        impactScale: impactScale,
                       );
                     },
                   ),
@@ -359,7 +385,7 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
                           ),
                           child: Text(
                             'Exchange',
-                            style: GoogleFonts.plusJakartaSans(
+                            style: AppText.jakarta(
                               fontWeight: FontWeight.w800,
                               fontSize: 16,
                               height: 1,
@@ -383,7 +409,7 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
                           ),
                           child: Text(
                             'Keep',
-                            style: GoogleFonts.plusJakartaSans(
+                            style: AppText.jakarta(
                               fontWeight: FontWeight.w800,
                               fontSize: 16,
                               height: 1,
@@ -441,6 +467,7 @@ class _PackPeelStage extends StatelessWidget {
     this.imageUrl,
     this.onTearUpdate,
     this.onTearEnd,
+    this.impactScale = 1.0,
   });
 
   final double tear;
@@ -449,6 +476,7 @@ class _PackPeelStage extends StatelessWidget {
   final bool interactive;
   final void Function(DragUpdateDetails)? onTearUpdate;
   final VoidCallback? onTearEnd;
+  final double impactScale;
 
   @override
   Widget build(BuildContext context) {
@@ -456,8 +484,8 @@ class _PackPeelStage extends StatelessWidget {
     final t = tear.clamp(0.0, 1.0);
     final exit = (tear - 1.0).clamp(0.0, 1.0);
     final peel = Curves.easeOutCubic.transform(t);
-    final emerge = Curves.easeOutCubic.transform(exit);
-    final stripFly = Curves.easeIn.transform(exit);
+    final emerge = Curves.easeOutBack.transform(exit);
+    final stripFly = Curves.easeOutExpo.transform(exit);
     final packFade = (1.0 - exit * 0.9).clamp(0.0, 1.0);
     final showEmerging = exit > 0.02;
     // Start physically splitting once the swipe has real progress.
@@ -604,7 +632,7 @@ class _PackPeelStage extends StatelessWidget {
                       child: Transform.translate(
                         offset: Offset(0, -packH * 0.12 * exit),
                         child: Transform.scale(
-                          scale: 0.94 + exit * 0.06,
+                          scale: (0.94 + exit * 0.06) * impactScale,
                           child: Center(
                             child: _CardBack(width: backW, height: backH),
                           ),
@@ -660,7 +688,7 @@ class _PackPeelStage extends StatelessWidget {
                                           t <= 0
                                               ? 'SWIPE ACROSS TOP'
                                               : '${(t * 100).round()}%',
-                                          style: GoogleFonts.plusJakartaSans(
+                                          style: AppText.jakarta(
                                             fontWeight: FontWeight.w800,
                                             color: CC.accent,
                                             letterSpacing: 1.0,
@@ -790,7 +818,7 @@ class _FoilPackFallback extends StatelessWidget {
             child: Text(
               'VAULTREX\nRIFTBOUND',
               textAlign: TextAlign.center,
-              style: GoogleFonts.plusJakartaSans(
+              style: AppText.jakarta(
                 color: Colors.white,
                 fontWeight: FontWeight.w800,
                 fontSize: 16,
@@ -1104,7 +1132,10 @@ class _RevealStage extends StatelessWidget {
 
           return LayoutBuilder(
             builder: (context, constraints) {
-              final maxH = constraints.maxHeight * 0.86;
+              final maxH = math.min(
+                constraints.maxHeight * 0.86,
+                constraints.maxWidth * 1.7,
+              );
               final maxW = constraints.maxWidth - 24;
               var cardH = maxH;
               var cardW = cardH * (5 / 7);
@@ -1204,7 +1235,7 @@ class _RevealStage extends StatelessWidget {
                                   textAlign: TextAlign.center,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.plusJakartaSans(
+                                  style: AppText.jakarta(
                                     fontWeight: FontWeight.w800,
                                     fontSize: 20,
                                     height: 1.2,
@@ -1225,7 +1256,7 @@ class _RevealStage extends StatelessWidget {
                                       ],
                                       MoneyText(
                                         fair,
-                                        style: GoogleFonts.plusJakartaSans(
+                                        style: AppText.jakarta(
                                           fontSize: 17,
                                           fontWeight: FontWeight.w800,
                                           height: 1,
@@ -1253,7 +1284,7 @@ class _RevealStage extends StatelessWidget {
                                       const SizedBox(width: 5),
                                       Text(
                                         '${(fair * 100).round()}',
-                                        style: GoogleFonts.plusJakartaSans(
+                                        style: AppText.jakarta(
                                           color: CC.candy,
                                           fontWeight: FontWeight.w700,
                                           fontSize: 15,
@@ -1267,7 +1298,7 @@ class _RevealStage extends StatelessWidget {
                                   const SizedBox(height: 10),
                                   Text(
                                     'NICE PULL',
-                                    style: GoogleFonts.plusJakartaSans(
+                                    style: AppText.jakarta(
                                       color: ambient,
                                       fontWeight: FontWeight.w800,
                                       letterSpacing: 1.4,
@@ -1284,7 +1315,7 @@ class _RevealStage extends StatelessWidget {
                                         : exchangeHint
                                             ? 'Release to Exchange'
                                             : 'Swipe left or right',
-                                    style: GoogleFonts.plusJakartaSans(
+                                    style: AppText.jakarta(
                                       color: keepHint
                                           ? CC.accent
                                           : exchangeHint
@@ -1395,12 +1426,13 @@ class _ActiveLineup extends StatelessWidget {
                 child: Transform(
                   alignment: Alignment.center,
                   transform: Matrix4.identity()
-                    ..setEntry(3, 2, 0.001)
+                    ..setEntry(3, 2, 0.0018 / (cardW / 200))
                     ..rotateY(displayAngle),
                   child: showFront
                       ? FoilChromatic(
                           enabled: owned.foil,
                           intensity: 0.78,
+                          autoPlay: true,
                           child: CardArt(
                             url: artUrl,
                             width: cardW,

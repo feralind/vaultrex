@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../game/game_controller.dart';
 import '../models/enums.dart';
 import '../models/models.dart';
+import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import '../widgets/card_detail_sheet.dart';
 import '../widgets/game_widgets.dart';
@@ -70,7 +70,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                   children: [
                     Text(
                       'Market',
-                      style: GoogleFonts.plusJakartaSans(
+                      style: AppText.jakarta(
                         fontSize: 30,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.6,
@@ -78,7 +78,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                     ),
                     Text(
                       'Singles · raw & PSA slabs',
-                      style: GoogleFonts.plusJakartaSans(
+                      style: AppText.jakarta(
                         color: CC.inkMuted,
                         fontSize: 13,
                       ),
@@ -96,7 +96,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                 ),
                 child: Text(
                   '\$${state.player.cash.toStringAsFixed(2)}',
-                  style: GoogleFonts.plusJakartaSans(
+                  style: AppText.jakarta(
                     fontWeight: FontWeight.w800,
                     color: const Color(0xFF34D399),
                     fontSize: 15,
@@ -110,10 +110,10 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
           child: TextField(
             onChanged: (q) => setState(() => _query = q),
-            style: GoogleFonts.plusJakartaSans(fontSize: 14),
+            style: AppText.jakarta(fontSize: 14),
             decoration: InputDecoration(
               hintText: 'Search cards, sets…',
-              hintStyle: GoogleFonts.plusJakartaSans(color: CC.inkMuted),
+              hintStyle: AppText.jakarta(color: CC.inkMuted),
               prefixIcon: const Icon(Icons.search, color: CC.inkMuted),
               filled: true,
               fillColor: CC.card,
@@ -147,7 +147,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                     onSelected: (_) => setState(() => _filter = f),
                     selectedColor: CC.accent.withValues(alpha: 0.25),
                     backgroundColor: CC.card,
-                    labelStyle: GoogleFonts.plusJakartaSans(
+                    labelStyle: AppText.jakarta(
                       fontWeight: FontWeight.w600,
                       color: CC.ink,
                       fontSize: 12,
@@ -166,7 +166,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                     onSelected: (_) => setState(() => _set = on ? null : s),
                     selectedColor: CC.scan.withValues(alpha: 0.18),
                     backgroundColor: CC.card,
-                    labelStyle: GoogleFonts.plusJakartaSans(
+                    labelStyle: AppText.jakarta(
                       fontWeight: FontWeight.w600,
                       color: CC.ink,
                       fontSize: 12,
@@ -185,7 +185,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
               ? Center(
                   child: Text(
                     'No listings match — try Advance Day in Settings.',
-                    style: GoogleFonts.plusJakartaSans(color: CC.inkMuted),
+                    style: AppText.jakarta(color: CC.inkMuted),
                     textAlign: TextAlign.center,
                   ),
                 )
@@ -197,7 +197,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                         padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
                         child: Text(
                           'Cards (${listings.length})',
-                          style: GoogleFonts.plusJakartaSans(
+                          style: AppText.jakarta(
                             fontWeight: FontWeight.w800,
                             fontSize: 18,
                           ),
@@ -229,7 +229,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
                         child: Text(
                           'Buy Now',
-                          style: GoogleFonts.plusJakartaSans(
+                          style: AppText.jakarta(
                             fontWeight: FontWeight.w800,
                             fontSize: 18,
                           ),
@@ -364,6 +364,7 @@ class _CarouselCard extends StatelessWidget {
                       : CardArt(
                           url: def.displayArtUrl,
                           foil: listing.foil,
+                          autoPlay: false,
                           width: 112,
                           height: 156,
                           radius: 10,
@@ -380,7 +381,7 @@ class _CarouselCard extends StatelessWidget {
                       def.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.plusJakartaSans(
+                      style: AppText.jakarta(
                         fontWeight: FontWeight.w700,
                         fontSize: 13,
                         height: 1.2,
@@ -392,7 +393,7 @@ class _CarouselCard extends StatelessWidget {
                       '${listing.graded ? ' · PSA' : ''}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.plusJakartaSans(
+                      style: AppText.jakarta(
                         fontSize: 11,
                         height: 1.2,
                         color: CC.inkMuted,
@@ -401,7 +402,7 @@ class _CarouselCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       '\$${listing.price.toStringAsFixed(2)}',
-                      style: GoogleFonts.plusJakartaSans(
+                      style: AppText.jakarta(
                         fontWeight: FontWeight.w800,
                         fontSize: 15,
                         height: 1.2,
@@ -410,7 +411,7 @@ class _CarouselCard extends StatelessWidget {
                     ),
                     Text(
                       'See Buying Options',
-                      style: GoogleFonts.plusJakartaSans(
+                      style: AppText.jakarta(
                         fontSize: 11,
                         height: 1.2,
                         fontWeight: FontWeight.w700,
@@ -480,6 +481,7 @@ class _BuyNowRow extends StatelessWidget {
                       : CardArt(
                           url: def.displayArtUrl,
                           foil: listing.foil,
+                          autoPlay: false,
                           width: 64,
                           height: 88,
                           radius: 8,
@@ -495,7 +497,7 @@ class _BuyNowRow extends StatelessWidget {
                       def.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.plusJakartaSans(
+                      style: AppText.jakarta(
                         fontWeight: FontWeight.w800,
                         fontSize: 14,
                       ),
@@ -503,14 +505,14 @@ class _BuyNowRow extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       gradeTxt,
-                      style: GoogleFonts.plusJakartaSans(
+                      style: AppText.jakarta(
                         fontSize: 12,
                         color: CC.inkMuted,
                       ),
                     ),
                     Text(
                       listing.sellerAlias ?? listing.sellerType.label,
-                      style: GoogleFonts.plusJakartaSans(
+                      style: AppText.jakarta(
                         fontSize: 11,
                         color: CC.inkMuted,
                       ),
@@ -518,7 +520,7 @@ class _BuyNowRow extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       '\$${listing.price.toStringAsFixed(2)}',
-                      style: GoogleFonts.plusJakartaSans(
+                      style: AppText.jakarta(
                         fontWeight: FontWeight.w800,
                         fontSize: 16,
                         color: const Color(0xFF34D399),
@@ -536,7 +538,7 @@ class _BuyNowRow extends StatelessWidget {
                 ),
                 child: Text(
                   'BUY',
-                  style: GoogleFonts.plusJakartaSans(
+                  style: AppText.jakarta(
                     fontWeight: FontWeight.w800,
                     fontSize: 13,
                     letterSpacing: 0.4,

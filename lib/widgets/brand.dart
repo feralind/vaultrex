@@ -5,8 +5,8 @@ import 'dart:ui' as ui;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:google_fonts/google_fonts.dart';
 
+import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import 'knockout_image.dart';
 
@@ -31,7 +31,7 @@ class VaultrexLogo extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             AppBrand.name,
-            style: GoogleFonts.plusJakartaSans(
+            style: AppText.jakarta(
               fontWeight: FontWeight.w700,
               fontSize: size * 0.72,
               color: CC.ink,
@@ -195,7 +195,7 @@ class GamePickTile extends StatelessWidget {
                   textAlign: TextAlign.center,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.plusJakartaSans(
+                  style: AppText.jakarta(
                     fontWeight: FontWeight.w700,
                     fontSize: 15,
                     color: CC.ink,
@@ -223,7 +223,7 @@ class GamePickTile extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     'Soon',
-                    style: GoogleFonts.plusJakartaSans(
+                    style: AppText.jakarta(
                       fontSize: 11,
                       color: CC.inkMuted,
                     ),
@@ -416,6 +416,7 @@ class _RealPackArt extends StatelessWidget {
                 return KnockoutProductImage(
                   url: url,
                   width: constraints.maxWidth,
+                  // Fills slot height — review Flip ratios if pack peeks crop.
                   height: constraints.maxHeight,
                   fit: BoxFit.contain,
                   placeholder: fallback,
@@ -507,7 +508,7 @@ class _FoilPack extends StatelessWidget {
                   Text(
                     'VAULTREX',
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.plusJakartaSans(
+                    style: AppText.jakarta(
                       fontSize: math.max(7, width * 0.075),
                       fontWeight: FontWeight.w800,
                       letterSpacing: 1.4,
@@ -520,7 +521,7 @@ class _FoilPack extends StatelessWidget {
                     textAlign: TextAlign.center,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.plusJakartaSans(
+                    style: AppText.jakarta(
                       fontSize: math.max(9, width * 0.095),
                       fontWeight: FontWeight.w800,
                       color: Colors.white,
@@ -678,7 +679,7 @@ class _MiniSlabState extends State<MiniSlab> {
             child: Text(
               'PSA  ${widget.label}',
               textAlign: TextAlign.center,
-              style: GoogleFonts.plusJakartaSans(
+              style: AppText.jakarta(
                 fontSize: math.max(5.5, widget.width * 0.145),
                 fontWeight: FontWeight.w800,
                 color: Colors.white,
@@ -808,7 +809,7 @@ class CandyBalance extends StatelessWidget {
           const SizedBox(width: 5),
           Text(
             '$amount',
-            style: GoogleFonts.plusJakartaSans(
+            style: AppText.jakarta(
               fontWeight: FontWeight.w800,
               fontSize: 13,
               color: CC.ink,

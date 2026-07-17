@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../game/game_controller.dart';
 import '../models/enums.dart';
 import '../models/models.dart';
+import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import '../widgets/brand.dart';
 import '../widgets/pack_theater.dart';
@@ -146,7 +146,7 @@ class SealedInventorySheet extends ConsumerWidget {
           children: [
             Text(
               'Sell sealed pack',
-              style: GoogleFonts.plusJakartaSans(
+              style: AppText.jakarta(
                 fontWeight: FontWeight.w800,
                 fontSize: 18,
               ),
@@ -154,7 +154,7 @@ class SealedInventorySheet extends ConsumerWidget {
             const SizedBox(height: 6),
             Text(
               'Refund ~80% of market value.',
-              style: GoogleFonts.plusJakartaSans(
+              style: AppText.jakarta(
                 color: CC.inkMuted,
                 fontSize: 13,
               ),
@@ -179,7 +179,7 @@ class SealedInventorySheet extends ConsumerWidget {
                   const SizedBox(width: 8),
                   Text(
                     'Sell for $candy Candy',
-                    style: GoogleFonts.plusJakartaSans(
+                    style: AppText.jakarta(
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -232,7 +232,7 @@ class SealedInventorySheet extends ConsumerWidget {
                     children: [
                       Text(
                         'Sealed inventory',
-                        style: GoogleFonts.plusJakartaSans(
+                        style: AppText.jakarta(
                           fontSize: 22,
                           fontWeight: FontWeight.w800,
                           letterSpacing: -0.4,
@@ -243,7 +243,7 @@ class SealedInventorySheet extends ConsumerWidget {
                         total == 0
                             ? 'Buy packs or boxes — they land here sealed.'
                             : '$total sealed pack${total == 1 ? '' : 's'} ready to rip',
-                        style: GoogleFonts.plusJakartaSans(
+                        style: AppText.jakarta(
                           color: CC.inkMuted,
                           fontSize: 13,
                         ),
@@ -266,7 +266,7 @@ class SealedInventorySheet extends ConsumerWidget {
                       child: Text(
                         'No sealed packs yet.\nGrab an Instapack or booster box.',
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.plusJakartaSans(
+                        style: AppText.jakarta(
                           color: CC.inkMuted,
                           height: 1.45,
                         ),
@@ -304,7 +304,7 @@ class SealedInventorySheet extends ConsumerWidget {
                                     g.title,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.plusJakartaSans(
+                                    style: AppText.jakarta(
                                       fontWeight: FontWeight.w800,
                                       fontSize: 15,
                                     ),
@@ -312,7 +312,7 @@ class SealedInventorySheet extends ConsumerWidget {
                                   const SizedBox(height: 4),
                                   Text(
                                     '${g.packs.length} sealed · ${g.setCode}',
-                                    style: GoogleFonts.plusJakartaSans(
+                                    style: AppText.jakarta(
                                       color: CC.inkMuted,
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
@@ -321,7 +321,7 @@ class SealedInventorySheet extends ConsumerWidget {
                                   const SizedBox(height: 4),
                                   Text(
                                     'Sell ~\$${g.sellCash.toStringAsFixed(2)}',
-                                    style: GoogleFonts.plusJakartaSans(
+                                    style: AppText.jakarta(
                                       color: CC.inkMuted,
                                       fontSize: 11,
                                     ),
@@ -338,7 +338,7 @@ class SealedInventorySheet extends ConsumerWidget {
                                             child: Text(
                                               'Open',
                                               style:
-                                                  GoogleFonts.plusJakartaSans(
+                                                  AppText.jakarta(
                                                 fontWeight: FontWeight.w800,
                                               ),
                                             ),
@@ -361,7 +361,7 @@ class SealedInventorySheet extends ConsumerWidget {
                                             child: Text(
                                               'Sell',
                                               style:
-                                                  GoogleFonts.plusJakartaSans(
+                                                  AppText.jakarta(
                                                 fontWeight: FontWeight.w800,
                                               ),
                                             ),
@@ -432,7 +432,7 @@ class SealedInventoryBanner extends ConsumerWidget {
                     children: [
                       Text(
                         'Sealed inventory',
-                        style: GoogleFonts.plusJakartaSans(
+                        style: AppText.jakarta(
                           fontWeight: FontWeight.w800,
                           fontSize: 15,
                         ),
@@ -442,7 +442,7 @@ class SealedInventoryBanner extends ConsumerWidget {
                         count == 0
                             ? 'Boxes & packs you buy stay sealed here'
                             : '$count pack${count == 1 ? '' : 's'} ready — Open or Sell',
-                        style: GoogleFonts.plusJakartaSans(
+                        style: AppText.jakarta(
                           color: CC.inkMuted,
                           fontSize: 12,
                         ),
@@ -462,7 +462,7 @@ class SealedInventoryBanner extends ConsumerWidget {
                     ),
                     child: Text(
                       '$count',
-                      style: GoogleFonts.plusJakartaSans(
+                      style: AppText.jakarta(
                         fontWeight: FontWeight.w800,
                         color: CC.accent,
                       ),

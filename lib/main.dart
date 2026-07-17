@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -14,6 +15,16 @@ void main() {
   runApp(const ProviderScope(child: VaultrexApp()));
 }
 
+class AppScrollBehavior extends MaterialScrollBehavior {
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.stylus,
+        PointerDeviceKind.trackpad,
+      };
+}
+
 class VaultrexApp extends StatelessWidget {
   const VaultrexApp({super.key});
 
@@ -23,6 +34,7 @@ class VaultrexApp extends StatelessWidget {
       title: 'Vaultrex',
       debugShowCheckedModeBanner: false,
       theme: CC.dark(),
+      scrollBehavior: AppScrollBehavior(),
       home: const _Root(),
     );
   }
@@ -95,7 +107,24 @@ class _HomeShellState extends State<HomeShell> {
       backgroundColor: CC.bg,
       body: SafeArea(
         bottom: false,
-        child: IndexedStack(index: _index, children: _pages),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            for (var i = 0; i < _pages.length; i++)
+              IgnorePointer(
+                ignoring: _index != i,
+                child: AnimatedOpacity(
+                  opacity: _index == i ? 1 : 0,
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOutCubic,
+                  child: TickerMode(
+                    enabled: _index == i,
+                    child: _pages[i],
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(

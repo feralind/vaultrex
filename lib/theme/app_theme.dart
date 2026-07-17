@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
+
+import 'app_text.dart';
 
 /// Vaultrex dark collector chrome.
 class CC {
@@ -21,13 +22,14 @@ class CC {
   static const glowTeal = Color(0x3322D3EE);
 
   static ThemeData dark() {
-    final base = GoogleFonts.plusJakartaSansTextTheme(
+    final base = AppText.textTheme(
       ThemeData(brightness: Brightness.dark).textTheme,
     ).apply(bodyColor: ink, displayColor: ink);
 
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
+      fontFamily: AppText.family,
       scaffoldBackgroundColor: bg,
       colorScheme: const ColorScheme.dark(
         primary: accent,
@@ -45,7 +47,7 @@ class CC {
         scrolledUnderElevation: 0,
         centerTitle: true,
         systemOverlayStyle: SystemUiOverlayStyle.light,
-        titleTextStyle: GoogleFonts.plusJakartaSans(
+        titleTextStyle: AppText.jakarta(
           fontWeight: FontWeight.w700,
           fontSize: 17,
           color: ink,
@@ -58,7 +60,7 @@ class CC {
           elevation: 0,
           minimumSize: const Size.fromHeight(52),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          textStyle: GoogleFonts.plusJakartaSans(
+          textStyle: AppText.jakarta(
             fontWeight: FontWeight.w800,
             fontSize: 15,
             letterSpacing: 0.6,
@@ -72,7 +74,7 @@ class CC {
         height: 72,
         labelTextStyle: WidgetStateProperty.resolveWith((s) {
           final on = s.contains(WidgetState.selected);
-          return GoogleFonts.plusJakartaSans(
+          return AppText.jakarta(
             fontSize: 10,
             fontWeight: on ? FontWeight.w700 : FontWeight.w500,
             color: on ? ink : inkMuted,
@@ -86,7 +88,7 @@ class CC {
       dividerTheme: const DividerThemeData(color: line, thickness: 1),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: cardSoft,
-        contentTextStyle: GoogleFonts.plusJakartaSans(color: ink),
+        contentTextStyle: AppText.jakarta(color: ink),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
