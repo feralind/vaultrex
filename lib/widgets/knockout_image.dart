@@ -45,6 +45,7 @@ class _KnockoutProductImageState extends State<KnockoutProductImage> {
   ui.Image? _image;
   Object? _error;
   bool _loading = true;
+  bool _useRawAsset = false;
 
   @override
   void initState() {
@@ -61,6 +62,19 @@ class _KnockoutProductImageState extends State<KnockoutProductImage> {
   }
 
   Future<void> _load() async {
+    // Local featured/cutout art is already transparent — show as-is.
+    // Avoids isolate decode failures / fringe choke on large pack PNGs.
+    if (isAssetImageUrl(widget.url)) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = null;
+        _image = null;
+        _useRawAsset = true;
+      });
+      return;
+    }
+
     // v2: fringe choke also runs on assets that already have alpha.
     final key = 'v2:${widget.url}@${widget.threshold}';
     final cached = _cache[key];
@@ -69,6 +83,7 @@ class _KnockoutProductImageState extends State<KnockoutProductImage> {
         _image = cached;
         _error = null;
         _loading = false;
+        _useRawAsset = false;
       });
       return;
     }
@@ -77,15 +92,11 @@ class _KnockoutProductImageState extends State<KnockoutProductImage> {
       _loading = true;
       _error = null;
       _image = null;
+      _useRawAsset = false;
     });
 
     try {
-      final ImageProvider provider;
-      if (isAssetImageUrl(widget.url)) {
-        provider = AssetImage(normalizeAssetPath(widget.url));
-      } else {
-        provider = CachedNetworkImageProvider(widget.url);
-      }
+      final provider = CachedNetworkImageProvider(widget.url);
       final src = await _resolveImage(provider);
       final bd = await src.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (bd == null) throw StateError('No pixel data');
@@ -156,6 +167,21 @@ class _KnockoutProductImageState extends State<KnockoutProductImage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_useRawAsset) {
+      return SizedBox(
+        width: widget.width,
+        height: widget.height,
+        child: Image.asset(
+          normalizeAssetPath(widget.url),
+          width: widget.width,
+          height: widget.height,
+          fit: widget.fit,
+          filterQuality: FilterQuality.high,
+          errorBuilder: (_, _, _) =>
+              widget.error ?? widget.placeholder ?? const SizedBox.shrink(),
+        ),
+      );
+    }
     if (_loading) {
       return SizedBox(
         width: widget.width,
