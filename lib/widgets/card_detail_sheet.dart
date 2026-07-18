@@ -9,6 +9,7 @@ import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import 'foil_slab.dart';
 import 'game_widgets.dart';
+import 'psa_grading_progress.dart';
 
 enum CardDetailMode { buy, owned }
 
@@ -85,7 +86,7 @@ class CardDetailSheet extends StatefulWidget {
     required this.fairPrice,
     required this.onListForSale,
     required this.onCancelListing,
-    required this.onSendToPsa,
+    this.onSendToPsa,
     this.suggestedAsk,
   })  : mode = CardDetailMode.owned,
         listing = null,
@@ -943,26 +944,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
         ),
       ],
       const SizedBox(height: 10),
-      SizedBox(
-        width: double.infinity,
-        child: FilledButton.tonal(
-          onPressed: owned.graded || listed
-              ? null
-              : () async {
-                  await widget.onSendToPsa!();
-                  if (mounted) Navigator.pop(context);
-                },
-          style: FilledButton.styleFrom(
-            minimumSize: const Size.fromHeight(48),
-          ),
-          child: Text(
-            'Send to PSA · \$${GradingCompany.psa.fee}',
-            style: AppText.jakarta(
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-      ),
+      PsaSendButton(instanceId: owned.instanceId),
     ];
   }
 

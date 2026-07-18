@@ -14,6 +14,7 @@ class TcgcsvPriceRefresh {
 
   static const riftboundCategory = 89;
   static const pokemonCategory = 3;
+  static const mtgCategory = 1;
 
   static const riftboundGroups = <String, int>{
     'OGS': 24439,
@@ -31,13 +32,28 @@ class TcgcsvPriceRefresh {
     'PRE': 23821,
   };
 
+  static const mtgGroups = <String, int>{
+    'FDN': 23556,
+    'MH3': 23444,
+    'DSK': 23550,
+    'BLB': 23447,
+    'OTJ': 23439,
+    'DFT': 23874,
+  };
+
   static DateTime? lastRefreshAt;
 
-  static Map<String, int> groupsFor(String gameId) =>
-      gameId == 'pokemon' ? pokemonGroups : riftboundGroups;
+  static Map<String, int> groupsFor(String gameId) => switch (gameId) {
+        'pokemon' => pokemonGroups,
+        'mtg' => mtgGroups,
+        _ => riftboundGroups,
+      };
 
-  static int categoryFor(String gameId) =>
-      gameId == 'pokemon' ? pokemonCategory : riftboundCategory;
+  static int categoryFor(String gameId) => switch (gameId) {
+        'pokemon' => pokemonCategory,
+        'mtg' => mtgCategory,
+        _ => riftboundCategory,
+      };
 
   /// Load cached spots for [gameId].
   static Future<Map<int, SpotPrice>> loadCache(String gameId) async {

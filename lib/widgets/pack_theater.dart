@@ -918,7 +918,9 @@ class _FoilPackFallback extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isPokemon = refCatalogIsPokemon(context);
+    final franchise = refCatalogFranchise(context);
+    final isPokemon = franchise == 'pokemon';
+    final isMtg = franchise == 'mtg';
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -930,11 +932,17 @@ class _FoilPackFallback extends StatelessWidget {
                   Color(0xFF1E3A8A),
                   Color(0xFFFFCB05),
                 ]
-              : const [
-                  Color(0xFF2A3A6A),
-                  Color(0xFF5B8CFF),
-                  Color(0xFFA78BFA),
-                ],
+              : isMtg
+                  ? const [
+                      Color(0xFF1A0A05),
+                      Color(0xFF7C2D12),
+                      Color(0xFFF97316),
+                    ]
+                  : const [
+                      Color(0xFF2A3A6A),
+                      Color(0xFF5B8CFF),
+                      Color(0xFFA78BFA),
+                    ],
         ),
       ),
       child: Stack(
@@ -952,11 +960,21 @@ class _FoilPackFallback extends StatelessWidget {
                     ),
                   )
                 : Image.asset(
-                    'assets/logos/riftbound.png',
-                    height: 108,
+                    isMtg
+                        ? 'assets/logos/mtg.png'
+                        : 'assets/logos/riftbound.png',
+                    height: isMtg ? 96 : 108,
                     fit: BoxFit.contain,
-                    errorBuilder: (_, _, _) =>
-                        const RiftMark(size: 72, framed: false),
+                    errorBuilder: (_, _, _) => isMtg
+                        ? Text(
+                            'MAGIC',
+                            style: AppText.jakarta(
+                              color: const Color(0xFFF97316),
+                              fontWeight: FontWeight.w900,
+                              fontSize: 28,
+                            ),
+                          )
+                        : const RiftMark(size: 72, framed: false),
                   ),
           ),
           Positioned(
@@ -964,7 +982,11 @@ class _FoilPackFallback extends StatelessWidget {
             right: 16,
             bottom: 28,
             child: Text(
-              isPokemon ? 'POKÉMON' : 'RIFTBOUND',
+              isPokemon
+                  ? 'POKÉMON'
+                  : isMtg
+                      ? 'MAGIC'
+                      : 'RIFTBOUND',
               textAlign: TextAlign.center,
               style: AppText.jakarta(
                 color: Colors.white,
@@ -986,14 +1008,21 @@ class _CardBack extends StatelessWidget {
 
   static const riftboundPath = 'assets/card_backs/riftbound_back.png';
   static const pokemonPath = 'assets/card_backs/pokemon_back.png';
+  static const mtgPath = 'assets/card_backs/mtg_back.png';
 
   final double width;
   final double height;
 
   @override
   Widget build(BuildContext context) {
-    final isPokemon = refCatalogIsPokemon(context);
-    final path = isPokemon ? pokemonPath : riftboundPath;
+    final franchise = refCatalogFranchise(context);
+    final isPokemon = franchise == 'pokemon';
+    final isMtg = franchise == 'mtg';
+    final path = switch (franchise) {
+      'pokemon' => pokemonPath,
+      'mtg' => mtgPath,
+      _ => riftboundPath,
+    };
     return Container(
       width: width,
       height: height,
@@ -1029,11 +1058,15 @@ class _CardBack extends StatelessWidget {
                     ),
                   ),
                 )
-                  : ColoredBox(
-                  color: const Color(0xFF0C1428),
+              : ColoredBox(
+                  color: isMtg
+                      ? const Color(0xFF1A0A05)
+                      : const Color(0xFF0C1428),
                   child: Center(
                     child: Image.asset(
-                      'assets/logos/riftbound.png',
+                      isMtg
+                          ? 'assets/logos/mtg.png'
+                          : 'assets/logos/riftbound.png',
                       width: width * 0.42,
                       height: width * 0.42,
                       fit: BoxFit.contain,
@@ -1046,15 +1079,19 @@ class _CardBack extends StatelessWidget {
   }
 }
 
-/// Reads franchise from the active game notifier when available.
-bool refCatalogIsPokemon(BuildContext context) {
+/// Reads franchise id from the active game notifier when available.
+String refCatalogFranchise(BuildContext context) {
   try {
     final container = ProviderScope.containerOf(context, listen: false);
-    return container.read(gameProvider.notifier).catalog.isPokemon;
+    return container.read(gameProvider.notifier).catalog.gameId;
   } catch (_) {
-    return false;
+    return 'riftbound';
   }
 }
+
+/// Reads franchise from the active game notifier when available.
+bool refCatalogIsPokemon(BuildContext context) =>
+    refCatalogFranchise(context) == 'pokemon';
 
 Color _ambientFor(Rarity? rarity, {bool foil = false}) {
   if (foil) return const Color(0xFFFBBF24);

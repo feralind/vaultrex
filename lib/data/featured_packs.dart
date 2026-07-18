@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/enums.dart';
 import '../models/models.dart';
 import 'pokemon_featured_packs.dart';
+import 'mtg_featured_packs.dart';
 
 /// Featured Pack tiers (separate from Riftbound sealed).
 enum FeaturedPackTier {
@@ -24,15 +25,10 @@ extension FeaturedPackTierX on FeaturedPackTier {
         FeaturedPackTier.mythic => 'Mythic',
       };
 
-  String get assetPath => switch (this) {
-        FeaturedPackTier.common => 'assets/featured_packs/pack_common.png',
-        FeaturedPackTier.uncommon => 'assets/featured_packs/pack_uncommon.png',
-        FeaturedPackTier.rare => 'assets/featured_packs/pack_rare.png',
-        FeaturedPackTier.epic => 'assets/featured_packs/pack_epic.png',
-        FeaturedPackTier.legendary =>
-          'assets/featured_packs/pack_legendary.png',
-        FeaturedPackTier.mythic => 'assets/featured_packs/pack_mythic.png',
-      };
+  /// Legacy flat path — prefer [FeaturedPackDef.assetPath] (franchise folders).
+  String get assetPath =>
+      'assets/featured_packs/riftbound/pack_$name.png';
+
 
   List<Color> get bloomColors => switch (this) {
         FeaturedPackTier.common => const [
@@ -119,7 +115,15 @@ class FeaturedPackDef {
 
   int get candyPrice => (priceUsd * 100).round();
 
-  String get assetPath => tier.assetPath;
+  String get assetPath {
+    // Bindora template for Pokémon + MTG; RIP Pack swirl for Riftbound.
+    final folder = id.startsWith('pkfp_')
+        ? 'pokemon'
+        : id.startsWith('mtgfp_')
+            ? 'mtg'
+            : 'riftbound';
+    return 'assets/featured_packs/$folder/pack_${tier.name}.png';
+  }
 }
 
 /// Curated Featured Packs — Vaultrex instant-rip pricing tiers.
@@ -375,15 +379,21 @@ List<FeaturedPackDef> get kFeaturedPacks => [
       ),
     ];
 
-/// Featured packs for the active franchise (`riftbound` | `pokemon`).
-List<FeaturedPackDef> featuredPacksFor(String gameId) =>
-    gameId == 'pokemon' ? kPokemonFeaturedPacks : kFeaturedPacks;
+/// Featured packs for the active franchise (`riftbound` | `pokemon` | `mtg`).
+List<FeaturedPackDef> featuredPacksFor(String gameId) => switch (gameId) {
+      'pokemon' => kPokemonFeaturedPacks,
+      'mtg' => kMtgFeaturedPacks,
+      _ => kFeaturedPacks,
+    };
 
 FeaturedPackDef? featuredPackById(String id) {
   for (final p in kFeaturedPacks) {
     if (p.id == id) return p;
   }
   for (final p in kPokemonFeaturedPacks) {
+    if (p.id == id) return p;
+  }
+  for (final p in kMtgFeaturedPacks) {
     if (p.id == id) return p;
   }
   return null;

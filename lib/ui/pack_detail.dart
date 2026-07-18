@@ -104,10 +104,14 @@ class _PackDetailSheetState extends ConsumerState<_PackDetailSheet> {
                 Text(
                   product.kind == SealedKind.box
                       ? 'Booster box · ${product.packsPerBox ?? 24} packs'
-                      : ref.watch(gameProvider.select((s) => s.franchiseId)) ==
-                              'pokemon'
-                          ? 'Digital Instapack · real Pokémon pulls'
-                          : 'Digital Instapack · real Riftbound pulls',
+                      : switch (ref.watch(
+                          gameProvider.select((s) => s.franchiseId),
+                        )) {
+                          'pokemon' =>
+                            'Digital Instapack · real Pokémon pulls',
+                          'mtg' => 'Digital Instapack · real Magic pulls',
+                          _ => 'Digital Instapack · real Riftbound pulls',
+                        },
                   textAlign: TextAlign.center,
                   style: AppText.jakarta(
                     color: CC.inkMuted,

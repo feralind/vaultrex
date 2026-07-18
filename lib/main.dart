@@ -132,6 +132,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       ref.read(gameProvider.notifier).catchUpOnlineSales();
+      ref.read(gameProvider.notifier).catchUpGrading();
     }
   }
 

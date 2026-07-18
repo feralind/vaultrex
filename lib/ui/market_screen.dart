@@ -78,7 +78,11 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
     final carousel = featured.take(12).toList();
     final setCodes = notifier.catalog.bySet.keys.toList()..sort();
     final franchiseLabel =
-        notifier.activeGameId == 'pokemon' ? 'Pokémon' : 'Riftbound';
+        notifier.activeGameId == 'pokemon'
+            ? 'Pokémon'
+            : notifier.activeGameId == 'mtg'
+                ? 'Magic'
+                : 'Riftbound';
     final openOffers = state.marketOffers.where((o) => o.isOpen).length;
 
     return Column(

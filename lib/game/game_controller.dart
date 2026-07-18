@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -265,9 +266,9 @@ class GameState {
         lastPlayedAtMs: null,
       );
     }
-    final fid = (j['franchiseId'] as String?) == 'pokemon'
-        ? 'pokemon'
-        : 'riftbound';
+    final fid = GameCatalog.normalizeId(
+      (j['franchiseId'] as String?) ?? 'riftbound',
+    );
     return GameState(
       ready: true,
       catalogLoaded: true,
@@ -372,7 +373,7 @@ class GameNotifier extends _GameNotifierBase
   /// Switch franchise (Riftbound ↔ Pokémon). Each franchise keeps its own
   /// market / sealed / collection slot; wallet (cash/candy/xp) stays shared.
   Future<void> switchFranchise(String gameId) async {
-    final id = gameId == 'pokemon' ? 'pokemon' : 'riftbound';
+    final id = GameCatalog.normalizeId(gameId);
     if (_catalog.gameId == id && state.ready) return;
 
     // Persist current franchise economy before leaving.
@@ -406,9 +407,12 @@ class GameNotifier extends _GameNotifierBase
           next = next.copyWith(sealedListings: _generateSealedShop(next.events));
         }
         next = next.copyWith(
-          message: id == 'pokemon'
-              ? 'Switched to Pokémon — your Pokémon market restored.'
-              : 'Switched to Riftbound — your Riftbound market restored.',
+          message: switch (id) {
+            'pokemon' =>
+              'Switched to Pokémon — your Pokémon market restored.',
+            'mtg' => 'Switched to Magic — your Magic market restored.',
+            _ => 'Switched to Riftbound — your Riftbound market restored.',
+          },
         );
       } catch (_) {
         next = _freshFranchiseState(id, wallet);
@@ -438,9 +442,11 @@ class GameNotifier extends _GameNotifierBase
       day: 1,
       lastRip: null,
       lastRipPaid: null,
-      message: id == 'pokemon'
-          ? 'Switched to Pokémon — sealed & singles stocked.'
-          : 'Switched to Riftbound — sealed & singles stocked.',
+      message: switch (id) {
+        'pokemon' => 'Switched to Pokémon — sealed & singles stocked.',
+        'mtg' => 'Switched to Magic — sealed & singles stocked.',
+        _ => 'Switched to Riftbound — sealed & singles stocked.',
+      },
       migrationNotice: null,
       valueHistory: [
         CollectionValuePoint(date: DateTime.now(), value: 0),
@@ -501,6 +507,7 @@ class GameNotifier extends _GameNotifierBase
           _recordCollectionValue(force: true);
         }
         await catchUpOnlineSales();
+        await catchUpGrading();
         await _persist();
         return;
       } catch (_) {
@@ -524,9 +531,11 @@ class GameNotifier extends _GameNotifierBase
       day: 1,
       lastRip: null,
       lastRipPaid: null,
-      message: gameId == 'pokemon'
-          ? 'Welcome to Vaultrex — Pokémon sealed & singles.'
-          : 'Welcome to Vaultrex — Riftbound sealed & singles.',
+      message: switch (gameId) {
+        'pokemon' => 'Welcome to Vaultrex — Pokémon sealed & singles.',
+        'mtg' => 'Welcome to Vaultrex — Magic sealed & singles.',
+        _ => 'Welcome to Vaultrex — Riftbound sealed & singles.',
+      },
       migrationNotice: null,
       valueHistory: [
         CollectionValuePoint(date: DateTime.now(), value: 0),
@@ -538,6 +547,7 @@ class GameNotifier extends _GameNotifierBase
     );
     state = fresh;
     await catchUpOnlineSales();
+    await catchUpGrading();
     await _persist();
   }
 
@@ -574,7 +584,7 @@ class GameNotifier extends _GameNotifierBase
 
   @override
   Future<void> _persist() async {
-    final id = state.franchiseId == 'pokemon' ? 'pokemon' : 'riftbound';
+    final id = GameCatalog.normalizeId(state.franchiseId);
     await _db.savePayload(id, state.toJson());
     await _db.saveWallet(state.player.toJson());
   }
@@ -986,10 +996,18 @@ class GameNotifier extends _GameNotifierBase
   MarketEvent _randomEvent() {
     final keys = _catalog.bySet.keys.toList();
     final set = keys.isEmpty
-        ? (_catalog.isPokemon ? 'MEW' : 'OGN')
+        ? (_catalog.isPokemon
+            ? 'MEW'
+            : _catalog.isMtg
+                ? 'FDN'
+                : 'OGN')
         : keys[_rng.nextInt(keys.length)];
     final hot = _rng.nextBool();
-    final game = _catalog.isPokemon ? 'Pokémon' : 'Riftbound';
+    final game = _catalog.isPokemon
+        ? 'Pokémon'
+        : _catalog.isMtg
+            ? 'Magic'
+            : 'Riftbound';
     return MarketEvent(
       id: _uuid.v4(),
       title: hot ? '$set hype spike' : '$set cools off',

@@ -8,7 +8,6 @@ import '../theme/app_theme.dart';
 import '../widgets/card_detail_sheet.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/portfolio_value_chart.dart';
-import '../widgets/psa_grading_progress.dart';
 import 'create_binder_sheet.dart';
 import 'flip_layout.dart';
 import 'sealed_inventory.dart';
@@ -91,7 +90,9 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen>
                     Text(
                       notifier.activeGameId == 'pokemon'
                           ? 'Pokémon collection'
-                          : 'Riftbound collection',
+                          : notifier.activeGameId == 'mtg'
+                              ? 'Magic collection'
+                              : 'Riftbound collection',
                       style: AppText.jakarta(
                         color: CC.inkMuted,
                         fontSize: 12,
@@ -632,14 +633,7 @@ class _CardsTab extends ConsumerWidget {
               await notifier.cancelOnlineListing(match.id);
             }
           },
-          onSendToPsa: () async {
-            Navigator.pop(context);
-            await showPsaGradingProgress(
-              context,
-              ref,
-              instanceId: owned.instanceId,
-            );
-          },
+          onSendToPsa: null,
         );
       },
     );
@@ -654,7 +648,9 @@ class _SetsTab extends ConsumerWidget {
     if (!state.ready) return const SizedBox.shrink();
     final sets = notifier.catalog.isPokemon
         ? notifier.catalog.bySet.keys.toList()
-        : ['OGS', 'OGN', 'SFD', 'UNL'];
+        : notifier.catalog.isMtg
+            ? notifier.catalog.bySet.keys.toList()
+            : ['OGS', 'OGN', 'SFD', 'UNL'];
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: sets.length,

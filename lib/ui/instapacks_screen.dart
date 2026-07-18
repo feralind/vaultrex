@@ -62,8 +62,10 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen>
     final cash = state.player.cash;
     final isPokemon = active == 'pokemon';
     final isRiftbound = active == 'riftbound';
-    final featuredPacks =
-        (isRiftbound || isPokemon) ? featuredPacksFor(active) : const <FeaturedPackDef>[];
+    final isMtg = active == 'mtg';
+    final featuredPacks = (isRiftbound || isPokemon || isMtg)
+        ? featuredPacksFor(active)
+        : const <FeaturedPackDef>[];
 
     return LiveAmbientBackdrop(
       child: CustomScrollView(
@@ -116,7 +118,7 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen>
             ],
           ),
         ),
-        if (!isRiftbound && !isPokemon)
+        if (!isRiftbound && !isPokemon && !isMtg)
           const SliverFillRemaining(
             hasScrollBody: false,
             child: Center(
@@ -167,7 +169,11 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen>
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: Text(
-                isPokemon ? 'Pokémon Sealed' : 'Riftbound Sealed',
+                isPokemon
+                    ? 'Pokémon Sealed'
+                    : isMtg
+                        ? 'Magic Sealed'
+                        : 'Riftbound Sealed',
                 style: AppText.jakarta(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
@@ -240,9 +246,9 @@ class _InstapacksHero extends StatefulWidget {
 
 class _InstapacksHeroState extends State<_InstapacksHero>
     with SingleTickerProviderStateMixin {
-  static const _left = 'assets/featured_packs/pack_legendary.png';
-  static const _center = 'assets/featured_packs/pack_rare.png';
-  static const _right = 'assets/featured_packs/pack_mythic.png';
+  static const _left = 'assets/featured_packs/riftbound/pack_legendary.png';
+  static const _center = 'assets/featured_packs/riftbound/pack_rare.png';
+  static const _right = 'assets/featured_packs/riftbound/pack_mythic.png';
 
   late final AnimationController _float;
 

@@ -78,9 +78,10 @@ const kGames = [
   GameOption(
     id: 'mtg',
     name: 'Magic',
-    enabled: false,
+    enabled: true,
     color: Color(0xFFF97316),
     logoAsset: 'assets/logos/mtg.png',
+    logoScale: 1.12,
   ),
   GameOption(
     id: 'onepiece',

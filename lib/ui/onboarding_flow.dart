@@ -115,9 +115,9 @@ class _IntroPage extends StatelessWidget {
   const _IntroPage();
 
   // Featured pack arts (same assets as Instapacks).
-  static const _packLeft = 'assets/featured_packs/pack_legendary.png';
-  static const _packRight = 'assets/featured_packs/pack_mythic.png';
-  static const _packFront = 'assets/featured_packs/pack_rare.png';
+  static const _packLeft = 'assets/featured_packs/riftbound/pack_legendary.png';
+  static const _packRight = 'assets/featured_packs/riftbound/pack_mythic.png';
+  static const _packFront = 'assets/featured_packs/riftbound/pack_rare.png';
 
   @override
   Widget build(BuildContext context) {
@@ -245,9 +245,9 @@ class _RipPacksPage extends StatefulWidget {
 class _RipPacksPageState extends State<_RipPacksPage>
     with SingleTickerProviderStateMixin {
   // Featured pack arts — fanned like the onboarding reference.
-  static const _packLeft = 'assets/featured_packs/pack_legendary.png';
-  static const _packRight = 'assets/featured_packs/pack_mythic.png';
-  static const _packCenter = 'assets/featured_packs/pack_rare.png';
+  static const _packLeft = 'assets/featured_packs/riftbound/pack_legendary.png';
+  static const _packRight = 'assets/featured_packs/riftbound/pack_mythic.png';
+  static const _packCenter = 'assets/featured_packs/riftbound/pack_rare.png';
 
   late final AnimationController _c;
 

@@ -462,7 +462,12 @@ class _FoilPack extends StatelessWidget {
         ? [colors.first, colors.first]
         : colors;
     final isPokemon = franchiseId == 'pokemon';
-    final brandLabel = isPokemon ? 'POKÉMON' : 'RIFTBOUND';
+    final isMtg = franchiseId == 'mtg';
+    final brandLabel = isPokemon
+        ? 'POKÉMON'
+        : isMtg
+            ? 'MAGIC'
+            : 'RIFTBOUND';
 
     return Container(
       width: width,
@@ -517,7 +522,9 @@ class _FoilPack extends StatelessWidget {
                       color: Colors.white.withValues(alpha: 0.92),
                     )
                   : Image.asset(
-                      'assets/logos/riftbound.png',
+                      isMtg
+                          ? 'assets/logos/mtg.png'
+                          : 'assets/logos/riftbound.png',
                       width: width * 0.42,
                       fit: BoxFit.contain,
                       errorBuilder: (_, _, _) =>

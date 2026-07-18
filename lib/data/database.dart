@@ -2,16 +2,18 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'riftbound_catalog.dart';
+
 /// Lightweight JSON save store (works on Android + Web).
 ///
-/// Each franchise (Riftbound / Pokémon) has its own economy slot so markets
-/// never overwrite each other. Wallet (cash/candy/xp) is shared separately.
+/// Each franchise has its own economy slot so markets never overwrite each other.
+/// Wallet (cash/candy/xp) is shared separately.
 class AppDatabase {
   static const _legacyKey = 'cardflip_game_v2';
   static const _walletKey = 'cardflip_wallet_v1';
 
   static String _slotKey(String gameId) {
-    final id = gameId == 'pokemon' ? 'pokemon' : 'riftbound';
+    final id = GameCatalog.normalizeId(gameId);
     return 'cardflip_game_v2_$id';
   }
 

@@ -32,6 +32,17 @@ class RiftboundPackOpener {
       cards.addAll(_drawRarePlus(setCode, 1, forceFoil: false));
       return cards;
     }
+    if (catalog.isMtg) {
+      // Play Booster–style: ~14 cards with rare+ slot and foil chance.
+      final cards = <OwnedCard>[];
+      cards.addAll(_drawMany(setCode, Rarity.common, 6, foil: false));
+      cards.addAll(_drawMany(setCode, Rarity.uncommon, 3, foil: false));
+      cards.addAll(_drawRarePlus(setCode, 1, forceFoil: false));
+      cards.add(_drawFoilAny(setCode));
+      // Wildcard / land-ish filler from commons.
+      cards.addAll(_drawMany(setCode, Rarity.common, 3, foil: false));
+      return cards;
+    }
     final cards = <OwnedCard>[];
     cards.addAll(_drawMany(setCode, Rarity.common, 7, foil: false));
     cards.addAll(_drawMany(setCode, Rarity.uncommon, 3, foil: false));
@@ -41,9 +52,13 @@ class RiftboundPackOpener {
     return cards;
   }
 
-  /// 36 packs for Pokémon boxes; 24 for Riftbound.
+  /// 36 packs for Pokémon boxes; 30 for MTG; 24 for Riftbound.
   List<OwnedCard> openBox(String setCode) {
-    final packs = catalog.isPokemon ? 36 : 24;
+    final packs = catalog.isPokemon
+        ? 36
+        : catalog.isMtg
+            ? 30
+            : 24;
     final all = <OwnedCard>[];
     for (var i = 0; i < packs; i++) {
       all.addAll(openPack(setCode));

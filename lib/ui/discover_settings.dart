@@ -15,13 +15,21 @@ class DiscoverScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isPokemon =
-        ref.watch(gameProvider.select((s) => s.franchiseId)) == 'pokemon';
-    final franchise = isPokemon ? 'Pokémon' : 'Riftbound';
-    final packBlurb = isPokemon
-        ? 'Rip Scarlet & Violet–era packs with real street pricing.'
-        : 'Rip Origins, Spiritforged, and Unleashed packs with real street pricing.';
-
+    final fid =
+        ref.watch(gameProvider.select((s) => s.franchiseId));
+    final franchise = switch (fid) {
+      'pokemon' => 'Pokémon',
+      'mtg' => 'Magic',
+      _ => 'Riftbound',
+    };
+    final packBlurb = switch (fid) {
+      'pokemon' =>
+        'Rip Scarlet & Violet–era packs with real street pricing.',
+      'mtg' =>
+        'Rip Foundations, MH3, and Bloomburrow packs with real street pricing.',
+      _ =>
+        'Rip Origins, Spiritforged, and Unleashed packs with real street pricing.',
+    };
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
       children: [
@@ -232,8 +240,9 @@ class SettingsScreen extends ConsumerWidget {
           'Vaultrex is a personal offline collecting/market sim. '
           'Riftbound names and related IP belong to Riot Games. '
           'Pokémon and Pokémon TCG names/marks belong to Nintendo / Creatures / Game Freak / The Pokémon Company. '
+          'Magic: The Gathering names and marks belong to Wizards of the Coast. '
           'Prices from TCGCSV/TCGplayer public data. '
-          'Not affiliated with those rights holders.',
+          'Not affiliated with or endorsed by those rights holders.',
           style: AppText.jakarta(
             color: CC.inkMuted,
             height: 1.45,

@@ -33,6 +33,32 @@ mixin _GradingActions on _GameNotifierBase {
       message: 'Sent to ${company.label} · ~${secs}s.',
     );
     await _persist();
+    // Complete in the background so the card sheet can be dismissed.
+    unawaited(_finishRealtimeWhenReady(job.id, secs));
+  }
+
+  Future<void> _finishRealtimeWhenReady(String jobId, int secs) async {
+    await Future<void>.delayed(Duration(seconds: secs));
+    try {
+      await completeRealtimeGrading(jobId);
+    } catch (_) {
+      // Soft-fail; catchUpGrading will retry on resume/bootstrap.
+    }
+  }
+
+  /// Completes any wall-clock-ready grading jobs (app resume / bootstrap).
+  Future<int> catchUpGrading() async {
+    await tickRealtimeGrading();
+    var n = 0;
+    final pending = state.grading
+        .where((g) => g.ready && !g.revealed)
+        .map((g) => g.id)
+        .toList();
+    for (final id in pending) {
+      await revealSlab(id);
+      n++;
+    }
+    return n;
   }
 
   /// Marks realtime jobs ready when wall-clock elapsed; returns newly ready ids.

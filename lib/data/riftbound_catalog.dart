@@ -12,7 +12,7 @@ class SpotPrice {
   final double? foilMarketPrice;
 }
 
-/// Franchise catalog (Riftbound or Pokémon) loaded from bundled TCGCSV JSON.
+/// Franchise catalog (Riftbound, Pokémon, or Magic) loaded from bundled TCGCSV JSON.
 class GameCatalog {
   GameCatalog._(this.gameId, this.cards, this.sealed, this.byId, this.bySet);
 
@@ -24,20 +24,30 @@ class GameCatalog {
 
   bool get isPokemon => gameId == 'pokemon';
   bool get isRiftbound => gameId == 'riftbound';
+  bool get isMtg => gameId == 'mtg';
 
   static final Map<String, GameCatalog> _cache = {};
 
+  static String normalizeId(String gameId) {
+    if (gameId == 'pokemon') return 'pokemon';
+    if (gameId == 'mtg') return 'mtg';
+    return 'riftbound';
+  }
+
   static Future<GameCatalog> load([String gameId = 'riftbound']) async {
-    final id = gameId == 'pokemon' ? 'pokemon' : 'riftbound';
+    final id = normalizeId(gameId);
     if (_cache.containsKey(id)) return _cache[id]!;
 
-    final cardAsset = id == 'pokemon'
-        ? 'assets/data/pokemon_catalog.json'
-        : 'assets/data/riftbound_catalog.json';
-    final sealedAsset = id == 'pokemon'
-        ? 'assets/data/pokemon_sealed.json'
-        : 'assets/data/sealed_products.json';
-
+    final cardAsset = switch (id) {
+      'pokemon' => 'assets/data/pokemon_catalog.json',
+      'mtg' => 'assets/data/mtg_catalog.json',
+      _ => 'assets/data/riftbound_catalog.json',
+    };
+    final sealedAsset = switch (id) {
+      'pokemon' => 'assets/data/pokemon_sealed.json',
+      'mtg' => 'assets/data/mtg_sealed.json',
+      _ => 'assets/data/sealed_products.json',
+    };
     final cardRaw =
         jsonDecode(await rootBundle.loadString(cardAsset)) as Map<String, dynamic>;
     final sealedRaw =
@@ -62,7 +72,9 @@ class GameCatalog {
         .where((p) =>
             p.kind == SealedKind.pack ||
             p.kind == SealedKind.box ||
-            (id == 'pokemon' && p.kind == SealedKind.other && p.marketPrice > 0))
+            ((id == 'pokemon' || id == 'mtg') &&
+                p.kind == SealedKind.other &&
+                p.marketPrice > 0))
         .where((p) => p.kind == SealedKind.pack || p.kind == SealedKind.box)
         .toList();
 
@@ -149,12 +161,19 @@ Rarity parseRarity(String? raw) {
   if (raw == null || raw.isEmpty || raw == 'None') return Rarity.none;
   switch (raw.toLowerCase()) {
     case 'common':
+    case 'c':
+    case 'l':
       return Rarity.common;
     case 'uncommon':
+    case 'u':
       return Rarity.uncommon;
     case 'rare':
+    case 'r':
       return Rarity.rare;
     case 'epic':
+    case 'm':
+    case 'mythic':
+    case 'mythic rare':
       return Rarity.epic;
     case 'showcase':
       return Rarity.showcase;
@@ -165,12 +184,17 @@ Rarity parseRarity(String? raw) {
     case 'ultimate':
       return Rarity.ultimate;
     case 'promo':
+    case 'p':
       return Rarity.promo;
     case 'token':
+    case 't':
       return Rarity.token;
     default:
-      if (raw.toLowerCase().contains('showcase')) return Rarity.showcase;
-      if (raw.toLowerCase().contains('signature')) return Rarity.signature;
+      final low = raw.toLowerCase();
+      if (low.contains('mythic')) return Rarity.epic;
+      if (low.contains('showcase')) return Rarity.showcase;
+      if (low.contains('signature')) return Rarity.signature;
+      if (low.contains('token')) return Rarity.token;
       return Rarity.none;
   }
 }

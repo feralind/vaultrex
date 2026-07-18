@@ -53,24 +53,39 @@ class CardDef {
   double get artAspectRatio =>
       isLandscapeCard ? 3.5 / 2.5 : 2.5 / 3.5;
 
-  /// Pokémon catalog ids are prefixed `pkm_`; everything else is Riftbound.
+  /// Pokémon / MTG catalog prefixes; everything else is Riftbound.
   bool get isPokemonCard =>
       id.startsWith('pkm_') || id.startsWith('pokemon_');
 
-  String get franchiseId => isPokemonCard ? 'pokemon' : 'riftbound';
+  bool get isMtgCard => id.startsWith('mtg_');
+
+  String get franchiseId => isPokemonCard
+      ? 'pokemon'
+      : isMtgCard
+          ? 'mtg'
+          : 'riftbound';
 
   /// Uppercase chip label for detail / collection tags.
-  String get franchiseTag => isPokemonCard ? 'POKÉMON' : 'RIFTBOUND';
+  String get franchiseTag => isPokemonCard
+      ? 'POKÉMON'
+      : isMtgCard
+          ? 'MAGIC'
+          : 'RIFTBOUND';
 
-  String get franchiseDisplayName =>
-      isPokemonCard ? 'Pokémon' : 'Riftbound';
+  String get franchiseDisplayName => isPokemonCard
+      ? 'Pokémon'
+      : isMtgCard
+          ? 'Magic'
+          : 'Riftbound';
 
   /// Approximate print year for slab / detail chrome.
   String get setYear => switch (setCode) {
         'OGS' || 'OGN' || 'SFD' || 'UNL' => '2025',
         'MEW' || 'OBF' || 'PAL' => '2023',
         'TWM' || 'SSP' || 'PRE' => '2024',
-        _ => isPokemonCard ? '2024' : '2025',
+        'FDN' || 'DFT' => '2024',
+        'MH3' || 'DSK' || 'BLB' || 'OTJ' => '2024',
+        _ => isPokemonCard || isMtgCard ? '2024' : '2025',
       };
 
   /// PSA slab set line, e.g. "2023 SV: SCARLET & VIOLET 151".
@@ -139,12 +154,19 @@ class CardDef {
     if (raw == null) return Rarity.none;
     switch (raw.toLowerCase()) {
       case 'common':
+      case 'c':
+      case 'l': // MTG basic land abbreviation in some dumps
         return Rarity.common;
       case 'uncommon':
+      case 'u':
         return Rarity.uncommon;
       case 'rare':
+      case 'r':
         return Rarity.rare;
       case 'epic':
+      case 'm':
+      case 'mythic':
+      case 'mythic rare':
         return Rarity.epic;
       case 'showcase':
         return Rarity.showcase;
@@ -155,10 +177,15 @@ class CardDef {
       case 'ultimate':
         return Rarity.ultimate;
       case 'promo':
+      case 'p':
         return Rarity.promo;
       case 'token':
+      case 't':
         return Rarity.token;
       default:
+        final low = raw.toLowerCase();
+        if (low.contains('mythic')) return Rarity.epic;
+        if (low.contains('token')) return Rarity.token;
         return Rarity.none;
     }
   }
