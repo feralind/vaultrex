@@ -371,6 +371,57 @@ mixin _ShopActions on _GameNotifierBase {
     await _persist();
   }
 
+  /// Instant house buylist — quick flip cash at a haircut vs fair.
+  Future<bool> quickSellToHouse(String instanceId) async {
+    OwnedCard? card;
+    for (final c in state.collection) {
+      if (c.instanceId == instanceId) {
+        card = c;
+        break;
+      }
+    }
+    if (card == null) {
+      state = state.copyWith(message: 'Card not in collection.');
+      return false;
+    }
+    // Drop any active online listing so quick-flip is one tap.
+    var collection = state.collection;
+    var online = state.onlineListings;
+    if (card.listedAsk != null) {
+      online = online.where((l) => l.ownedInstanceId != instanceId).toList();
+      collection = [
+        for (final c in collection)
+          if (c.instanceId == instanceId)
+            c.copyWith(clearListedAsk: true)
+          else
+            c,
+      ];
+      card = collection.firstWhere((c) => c.instanceId == instanceId);
+    }
+    final def = _catalog.byId[card.cardId];
+    if (def == null) {
+      state = state.copyWith(message: 'Unknown card.');
+      return false;
+    }
+    final fair = fairFor(card);
+    final payout =
+        double.parse((fair * 0.72).clamp(0.25, max(0.25, fair)).toStringAsFixed(2));
+    final player = state.player.copyWith(
+      cash: state.player.cash + payout,
+      cardsSold: state.player.cardsSold + 1,
+      xp: state.player.xp + 2,
+    );
+    state = state.copyWith(
+      player: player,
+      collection: collection.where((c) => c.instanceId != instanceId).toList(),
+      onlineListings: online,
+      message: 'Quick sold for \$${payout.toStringAsFixed(2)} (house buylist).',
+    );
+    _recordCollectionValue();
+    await _persist();
+    return true;
+  }
+
   /// Simulated wallet top-up after fake Google Pay succeeds.
   Future<void> topUpCash(double amount) async {
     final add = double.parse(amount.clamp(1, 99999).toStringAsFixed(2));

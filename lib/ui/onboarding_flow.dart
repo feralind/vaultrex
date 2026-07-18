@@ -177,8 +177,10 @@ class _IntroPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
+          const BindoraMark(size: 72, framed: false),
+          const SizedBox(height: 14),
           Text(
-            'Vaultrex',
+            'Bindora',
             style: AppText.jakarta(
               fontSize: 34,
               fontWeight: FontWeight.w800,

@@ -633,6 +633,7 @@ class _CardsTab extends ConsumerWidget {
               await notifier.cancelOnlineListing(match.id);
             }
           },
+          onQuickSell: () => notifier.quickSellToHouse(owned.instanceId),
           onSendToPsa: null,
         );
       },

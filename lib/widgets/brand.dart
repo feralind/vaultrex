@@ -12,11 +12,12 @@ import 'knockout_image.dart';
 
 /// Official product name.
 abstract final class AppBrand {
-  static const name = 'Vaultrex';
+  static const name = 'Bindora';
+  static const logoAsset = 'assets/logos/bindora.png';
 }
 
-class VaultrexLogo extends StatelessWidget {
-  const VaultrexLogo({super.key, this.size = 22, this.showWordmark = true});
+class BindoraLogo extends StatelessWidget {
+  const BindoraLogo({super.key, this.size = 22, this.showWordmark = true});
 
   final double size;
   final bool showWordmark;
@@ -26,7 +27,7 @@ class VaultrexLogo extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        RiftMark(size: size),
+        BindoraMark(size: size),
         if (showWordmark) ...[
           const SizedBox(width: 8),
           Text(
@@ -43,32 +44,43 @@ class VaultrexLogo extends StatelessWidget {
   }
 }
 
-/// Legacy alias for [VaultrexLogo].
-typedef CandyLogo = VaultrexLogo;
+/// Legacy aliases.
+typedef VaultrexLogo = BindoraLogo;
+typedef CandyLogo = BindoraLogo;
 
-/// Original Vaultrex rift-mark.
-class RiftMark extends StatelessWidget {
-  const RiftMark({super.key, this.size = 28, this.framed = true});
+/// Bold Bindora "B" mark — black source asset, tinted for dark UI.
+class BindoraMark extends StatelessWidget {
+  const BindoraMark({super.key, this.size = 28, this.framed = true});
   final double size;
-  /// When false, renders a free-floating bolt (no circular badge).
+  /// When false, renders the free-floating B (no badge plate).
   final bool framed;
 
   @override
   Widget build(BuildContext context) {
     if (!framed) {
+      // Source is solid black; tint to ink so it reads on dark chrome.
       return SizedBox(
         width: size,
         height: size,
-        child: Icon(
-          Icons.bolt_rounded,
-          color: const Color(0xFF7EB6FF),
-          size: size * 0.92,
-          shadows: [
-            Shadow(
-              color: CC.accent.withValues(alpha: 0.55),
-              blurRadius: size * 0.35,
+        child: Center(
+          child: ColorFiltered(
+            colorFilter: const ColorFilter.mode(CC.ink, BlendMode.srcIn),
+            child: Image.asset(
+              AppBrand.logoAsset,
+              width: size,
+              height: size,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.high,
+              errorBuilder: (_, _, _) => Text(
+                'B',
+                style: AppText.jakarta(
+                  fontWeight: FontWeight.w900,
+                  fontSize: size * 0.82,
+                  color: CC.ink,
+                ),
+              ),
             ),
-          ],
+          ),
         ),
       );
     }
@@ -77,23 +89,38 @@ class RiftMark extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF5B8CFF), Color(0xFFA78BFA)],
-        ),
+        color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: CC.accent.withValues(alpha: 0.35),
-            blurRadius: 10,
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Icon(Icons.bolt_rounded, color: Colors.white, size: size * 0.62),
+      child: Center(
+        child: Image.asset(
+          AppBrand.logoAsset,
+          width: size * 0.58,
+          height: size * 0.58,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.high,
+          errorBuilder: (_, _, _) => Text(
+            'B',
+            style: AppText.jakarta(
+              fontWeight: FontWeight.w900,
+              fontSize: size * 0.48,
+              color: Colors.black,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
+
+/// Legacy alias for [BindoraMark].
+typedef RiftMark = BindoraMark;
 
 /// Free-floating brand logo mark for game pickers (no card / circle frame).
 class GameBrandLogo extends StatelessWidget {

@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'app_text.dart';
 
-/// Vaultrex dark collector chrome.
+/// Bindora dark collector chrome.
 class CC {
   static const bg = Color(0xFF0A0C12);
   static const bgElevated = Color(0xFF12151E);

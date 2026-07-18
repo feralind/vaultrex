@@ -1,6 +1,6 @@
-# Vaultrex
+# Bindora
 
-Offline Riftbound collecting app — rip packs, collect, flip, and grade.
+Offline TCG collecting sim — rip packs, collect, flip, and grade.
 
 ## Getting Started
 

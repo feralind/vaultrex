@@ -1,11 +1,11 @@
 {
-    "name": "Vaultrex",
-    "short_name": "Vaultrex",
+    "name": "Bindora",
+    "short_name": "Bindora",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0A1622",
     "theme_color": "#0A1622",
-    "description": "Vaultrex — rip packs, collect, and flip Riftbound cards.",
+    "description": "Bindora — rip packs, collect, and flip TCG cards.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

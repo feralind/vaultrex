@@ -12,18 +12,18 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('Vaultrex boots', (tester) async {
+  testWidgets('Bindora boots', (tester) async {
     // Tall surface avoids OnboardingFlow RenderFlex overflow in tests.
     await tester.binding.setSurfaceSize(const Size(400, 1200));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    await tester.pumpWidget(const ProviderScope(child: VaultrexApp()));
+    await tester.pumpWidget(const ProviderScope(child: BindoraApp()));
     await tester.pump();
     await tester.runAsync(() async {
       await Future<void>.delayed(const Duration(milliseconds: 100));
     });
     await tester.pump();
 
-    expect(find.byType(VaultrexApp), findsOneWidget);
+    expect(find.byType(BindoraApp), findsOneWidget);
   });
 }

@@ -21,7 +21,7 @@ enum Condition {
   mint,
 }
 
-enum SellerType { clueless, serious, scammy, goblin }
+enum SellerType { clueless, serious, scammy, goblin, lgs, whale, flipper }
 
 enum SealedKind { pack, box, deck, displayCase, other }
 
@@ -92,27 +92,61 @@ extension SellerTypeX on SellerType {
         SellerType.serious => 'Serious Seller',
         SellerType.scammy => 'Suspicious Seller',
         SellerType.goblin => 'Goblin Auction',
+        SellerType.lgs => 'Local Game Store',
+        SellerType.whale => 'Whale Collector',
+        SellerType.flipper => 'Quick Flipper',
+      };
+
+  /// Short tip shown on buy / offer sheets.
+  String get blurb => switch (this) {
+        SellerType.clueless => 'Often takes ~86%+ offers · soft asks',
+        SellerType.serious => 'Wants near ask · fair comps · ships fast',
+        SellerType.scammy => 'Weak feedback · inspect carefully',
+        SellerType.goblin => 'Haggles hard · loves counters',
+        SellerType.lgs => 'Fair street · accepts ~92% · reliable',
+        SellerType.whale => 'Premium asks · rarely budges below 97%',
+        SellerType.flipper => 'Moves stock fast · open to 90% offers',
+      };
+
+  /// Default offer as fraction of ask when opening Make Offer.
+  double get defaultOfferFraction => switch (this) {
+        SellerType.clueless => 0.86,
+        SellerType.serious => 0.95,
+        SellerType.scammy => 0.88,
+        SellerType.goblin => 0.90,
+        SellerType.lgs => 0.92,
+        SellerType.whale => 0.97,
+        SellerType.flipper => 0.90,
       };
 
   /// Simulated positive feedback % for Feebay-style listings.
   double get rating => switch (this) {
         SellerType.serious => 98.5,
+        SellerType.lgs => 97.2,
+        SellerType.whale => 96.0,
         SellerType.clueless => 94.0,
+        SellerType.flipper => 93.1,
         SellerType.goblin => 91.2,
         SellerType.scammy => 72.4,
       };
 
   int get typicalSales => switch (this) {
         SellerType.serious => 4200,
-        SellerType.clueless => 180,
+        SellerType.lgs => 9800,
+        SellerType.flipper => 2100,
+        SellerType.whale => 640,
         SellerType.goblin => 860,
+        SellerType.clueless => 180,
         SellerType.scammy => 45,
       };
 
   int get shipsInDays => switch (this) {
         SellerType.serious => 1,
-        SellerType.clueless => 3,
+        SellerType.lgs => 1,
+        SellerType.flipper => 2,
         SellerType.goblin => 2,
+        SellerType.whale => 2,
+        SellerType.clueless => 3,
         SellerType.scammy => 5,
       };
 }
