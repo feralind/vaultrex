@@ -1,4 +1,4 @@
-# Vaultrex — 1000D Deep Review
+# Bindora — 1000D Deep Review
 
 **Date:** 2026-07-17  
 **Scope:** Full static code audit of animations, gestures, game economy, persistence, platform readiness, and test coverage.  
@@ -11,7 +11,7 @@
 
 **Overall score: 76 / 100**
 
-Vaultrex is a strong Rare Candy–style offline collector sim with a genuinely good pack-rip theater. Peel → hold → Y-flip → keep/exchange feels intentional and reference-driven. Analyzer is clean (`No issues found`). The weak spots are **interaction races during rip**, **near-zero automated tests**, **release Android network permission**, and **continuous animation cost** across kept-alive tabs.
+Bindora is a strong Rare Candy–style offline collector sim with a genuinely good pack-rip theater. Peel → hold → Y-flip → keep/exchange feels intentional and reference-driven. Analyzer is clean (`No issues found`). The weak spots are **interaction races during rip**, **near-zero automated tests**, **release Android network permission**, and **continuous animation cost** across kept-alive tabs.
 
 Ship-quality rip UX with early-product engineering discipline underneath.
 
@@ -199,7 +199,7 @@ Shop / Inventory
 
 | Layer | Coverage |
 |-------|----------|
-| Widget smoke | `VaultrexApp` boots — only |
+| Widget smoke | `BindoraApp` boots — only |
 | Pack opener unit | None |
 | Theater gesture / flip | None |
 | keep / exchange / finalize races | None |

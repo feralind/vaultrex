@@ -14,7 +14,7 @@
     { "name": "Modern Grails", "usd": 99.99, "sparks": 10000, "tier": "premium" },
     { "name": "Mythical Grails", "usd": 249.99, "sparks": 25000, "tier": "mythic" }
   ],
-  "vaultrexMapping": [
+  "BindoraMapping": [
     { "id": "pkfp_kanto_friends", "name": "Kanto Friends", "usd": 4.99, "pool": "MEW", "notes": "RC budget pricing; bulk-heavy IR tail" },
     { "id": "pkfp_roaring_waters", "name": "Roaring Waters", "usd": 7.99, "pool": "PAL+TWM+MEW water lean", "notes": "RC budget+" },
     { "id": "pkfp_rolling_thunder", "name": "Rolling Thunder", "usd": 19.99, "pool": "SSP-weighted", "notes": "RC mid" },
@@ -22,7 +22,7 @@
     { "id": "pkfp_paldea_hits", "name": "Paldea Hits", "usd": 24.99, "pool": "PAL", "notes": "Set chase between RC mid tiers" },
     { "id": "pkfp_151_grails", "name": "151 Chase", "usd": 49.99, "pool": "MEW", "notes": "Elevated 151 SIR EV (between Fire&Gold and Modern Grails)" },
     { "id": "pkfp_modern_grails", "name": "Modern Grails", "usd": 99.99, "pool": "cross-set Epic≥$25", "notes": "RC premium" },
-    { "id": "pkfp_mythical_grails", "name": "Mythical Grails", "usd": 179.99, "pool": "PRE-weighted", "notes": "RC mythic shape; soft-capped vs $249.99 for Vaultrex balance" }
+    { "id": "pkfp_mythical_grails", "name": "Mythical Grails", "usd": 179.99, "pool": "PRE-weighted", "notes": "RC mythic shape; soft-capped vs $249.99 for Bindora balance" }
   ],
   "rateNotes": "Official RareCandy per-card odds were behind login. Pull-rate bands approximate digital mystery-pack EV (house edge ~20–40%) using catalog marketPrice; IR/SIR map to Epic in pokemon_catalog.json.",
   "artNotes": "Featured tiles reuse Riftbound pack_*.png tier art + rotating chase card overlays (not code-card sealed SKUs)."

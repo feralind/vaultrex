@@ -45,76 +45,64 @@ class BindoraLogo extends StatelessWidget {
 }
 
 /// Legacy aliases.
-typedef VaultrexLogo = BindoraLogo;
 typedef CandyLogo = BindoraLogo;
 
-/// Bold Bindora "B" mark — black source asset, tinted for dark UI.
+/// Bindora mark — bold B on a rounded square (still square footprint).
 class BindoraMark extends StatelessWidget {
   const BindoraMark({super.key, this.size = 28, this.framed = true});
   final double size;
-  /// When false, renders the free-floating B (no badge plate).
+  /// When false, renders the mark without the soft drop shadow.
   final bool framed;
 
   @override
   Widget build(BuildContext context) {
-    if (!framed) {
-      // Source is solid black; tint to ink so it reads on dark chrome.
-      return SizedBox(
+    final mark = ClipRRect(
+      borderRadius: BorderRadius.circular(size * 0.22),
+      child: Image.asset(
+        AppBrand.logoAsset,
         width: size,
         height: size,
-        child: Center(
-          child: ColorFiltered(
-            colorFilter: const ColorFilter.mode(CC.ink, BlendMode.srcIn),
-            child: Image.asset(
-              AppBrand.logoAsset,
-              width: size,
-              height: size,
-              fit: BoxFit.contain,
-              filterQuality: FilterQuality.high,
-              errorBuilder: (_, _, _) => Text(
-                'B',
-                style: AppText.jakarta(
-                  fontWeight: FontWeight.w900,
-                  fontSize: size * 0.82,
-                  color: CC.ink,
-                ),
-              ),
+        fit: BoxFit.cover,
+        filterQuality: FilterQuality.high,
+        errorBuilder: (_, _, _) => Container(
+          width: size,
+          height: size,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(size * 0.22),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF4F46E5), Color(0xFFA855F7)],
+            ),
+          ),
+          child: Text(
+            'B',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              fontSize: size * 0.58,
+              height: 1,
             ),
           ),
         ),
-      );
-    }
+      ),
+    );
+    if (!framed) return SizedBox(width: size, height: size, child: mark);
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.white,
+        borderRadius: BorderRadius.circular(size * 0.22),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 8,
+            color: CC.accent.withValues(alpha: 0.35),
+            blurRadius: 10,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Center(
-        child: Image.asset(
-          AppBrand.logoAsset,
-          width: size * 0.58,
-          height: size * 0.58,
-          fit: BoxFit.contain,
-          filterQuality: FilterQuality.high,
-          errorBuilder: (_, _, _) => Text(
-            'B',
-            style: AppText.jakarta(
-              fontWeight: FontWeight.w900,
-              fontSize: size * 0.48,
-              color: Colors.black,
-            ),
-          ),
-        ),
-      ),
+      child: mark,
     );
   }
 }

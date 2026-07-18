@@ -2,7 +2,13 @@
 
 Offline TCG collecting sim — rip packs, collect, flip, and grade.
 
-## Getting Started
+## Franchises
+
+- Riftbound
+- Pokémon
+- Magic: The Gathering
+
+## Run
 
 ```bash
 flutter pub get

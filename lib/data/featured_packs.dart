@@ -116,7 +116,7 @@ class FeaturedPackDef {
   int get candyPrice => (priceUsd * 100).round();
 
   String get assetPath {
-    // Same Bindora foil template, rarity-tinted, per franchise folder.
+    // Bindora template for Pokémon + MTG; RIP Pack swirl for Riftbound.
     final folder = id.startsWith('pkfp_')
         ? 'pokemon'
         : id.startsWith('mtgfp_')

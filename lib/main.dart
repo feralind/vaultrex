@@ -42,9 +42,6 @@ class BindoraApp extends StatelessWidget {
   }
 }
 
-/// Legacy alias.
-typedef VaultrexApp = BindoraApp;
-
 class _Root extends StatefulWidget {
   const _Root();
 
