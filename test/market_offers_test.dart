@@ -1,9 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vaultrex/game/game_controller.dart';
-import 'package:vaultrex/models/enums.dart';
-import 'package:vaultrex/models/models.dart';
+import 'package:bindora/game/game_controller.dart';
+import 'package:bindora/models/enums.dart';
+import 'package:bindora/models/models.dart';
 
 Future<void> _waitUntilReady(ProviderContainer container) async {
   for (var i = 0; i < 120; i++) {

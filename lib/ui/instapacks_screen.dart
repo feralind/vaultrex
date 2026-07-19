@@ -228,7 +228,7 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen>
   }
 }
 
-/// Vaultrex Instapacks header: title, blurb, half-fade pack fan.
+/// Bindora Instapacks header: title, blurb, half-fade pack fan.
 class _InstapacksHero extends StatefulWidget {
   const _InstapacksHero({
     required this.candy,

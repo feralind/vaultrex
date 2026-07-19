@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vaultrex/data/pricing.dart';
-import 'package:vaultrex/data/riftbound_catalog.dart';
-import 'package:vaultrex/data/tcgcsv_price_refresh.dart';
-import 'package:vaultrex/models/enums.dart';
-import 'package:vaultrex/models/models.dart';
+import 'package:bindora/data/pricing.dart';
+import 'package:bindora/data/riftbound_catalog.dart';
+import 'package:bindora/data/tcgcsv_price_refresh.dart';
+import 'package:bindora/models/enums.dart';
+import 'package:bindora/models/models.dart';
 
 CardDef _card({
   required String id,

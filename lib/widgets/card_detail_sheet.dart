@@ -1022,7 +1022,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
     final platforms = [
       ('TC', const Color(0xFF5B8CFF), 'TCGPlayer'),
       ('EB', const Color(0xFFE8722A), 'eBay'),
-      ('VX', const Color(0xFFA78BFA), 'Vaultrex'),
+      ('BD', const Color(0xFFA78BFA), 'Bindora'),
       ('MK', const Color(0xFF34D399), 'Marketplace'),
     ];
     final i = m.id.hashCode.abs() % platforms.length;

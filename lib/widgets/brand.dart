@@ -12,11 +12,12 @@ import 'knockout_image.dart';
 
 /// Official product name.
 abstract final class AppBrand {
-  static const name = 'Vaultrex';
+  static const name = 'Bindora';
+  static const logoAsset = 'assets/logos/bindora.png';
 }
 
-class VaultrexLogo extends StatelessWidget {
-  const VaultrexLogo({super.key, this.size = 22, this.showWordmark = true});
+class BindoraLogo extends StatelessWidget {
+  const BindoraLogo({super.key, this.size = 22, this.showWordmark = true});
 
   final double size;
   final bool showWordmark;
@@ -29,7 +30,7 @@ class VaultrexLogo extends StatelessWidget {
         ClipRRect(
           borderRadius: BorderRadius.circular(size * 0.28),
           child: Image.asset(
-            'assets/logos/app_icon.png',
+            AppBrand.logoAsset,
             width: size,
             height: size,
             fit: BoxFit.cover,
@@ -52,10 +53,10 @@ class VaultrexLogo extends StatelessWidget {
   }
 }
 
-/// Legacy alias for [VaultrexLogo].
-typedef CandyLogo = VaultrexLogo;
+/// Legacy alias for [BindoraLogo].
+typedef CandyLogo = BindoraLogo;
 
-/// Original Vaultrex rift-mark.
+/// App mark fallback (bolt badge).
 class RiftMark extends StatelessWidget {
   const RiftMark({super.key, this.size = 28, this.framed = true});
   final double size;

@@ -627,9 +627,9 @@ class GameNotifier extends _GameNotifierBase
       lastRip: null,
       lastRipPaid: null,
       message: switch (gameId) {
-        'pokemon' => 'Welcome to Vaultrex — Pokémon sealed & singles.',
-        'mtg' => 'Welcome to Vaultrex — Magic sealed & singles.',
-        _ => 'Welcome to Vaultrex — Riftbound sealed & singles.',
+        'pokemon' => 'Welcome to Bindora — Pokémon sealed & singles.',
+        'mtg' => 'Welcome to Bindora — Magic sealed & singles.',
+        _ => 'Welcome to Bindora — Riftbound sealed & singles.',
       },
       migrationNotice: null,
       valueHistory: [

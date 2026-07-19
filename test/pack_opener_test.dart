@@ -1,9 +1,9 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vaultrex/data/riftbound_catalog.dart';
-import 'package:vaultrex/game/pack_opener.dart';
-import 'package:vaultrex/models/enums.dart';
+import 'package:bindora/data/riftbound_catalog.dart';
+import 'package:bindora/game/pack_opener.dart';
+import 'package:bindora/models/enums.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
