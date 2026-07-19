@@ -14,7 +14,7 @@ import 'widgets/pack_theater.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const ProviderScope(child: BindoraApp()));
+  runApp(const ProviderScope(child: VaultrexApp()));
 }
 
 class AppScrollBehavior extends MaterialScrollBehavior {
@@ -27,13 +27,13 @@ class AppScrollBehavior extends MaterialScrollBehavior {
       };
 }
 
-class BindoraApp extends StatelessWidget {
-  const BindoraApp({super.key});
+class VaultrexApp extends StatelessWidget {
+  const VaultrexApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Bindora',
+      title: 'Vaultrex',
       debugShowCheckedModeBanner: false,
       theme: CC.dark(),
       scrollBehavior: AppScrollBehavior(),

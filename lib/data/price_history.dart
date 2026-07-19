@@ -32,7 +32,7 @@ class PriceHistoryStore {
     if (_instance != null) return _instance!;
     final byId = <String, List<PricePoint>>{};
     var attribution =
-        'TCGCSV / TCGplayer spot · Bindora local history.';
+        'TCGCSV / TCGplayer spot · Vaultrex local history.';
     try {
       final raw = jsonDecode(
         await rootBundle.loadString('assets/data/price_history.json'),

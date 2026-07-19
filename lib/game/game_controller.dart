@@ -54,61 +54,94 @@ const _sellerNames = [
   'ShipFastSam',
   'CompsChecker',
   'VaultFlipVince',
-  'TableTopTim',
-  'MythicMart',
-  'EdgeWhisper',
-  'CenteringKate',
-  'RawToSlab',
-  'WeekendWhale',
-  'LocalSleeveShop',
-  'PromoPilePete',
-  'HoloHawk',
-  'BinderBrigade',
-  'QuickCashCards',
-  'FairAskFred',
+  // Expanded seller pool — denser market personalities
+  'ManaMarketMaya',
+  'MythicMintMike',
+  'PlanarPortDeals',
+  'CounterspellCarl',
+  'TapLandTrades',
+  'EDHEmpire',
+  'FoilFetchFran',
+  'ReservedListRex',
+  'DraftNightDan',
+  'CommanderCove',
+  'ScryStackSarah',
+  'BoltBudgetBob',
+  'IslandIsle',
+  'ShockLandSue',
+  'ProxyPolicePat', // will still be legitimate seller alias
+  'ModernMaven',
+  'PioneerPete',
+  'StandardSteve',
+  'LegacyLarry',
+  'CubeCrate',
+  'PrereleasePam',
+  'CollectorCrypt',
+  'GradedGrailGuy',
+  'RawRipRita',
+  'PsaPrepPaul',
   'NightOwlNexus',
-  'ShelfStockSam',
-  'GradingGuruGina',
-  'PlaysetPaul',
-  'ModernMintMax',
-  'LegacyLaneLisa',
-  'CommanderCarl',
-  'DraftDayDan',
-  'SealedSundaySue',
-  'FoilFinderFaye',
-  'SlabSniperSid',
-  'BuylistBen',
-  'TradeBinderTy',
-  'ParcelPostPat',
-  'VaultKeeperVal',
-  'RipAndShipRio',
-  'ConditionCarl',
-  'AskAskAlex',
-  'DealDeskDana',
-  'MarketMavenMia',
-  'BinderBossBea',
-  'SlabCitySteve',
-  'HoloHunterHank',
-  'PackPilotPenny',
-  'ChaseQueenQuinn',
-  'MintMachineMo',
-  'FoilFarmFran',
-  'GradeLabGus',
-  'RipRoomRay',
-  'ShelfSharkShay',
-  'CompsKingKurt',
-  'BulkBinBex',
-  'AltArtOz',
-  'PromoKingKai',
-  'NightBreakNed',
-  'WeekendWaresWes',
-  'LocalLaneLara',
-  'VaultVibeVic',
-  'DealDropDee',
-  'AskAceAva',
-  'ShipShapeShaun',
-  'CenteringCy',
-  'CornerCareCam',
+  'WeekendWhale',
+  'MicroMintMart',
+  'MidRangeMike',
+  'SpikeSeller',
+  'JohnnyJank',
+  'TimmyTrades',
+  'VorthosVault',
+  'MelvinMath',
+  'QuickShipQuinn',
+  'SlowboatSam',
+  'TrustMeTCG',
+  'VerifiedVince',
+  'LocalLGS_Lisa',
+  'MailDayMax',
+  'BubbleMailerBen',
+  'ToploaderTom',
+  'PennySleevePat',
+  'OneTouchOwen',
+  'MagneticMike',
+  'KmcKay',
+  'DragonShieldDee',
+  'UltimateGuardU',
+  'CardKingdomCarl',
+  'TcgPlayerTess',
+  'EbayEddie',
+  'MercariMia',
+  'WhatnotWes',
+  'TikTokTrades',
+  'DiscordDealsDan',
+  'RedditRipper',
+  'FBGroupGabe',
+  'ConBoothBarb',
+  'TableTopTina',
+  'SideEventSam',
+  'JudgeCallJess',
+  'RulesLawyerRon',
+  'StackMaster',
+  'PriorityPete',
+  'PassPriorityPam',
+  'UntapUpkeep',
+  'DrawGoDoug',
+  'AgroAlice',
+  'ControlCraig',
+  'ComboChris',
+  'MidrangeMona',
+  'RampRalph',
+  'TempoTess',
+  'ValueVince',
+  'GrindstoneGus',
+  'TutorTom',
+  'FetchlandFaye',
+  'ShocklandSal',
+  'DualLandDee',
+  'TriomeTara',
+  'PathwayPete',
+  'FastlandFran',
+  'SlowlandSam',
+  'ChecklandCal',
+  'FilterlandFay',
+  'UtilityUlysses',
+  'ManabaseMax',
 ];
 
 enum _MarketTier { hot, mid, budget }
@@ -122,6 +155,13 @@ const upgrades = [
     description: 'Online listing fees drop to 10%.',
     cost: 250,
     requiredXp: 40,
+  ),
+  UpgradeDef(
+    id: 'quick_flip_pro',
+    name: 'Quick Flip Pro',
+    description: 'Quick Flip pays 78% of fair instead of 70%.',
+    cost: 350,
+    requiredXp: 60,
   ),
   UpgradeDef(
     id: 'auto_snipe',
@@ -167,7 +207,7 @@ class GameState {
 
   final bool ready;
   final bool catalogLoaded;
-  /// Active TCG franchise for this save slot (`riftbound` | `pokemon`).
+  /// Active TCG franchise for this save slot (`riftbound` | `pokemon` | `mtg`).
   final String franchiseId;
   final PlayerStats player;
   final List<OwnedCard> collection;
@@ -587,9 +627,9 @@ class GameNotifier extends _GameNotifierBase
       lastRip: null,
       lastRipPaid: null,
       message: switch (gameId) {
-        'pokemon' => 'Welcome to Bindora — Pokémon sealed & singles.',
-        'mtg' => 'Welcome to Bindora — Magic sealed & singles.',
-        _ => 'Welcome to Bindora — Riftbound sealed & singles.',
+        'pokemon' => 'Welcome to Vaultrex — Pokémon sealed & singles.',
+        'mtg' => 'Welcome to Vaultrex — Magic sealed & singles.',
+        _ => 'Welcome to Vaultrex — Riftbound sealed & singles.',
       },
       migrationNotice: null,
       valueHistory: [
@@ -914,9 +954,7 @@ class GameNotifier extends _GameNotifierBase
     Set<String>? usedSellerPairs,
     _MarketTier tier = _MarketTier.mid,
   }) {
-    // Alias first so each handle keeps a sticky personality.
-    final alias = _pickSellerAlias(usedSellerPairs);
-    final seller = _sellerTypeForAlias(alias, tier: tier, graded: graded);
+    final seller = _pickSellerType(tier: tier, graded: graded);
     final foil = _rng.nextDouble() < 0.35 && c.foilMarketPrice != null;
     Condition cond;
     if (graded) {
@@ -958,17 +996,14 @@ class GameNotifier extends _GameNotifierBase
       price = base * gradeMult * 1.2;
     }
 
-    price *= switch (seller) {
-      SellerType.clueless => 0.88 + _rng.nextDouble() * 0.08,
-      SellerType.scammy => 0.92 + _rng.nextDouble() * 0.08,
-      SellerType.serious => 0.98 + _rng.nextDouble() * 0.07,
-      SellerType.goblin => 0.94 + _rng.nextDouble() * 0.10,
-      SellerType.lgs => 0.96 + _rng.nextDouble() * 0.06,
-      SellerType.whale => 1.02 + _rng.nextDouble() * 0.10,
-      SellerType.flipper => 0.93 + _rng.nextDouble() * 0.08,
-    };
+    // Slightly soft asks — deals exist, not 20%+ steals every day.
+    if (seller == SellerType.clueless) price *= 0.88 + _rng.nextDouble() * 0.08;
+    if (seller == SellerType.scammy) price *= 0.92 + _rng.nextDouble() * 0.08;
+    if (seller == SellerType.serious) price *= 0.98 + _rng.nextDouble() * 0.07;
+    if (seller == SellerType.goblin) price *= 0.94 + _rng.nextDouble() * 0.10;
     price *= 0.98 + _rng.nextDouble() * 0.05;
 
+    final alias = _pickSellerAlias(seller, usedSellerPairs);
     final gradeLabel = graded
         ? 'PSA ${grade >= 10 ? '10' : grade.toStringAsFixed(grade % 1 == 0 ? 0 : 1)}'
         : null;
@@ -976,8 +1011,6 @@ class GameNotifier extends _GameNotifierBase
         .clamp(55.0, 99.9);
     final sales =
         (seller.typicalSales * (0.55 + _rng.nextDouble() * 0.9)).round();
-
-    usedSellerPairs?.add('${seller.name}|$alias');
 
     return MarketListing(
       id: _uuid.v4(),
@@ -1002,56 +1035,36 @@ class GameNotifier extends _GameNotifierBase
     );
   }
 
-  /// Sticky personality per alias so the same handle feels consistent.
-  SellerType _sellerTypeForAlias(
-    String alias, {
+  SellerType _pickSellerType({
     required _MarketTier tier,
     required bool graded,
   }) {
-    final bucket = alias.hashCode.abs() % 100;
-    SellerType sticky;
-    if (bucket < 22) {
-      sticky = SellerType.serious;
-    } else if (bucket < 38) {
-      sticky = SellerType.clueless;
-    } else if (bucket < 52) {
-      sticky = SellerType.flipper;
-    } else if (bucket < 66) {
-      sticky = SellerType.lgs;
-    } else if (bucket < 78) {
-      sticky = SellerType.goblin;
-    } else if (bucket < 90) {
-      sticky = SellerType.whale;
-    } else {
-      sticky = SellerType.scammy;
-    }
-
-    // Tier nudge without erasing identity (deterministic per alias).
-    final nudge = (alias.hashCode ^ 0x9e3779b9).abs() % 100;
+    final r = _rng.nextDouble();
     if (graded || tier == _MarketTier.hot) {
-      if (sticky == SellerType.clueless && nudge < 35) {
-        return SellerType.serious;
-      }
-      if (sticky == SellerType.scammy && nudge < 45) {
-        return SellerType.whale;
-      }
+      if (r < 0.45) return SellerType.serious;
+      if (r < 0.70) return SellerType.goblin;
+      if (r < 0.88) return SellerType.clueless;
+      return SellerType.scammy;
     }
-    if (tier == _MarketTier.budget && sticky == SellerType.whale) {
-      return SellerType.flipper;
+    if (tier == _MarketTier.budget) {
+      if (r < 0.45) return SellerType.clueless;
+      if (r < 0.70) return SellerType.goblin;
+      if (r < 0.88) return SellerType.serious;
+      return SellerType.scammy;
     }
-    return sticky;
+    return SellerType.values[_rng.nextInt(SellerType.values.length)];
   }
 
-  String _pickSellerAlias(Set<String>? usedPairs) {
+  String _pickSellerAlias(SellerType seller, Set<String>? usedPairs) {
     if (usedPairs == null || usedPairs.isEmpty) {
       return _sellerNames[_rng.nextInt(_sellerNames.length)];
     }
     final shuffled = [..._sellerNames]..shuffle(_rng);
     for (final alias in shuffled) {
-      // Any type|alias key that already used this alias — skip reuse.
-      final taken = usedPairs.any((k) => k.endsWith('|$alias'));
-      if (!taken) return alias;
+      final key = '${seller.name}|$alias';
+      if (!usedPairs.contains(key)) return alias;
     }
+    // Exhausted unique pairs — pick any alias (still try a fresh name).
     return _sellerNames[_rng.nextInt(_sellerNames.length)];
   }
 
@@ -1172,6 +1185,7 @@ class GameNotifier extends _GameNotifierBase
         return _OfferDecision.reject;
       case SellerType.serious:
         if (offerOverAsk >= 0.95) return _OfferDecision.accept;
+        // Serious counters once (at ~98% ask) then rejects lowballs.
         if (offerOverAsk >= 0.88) return _OfferDecision.counter;
         return _OfferDecision.reject;
       case SellerType.goblin:
@@ -1180,18 +1194,6 @@ class GameNotifier extends _GameNotifierBase
         return _OfferDecision.reject;
       case SellerType.scammy:
         if (offerOverAsk >= 0.88) return _OfferDecision.accept;
-        return _OfferDecision.reject;
-      case SellerType.lgs:
-        if (offerOverAsk >= 0.92) return _OfferDecision.accept;
-        if (offerOverAsk >= 0.86) return _OfferDecision.counter;
-        return _OfferDecision.reject;
-      case SellerType.whale:
-        if (offerOverAsk >= 0.97) return _OfferDecision.accept;
-        if (offerOverAsk >= 0.93) return _OfferDecision.counter;
-        return _OfferDecision.reject;
-      case SellerType.flipper:
-        if (offerOverAsk >= 0.90) return _OfferDecision.accept;
-        if (_rng.nextDouble() < 0.50) return _OfferDecision.counter;
         return _OfferDecision.reject;
     }
   }
@@ -1228,14 +1230,14 @@ class GameNotifier extends _GameNotifierBase
       final fair = Pricing.fairValue(def, card, events: events);
       final ratio = listing.ask / max(0.01, fair);
       var chance = ratio <= 0.95
-          ? 0.72
+          ? 0.62
           : ratio <= 1.05
-              ? 0.58
+              ? 0.48
               : ratio <= 1.15
-                  ? 0.32
+                  ? 0.22
                   : ratio <= 1.3
-                      ? 0.14
-                      : 0.04;
+                      ? 0.08
+                      : 0.02;
       chance = (chance * chanceMult).clamp(0.0, 1.0);
       if (_rng.nextDouble() < chance) {
         final fee = listing.ask * Pricing.platformFeeRate(p);
@@ -1267,9 +1269,9 @@ class GameNotifier extends _GameNotifierBase
     );
   }
 
-  static const _catchUpWindowMs = 12 * 60 * 60 * 1000; // 12 hours
-  static const _catchUpMaxChecks = 5;
-  static const _catchUpChanceMult = 0.9;
+  static const _catchUpWindowMs = 20 * 60 * 60 * 1000; // 20 hours
+  static const _catchUpMaxChecks = 3;
+  static const _catchUpChanceMult = 0.85;
 
   /// Resolve missed listing sale rolls from real elapsed time (no background).
   Future<int> catchUpOnlineSales({int? nowMs}) async {
@@ -1447,9 +1449,6 @@ class GameNotifier extends _GameNotifierBase
           SellerType.serious => 0.98,
           SellerType.goblin => 0.94,
           SellerType.scammy => 0.95,
-          SellerType.lgs => 0.96,
-          SellerType.whale => 0.99,
-          SellerType.flipper => 0.93,
         };
         o.counterAmount = double.parse(
           max(o.offerAmount + 0.01, listing.price * counterMult)

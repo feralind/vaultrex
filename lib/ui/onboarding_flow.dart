@@ -178,7 +178,7 @@ class _IntroPage extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           Text(
-            'Bindora',
+            'Vaultrex',
             style: AppText.jakarta(
               fontSize: 34,
               fontWeight: FontWeight.w800,

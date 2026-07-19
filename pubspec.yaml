@@ -1,7 +1,7 @@
-name: bindora
-description: Bindora - offline TCG collecting. Rip packs, collect, flip, grade.
+name: vaultrex
+description: Vaultrex - offline Riftbound collecting. Rip packs, collect, flip, grade.
 publish_to: 'none'
-version: 1.4.3+17
+version: 1.3.1+14
 
 environment:
   sdk: ^3.12.2
@@ -38,8 +38,8 @@ flutter:
     - assets/logos/
     - assets/sealed/
     - assets/card_backs/
-    - assets/featured_packs/pokemon/
     - assets/featured_packs/riftbound/
+    - assets/featured_packs/pokemon/
     - assets/featured_packs/mtg/
   fonts:
     - family: PlusJakartaSans

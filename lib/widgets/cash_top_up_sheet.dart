@@ -21,7 +21,7 @@ Future<bool> showCashTopUp(BuildContext context, WidgetRef ref) async {
   final paid = await showFakeGooglePay(
     context,
     amount: amount,
-    merchant: 'Bindora Wallet',
+    merchant: 'Vaultrex Wallet',
   );
   if (!paid || !context.mounted) return false;
 
@@ -149,7 +149,7 @@ class _CashAmountSheetState extends State<_CashAmountSheet> {
               ],
             ),
             Text(
-              'Add Bindora cash for packs, market, and PSA. '
+              'Add Vaultrex cash for packs, market, and PSA. '
               'Totally normal banking energy.',
               style: AppText.jakarta(
                 color: CC.inkMuted,

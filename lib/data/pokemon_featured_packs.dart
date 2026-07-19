@@ -3,7 +3,7 @@ import '../models/models.dart';
 import 'featured_packs.dart';
 
 /// Pokémon Featured Packs — RareCandy Instapack–inspired tiers mapped onto
-/// Bindora Pokémon Featured Pack UI/mechanics.
+/// Vaultrex Pokémon Featured Pack UI/mechanics.
 ///
 /// Research notes (2026-07): packs.rarecandy.com requires auth; public odds
 /// tables were unavailable. Pricing tiers taken from RareCandy Instapacks grid

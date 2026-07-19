@@ -126,7 +126,7 @@ class FeaturedPackDef {
   }
 }
 
-/// Curated Featured Packs — Bindora instant-rip pricing tiers.
+/// Curated Featured Packs — Vaultrex instant-rip pricing tiers.
 /// mid-tier (~$10–$50) and premium chase (~$80–$180) digital rip products.
 const int kFeaturedPackCardCount = 6;
 

@@ -237,7 +237,7 @@ class SettingsScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          'Bindora is a personal offline collecting/market sim. '
+          'Vaultrex is a personal offline collecting/market sim. '
           'Riftbound names and related IP belong to Riot Games. '
           'Pokémon and Pokémon TCG names/marks belong to Nintendo / Creatures / Game Freak / The Pokémon Company. '
           'Magic: The Gathering names and marks belong to Wizards of the Coast. '

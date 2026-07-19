@@ -621,6 +621,7 @@ class _CardsTab extends ConsumerWidget {
           fairPrice: fair,
           suggestedAsk: notifier.suggestedAskFor(owned),
           onListForSale: (ask) => notifier.listOnline(owned.instanceId, ask),
+          onQuickFlip: () => notifier.quickFlipCard(owned.instanceId),
           onCancelListing: () async {
             OnlineListing? match;
             for (final l in ref.read(gameProvider).onlineListings) {
@@ -633,7 +634,6 @@ class _CardsTab extends ConsumerWidget {
               await notifier.cancelOnlineListing(match.id);
             }
           },
-          onQuickSell: () => notifier.quickSellToHouse(owned.instanceId),
           onSendToPsa: null,
         );
       },

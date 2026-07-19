@@ -12,12 +12,11 @@ import 'knockout_image.dart';
 
 /// Official product name.
 abstract final class AppBrand {
-  static const name = 'Bindora';
-  static const logoAsset = 'assets/logos/bindora.png';
+  static const name = 'Vaultrex';
 }
 
-class BindoraLogo extends StatelessWidget {
-  const BindoraLogo({super.key, this.size = 22, this.showWordmark = true});
+class VaultrexLogo extends StatelessWidget {
+  const VaultrexLogo({super.key, this.size = 22, this.showWordmark = true});
 
   final double size;
   final bool showWordmark;
@@ -27,7 +26,16 @@ class BindoraLogo extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        BindoraMark(size: size),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(size * 0.28),
+          child: Image.asset(
+            'assets/logos/app_icon.png',
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => RiftMark(size: size),
+          ),
+        ),
         if (showWordmark) ...[
           const SizedBox(width: 8),
           Text(
@@ -44,56 +52,45 @@ class BindoraLogo extends StatelessWidget {
   }
 }
 
-/// Legacy aliases.
-typedef CandyLogo = BindoraLogo;
+/// Legacy alias for [VaultrexLogo].
+typedef CandyLogo = VaultrexLogo;
 
-/// Bindora mark — bold B on a rounded square (still square footprint).
-class BindoraMark extends StatelessWidget {
-  const BindoraMark({super.key, this.size = 28, this.framed = true});
+/// Original Vaultrex rift-mark.
+class RiftMark extends StatelessWidget {
+  const RiftMark({super.key, this.size = 28, this.framed = true});
   final double size;
-  /// When false, renders the mark without the soft drop shadow.
+  /// When false, renders a free-floating bolt (no circular badge).
   final bool framed;
 
   @override
   Widget build(BuildContext context) {
-    final mark = ClipRRect(
-      borderRadius: BorderRadius.circular(size * 0.22),
-      child: Image.asset(
-        AppBrand.logoAsset,
+    if (!framed) {
+      return SizedBox(
         width: size,
         height: size,
-        fit: BoxFit.cover,
-        filterQuality: FilterQuality.high,
-        errorBuilder: (_, _, _) => Container(
-          width: size,
-          height: size,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(size * 0.22),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF4F46E5), Color(0xFFA855F7)],
+        child: Icon(
+          Icons.bolt_rounded,
+          color: const Color(0xFF7EB6FF),
+          size: size * 0.92,
+          shadows: [
+            Shadow(
+              color: CC.accent.withValues(alpha: 0.55),
+              blurRadius: size * 0.35,
             ),
-          ),
-          child: Text(
-            'B',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
-              fontSize: size * 0.58,
-              height: 1,
-            ),
-          ),
+          ],
         ),
-      ),
-    );
-    if (!framed) return SizedBox(width: size, height: size, child: mark);
+      );
+    }
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(size * 0.22),
+        shape: BoxShape.circle,
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF5B8CFF), Color(0xFFA78BFA)],
+        ),
         boxShadow: [
           BoxShadow(
             color: CC.accent.withValues(alpha: 0.35),
@@ -102,13 +99,10 @@ class BindoraMark extends StatelessWidget {
           ),
         ],
       ),
-      child: mark,
+      child: Icon(Icons.bolt_rounded, color: Colors.white, size: size * 0.62),
     );
   }
 }
-
-/// Legacy alias for [BindoraMark].
-typedef RiftMark = BindoraMark;
 
 /// Free-floating brand logo mark for game pickers (no card / circle frame).
 class GameBrandLogo extends StatelessWidget {

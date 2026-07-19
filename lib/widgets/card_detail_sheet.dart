@@ -76,8 +76,8 @@ class CardDetailSheet extends StatefulWidget {
         suggestedAsk = null,
         onListForSale = null,
         onCancelListing = null,
-        onQuickSell = null,
-        onSendToPsa = null;
+        onSendToPsa = null,
+        onQuickFlip = null;
 
   const CardDetailSheet.owned({
     super.key,
@@ -87,8 +87,8 @@ class CardDetailSheet extends StatefulWidget {
     required this.fairPrice,
     required this.onListForSale,
     required this.onCancelListing,
-    this.onQuickSell,
     this.onSendToPsa,
+    this.onQuickFlip,
     this.suggestedAsk,
   })  : mode = CardDetailMode.owned,
         listing = null,
@@ -106,8 +106,8 @@ class CardDetailSheet extends StatefulWidget {
   final Future<void> Function(String listingId, double amount)? onOffer;
   final Future<void> Function(double ask)? onListForSale;
   final Future<void> Function()? onCancelListing;
-  final Future<bool> Function()? onQuickSell;
   final Future<void> Function()? onSendToPsa;
+  final Future<void> Function()? onQuickFlip;
 
   @override
   State<CardDetailSheet> createState() => _CardDetailSheetState();
@@ -504,63 +504,8 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
     final fair = _guideBase;
     final deal = primary.price <= fair * 0.92;
     final warn = primary.sellerType == SellerType.scammy || primary.isFake;
-    final seller = primary.sellerType;
-    final alias = primary.sellerAlias ?? seller.label;
-    final rating = primary.displayRating.toStringAsFixed(1);
-    final ships = primary.displayShipsInDays;
 
     return [
-      Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: CC.card,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: warn
-                ? const Color(0xFFF59E0B).withValues(alpha: 0.55)
-                : CC.line,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              alias,
-              style: AppText.jakarta(
-                fontWeight: FontWeight.w800,
-                fontSize: 15,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              seller.label,
-              style: AppText.jakarta(
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
-                color: warn ? const Color(0xFFFBBF24) : CC.accent,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              seller.blurb,
-              style: AppText.jakarta(
-                color: CC.inkMuted,
-                fontSize: 12,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '$rating% · ${primary.displaySales} sold · ships ${ships}d',
-              style: AppText.jakarta(
-                fontSize: 11,
-                color: warn ? const Color(0xFFFBBF24) : CC.inkMuted,
-              ),
-            ),
-          ],
-        ),
-      ),
-      const SizedBox(height: 12),
       if (deal || warn) ...[
         Container(
           width: double.infinity,
@@ -617,7 +562,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
               side: const BorderSide(color: CC.line),
             ),
             child: Text(
-              'MAKE OFFER · ~${(seller.defaultOfferFraction * 100).round()}%',
+              'MAKE OFFER',
               style: AppText.jakarta(
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.5,
@@ -637,7 +582,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
       ),
       const SizedBox(height: 4),
       Text(
-        'Sorted by price · each seller has a style',
+        'Sorted by price · seller · condition',
         style: AppText.jakarta(
           color: CC.inkMuted,
           fontSize: 12,
@@ -646,8 +591,8 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
       const SizedBox(height: 12),
       ...buyList.map((m) {
         final platform = _platformFor(m);
-        final ratingRow = m.displayRating.toStringAsFixed(1);
-        final shipsRow = m.displayShipsInDays;
+        final rating = m.displayRating.toStringAsFixed(1);
+        final ships = m.displayShipsInDays;
         final shady = m.sellerType == SellerType.scammy || m.isFake;
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
@@ -700,7 +645,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
                       ),
                       Text(
                         '${m.sellerAlias ?? m.sellerType.label}'
-                        ' · ${m.sellerType.label}',
+                        ' · $rating% · ${m.displaySales} sold · ${ships}d',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: AppText.jakarta(
@@ -709,13 +654,12 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
                         ),
                       ),
                       Text(
-                        '$ratingRow% · ${m.displaySales} sold · ${shipsRow}d'
-                        ' · ${m.sellerType.blurb}',
+                        m.sellerType.personality,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: AppText.jakarta(
                           fontSize: 10,
-                          color: CC.inkMuted,
+                          color: CC.inkMuted.withValues(alpha: 0.85),
                         ),
                       ),
                     ],
@@ -776,10 +720,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
     if (widget.onOffer == null) return;
     final ask = listing.price;
     final fair = _guideBase;
-    final seedFrac = listing.sellerType.defaultOfferFraction;
-    var amount = double.parse(
-      (ask * seedFrac).clamp(0.99, ask - 0.01).toStringAsFixed(2),
-    );
+    var amount = double.parse((ask * 0.90).clamp(0.99, ask - 0.01).toStringAsFixed(2));
     final minOffer = 0.99;
     final maxOffer = double.parse((ask - 0.01).toStringAsFixed(2));
     if (maxOffer < minOffer) {
@@ -831,21 +772,6 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
                       fontWeight: FontWeight.w800,
                       fontSize: 20,
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${listing.sellerAlias ?? listing.sellerType.label}'
-                    ' · ${listing.sellerType.label}',
-                    style: AppText.jakarta(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                      color: CC.accent,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    listing.sellerType.blurb,
-                    style: AppText.jakarta(color: CC.inkMuted, fontSize: 12),
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -910,14 +836,6 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
     final owned = widget.owned!;
     final listed = owned.listedAsk != null;
     final fair = widget.fairPrice ?? 0;
-    final comps = widget.suggestedAsk;
-    final housePayout =
-        double.parse((fair * 0.72).clamp(0.25, math.max(0.25, fair)).toStringAsFixed(2));
-    // Rough fee preview (matches Pricing.platformFeeRate without upgrade).
-    final feeRate = 0.14;
-    final previewAsk = comps ?? fair;
-    final netPreview =
-        double.parse((previewAsk * (1 - feeRate)).toStringAsFixed(2));
 
     return [
       Text(
@@ -931,7 +849,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
       Text(
         listed
             ? 'Listed on the market · manage below'
-            : 'Quick flip to the house, or list online for more',
+            : 'Ownership actions · list or grade',
         style: AppText.jakarta(
           color: CC.inkMuted,
           fontSize: 12,
@@ -970,7 +888,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Fair asks sell faster · Advance Day / catch-up fills',
+                'Active online listing',
                 style: AppText.jakarta(
                   color: CC.inkMuted,
                   fontSize: 12,
@@ -980,35 +898,6 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
           ),
         ),
         const SizedBox(height: 10),
-        if (widget.onQuickSell != null) ...[
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: () async {
-                final ok = await widget.onQuickSell!();
-                if (ok && mounted) Navigator.pop(context);
-              },
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF34D399),
-                foregroundColor: const Color(0xFF052E1C),
-                minimumSize: const Size.fromHeight(48),
-              ),
-              child: Text(
-                'QUICK SELL · \$${housePayout.toStringAsFixed(2)}',
-                style: AppText.jakarta(
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.4,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Cancels listing · instant house buylist · ~72% fair',
-            style: AppText.jakarta(color: CC.inkMuted, fontSize: 11),
-          ),
-          const SizedBox(height: 10),
-        ],
         SizedBox(
           width: double.infinity,
           child: OutlinedButton(
@@ -1030,36 +919,6 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
           ),
         ),
       ] else ...[
-        if (widget.onQuickSell != null) ...[
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: () async {
-                final ok = await widget.onQuickSell!();
-                if (ok && mounted) Navigator.pop(context);
-              },
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF34D399),
-                foregroundColor: const Color(0xFF052E1C),
-                minimumSize: const Size.fromHeight(54),
-              ),
-              child: Text(
-                'QUICK SELL · \$${housePayout.toStringAsFixed(2)}',
-                style: AppText.jakarta(
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.4,
-                  fontSize: 15,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Instant house buylist · ~72% of fair · no wait',
-            style: AppText.jakarta(color: CC.inkMuted, fontSize: 11),
-          ),
-          const SizedBox(height: 14),
-        ],
         TextField(
           controller: _ask,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -1067,37 +926,39 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
             labelText: 'List online',
             prefixText: '\$',
             border: const OutlineInputBorder(),
-            helperText: comps != null
-                ? 'Comps ≈ \$${comps.toStringAsFixed(2)} · Fair ≈ \$${fair.toStringAsFixed(2)} · Net ~\$${netPreview.toStringAsFixed(2)} after fee'
-                : 'Fair ≈ \$${fair.toStringAsFixed(2)} · Net ~\$${netPreview.toStringAsFixed(2)} after fee',
+            helperText: widget.suggestedAsk != null
+                ? 'Comps ≈ \$${widget.suggestedAsk!.toStringAsFixed(2)} · Fair ≈ \$${fair.toStringAsFixed(2)}'
+                : 'Fair ≈ \$${fair.toStringAsFixed(2)}',
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
-            if (comps != null)
-              ActionChip(
-                label: Text(
-                  'List at comps',
-                  style: AppText.jakarta(fontWeight: FontWeight.w700, fontSize: 12),
-                ),
-                onPressed: () {
-                  _ask?.text = comps.toStringAsFixed(2);
-                  setState(() {});
-                },
+            if (widget.suggestedAsk != null)
+              _AskChip(
+                label: 'Comps',
+                value: widget.suggestedAsk!,
+                onTap: () => setState(() {
+                  _ask?.text = widget.suggestedAsk!.toStringAsFixed(2);
+                }),
               ),
-            ActionChip(
-              label: Text(
-                'List at fair',
-                style: AppText.jakarta(fontWeight: FontWeight.w700, fontSize: 12),
-              ),
-              onPressed: () {
+            _AskChip(
+              label: 'Fair',
+              value: fair,
+              onTap: () => setState(() {
                 _ask?.text = fair.toStringAsFixed(2);
-                setState(() {});
-              },
+              }),
             ),
+            if (fair > 0.05)
+              _AskChip(
+                label: '−5%',
+                value: fair * 0.95,
+                onTap: () => setState(() {
+                  _ask?.text = (fair * 0.95).toStringAsFixed(2);
+                }),
+              ),
           ],
         ),
         const SizedBox(height: 10),
@@ -1123,6 +984,34 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
             ),
           ),
         ),
+        if (widget.onQuickFlip != null) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: () async {
+                await widget.onQuickFlip!();
+                if (mounted) Navigator.pop(context);
+              },
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+                side: const BorderSide(color: CC.line),
+              ),
+              child: Text(
+                'QUICK FLIP · ~${(fair * 0.70).clamp(0.01, fair).toStringAsFixed(2)}',
+                style: AppText.jakarta(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Instant cash at 70% fair · skip market wait & fees',
+            style: AppText.jakarta(color: CC.inkMuted, fontSize: 11),
+          ),
+        ],
       ],
       const SizedBox(height: 10),
       PsaSendButton(instanceId: owned.instanceId),
@@ -1133,7 +1022,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
     final platforms = [
       ('TC', const Color(0xFF5B8CFF), 'TCGPlayer'),
       ('EB', const Color(0xFFE8722A), 'eBay'),
-      ('BD', const Color(0xFFA78BFA), 'Bindora'),
+      ('VX', const Color(0xFFA78BFA), 'Vaultrex'),
       ('MK', const Color(0xFF34D399), 'Marketplace'),
     ];
     final i = m.id.hashCode.abs() % platforms.length;
@@ -1159,6 +1048,44 @@ class _OwnershipFoilBadge extends StatelessWidget {
         style: AppText.jakarta(
           fontWeight: FontWeight.w800,
           fontSize: 12,
+        ),
+      ),
+    );
+  }
+}
+
+class _AskChip extends StatelessWidget {
+  const _AskChip({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final String label;
+  final double value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: CC.card,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: CC.line),
+          ),
+          child: Text(
+            '$label \$${value.toStringAsFixed(2)}',
+            style: AppText.jakarta(
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
         ),
       ),
     );

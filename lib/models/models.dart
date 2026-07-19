@@ -545,12 +545,7 @@ class MarketListing {
       };
 
   factory MarketListing.fromJson(Map<String, dynamic> j) {
-    SellerType seller;
-    try {
-      seller = SellerType.values.byName(j['sellerType'] as String);
-    } catch (_) {
-      seller = SellerType.serious;
-    }
+    final seller = SellerType.values.byName(j['sellerType'] as String);
     return MarketListing(
       id: j['id'] as String,
       sellerType: seller,

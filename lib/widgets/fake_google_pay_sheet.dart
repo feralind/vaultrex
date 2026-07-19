@@ -8,7 +8,7 @@ import '../theme/app_theme.dart';
 Future<bool> showFakeGooglePay(
   BuildContext context, {
   required double amount,
-  String merchant = 'Bindora',
+  String merchant = 'Vaultrex',
 }) async {
   final result = await showModalBottomSheet<bool>(
     context: context,
@@ -193,7 +193,7 @@ class _FakeGooglePaySheetState extends State<_FakeGooglePaySheet> {
             Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'Simulated approval — still settles with Bindora cash.',
+                'Simulated approval — still settles with Vaultrex cash.',
                 style: AppText.jakarta(
                   color: CC.accentHot,
                   fontSize: 12,
