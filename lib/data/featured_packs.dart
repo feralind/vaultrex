@@ -116,8 +116,7 @@ class FeaturedPackDef {
   int get candyPrice => (priceUsd * 100).round();
 
   String get assetPath {
-    // Franchise folders. Riftbound uses the original v1.2.1 pack art as-is
-    // (no logo overlays). Pokémon/MTG keep their own Bindora foils.
+    // Franchise folders. Riftbound uses the RIP Pack + twirl art set.
     final folder = id.startsWith('pkfp_')
         ? 'pokemon'
         : id.startsWith('mtgfp_')
