@@ -25,10 +25,19 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        // Ensure JAR (v1) + APK Signature Scheme v2 for broad sideload compatibility.
+        // Some OEMs/file managers fail with "problem parsing the package" when only v2 is present.
+        getByName("debug") {
+            enableV1Signing = true
+            enableV2Signing = true
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // Signing with the debug keys for now, so flutter run --release works.
             signingConfig = signingConfigs.getByName("debug")
         }
     }

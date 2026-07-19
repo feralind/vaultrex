@@ -533,8 +533,8 @@ class _FoilPack extends StatelessWidget {
                   : Image.asset(
                       isMtg
                           ? 'assets/logos/mtg.png'
-                          : 'assets/logos/riftbound.png',
-                      width: width * 0.42,
+                          : 'assets/logos/riftbound_wordmark.png',
+                      width: width * 0.55,
                       fit: BoxFit.contain,
                       errorBuilder: (_, _, _) =>
                           RiftMark(size: width * 0.42, framed: false),

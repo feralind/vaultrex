@@ -64,6 +64,7 @@ const kGames = [
     name: 'Riftbound',
     enabled: true,
     color: Color(0xFFF4820A),
+    // Orange swirl — franchise selection / picker only (not pack art).
     logoAsset: 'assets/logos/riftbound.png',
     // Square icon mark — scale up to balance Pokémon / other wordmarks.
     logoScale: 1.22,

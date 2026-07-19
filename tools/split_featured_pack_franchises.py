@@ -2,7 +2,9 @@
 """Split featured-pack art by franchise.
 
 Pokémon  → assets/featured_packs/pokemon/  (Bindora template, rarity tints)
-Riftbound → assets/featured_packs/riftbound/ (same foil body + orange swirl + RIP PACK)
+Riftbound → assets/featured_packs/riftbound/ (foil + blue wordmark + RIP PACK)
+
+Orange swirl (riftbound.png) is selection-screen only — never stamp it on packs.
 """
 
 from __future__ import annotations
@@ -26,7 +28,7 @@ from gen_featured_packs_from_template import (  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_ROOT = ROOT / "assets" / "featured_packs"
-LOGO = ROOT / "assets" / "logos" / "riftbound.png"
+LOGO = ROOT / "assets" / "logos" / "riftbound_wordmark.png"
 TARGET_W, TARGET_H = 832, 1248
 
 
@@ -44,16 +46,20 @@ def _font(size: int, bold: bool = False) -> ImageFont.ImageFont:
     return ImageFont.load_default()
 
 
-def _paste_swirl(pack: Image.Image, logo: Image.Image) -> Image.Image:
-    """Composite orange swirl over the center mark area."""
+def _paste_wordmark(pack: Image.Image, logo: Image.Image) -> Image.Image:
+    """Composite classic blue Riftbound wordmark over the center mark area."""
     out = pack.copy()
-    mark_h = int(pack.height * 0.42)
     logo = logo.convert("RGBA")
     bbox = logo.getbbox()
     if bbox:
         logo = logo.crop(bbox)
-    scale = mark_h / logo.height
+    mark_w = int(pack.width * 0.62)
+    scale = mark_w / max(1, logo.width)
     nw, nh = max(1, int(logo.width * scale)), max(1, int(logo.height * scale))
+    max_h = int(pack.height * 0.18)
+    if nh > max_h:
+        s2 = max_h / nh
+        nw, nh = max(1, int(nw * s2)), max_h
     logo = logo.resize((nw, nh), Image.Resampling.LANCZOS)
     ox = (pack.width - nw) // 2
     oy = int(pack.height * 0.36) - nh // 2
@@ -89,26 +95,29 @@ def _stamp_rip_pack(pack: Image.Image) -> Image.Image:
 
 
 def _cover_pokeball(pack: Image.Image) -> Image.Image:
-    """Soft-fill the black poké-ball outline before placing the swirl."""
+    """Hard-fill the center mark disk so Poké Ball art is fully gone."""
     out = pack.copy()
     arr = np.asarray(out).copy()
     h, w = arr.shape[:2]
     cy, cx = int(h * 0.36), w // 2
     yy, xx = np.ogrid[:h, :w]
     dist = np.sqrt((yy - cy) ** 2 + (xx - cx) ** 2)
-    r = int(min(w, h) * 0.28)
-    mask = (dist <= r) & (arr[..., 3] > 20)
-    # Also kill near-black ink strokes in a slightly larger disk.
-    ink = mask & (arr[..., 0] < 55) & (arr[..., 1] < 55) & (arr[..., 2] < 55)
-    ring = (dist > r * 0.9) & (dist < r * 1.35) & (arr[..., 3] > 200)
-    if ring.any():
-        mean = arr[ring][..., :3].mean(axis=0)
-    else:
-        mean = np.array([200, 140, 60], dtype=np.float32)
-    fill_mask = mask | ink
+    r = int(min(w, h) * 0.48)
+    ring = (
+        (dist > r * 1.05)
+        & (dist < r * 1.35)
+        & (arr[..., 3] > 200)
+        & (((arr[..., 0].astype(np.int16) + arr[..., 1] + arr[..., 2]) / 3) > 80)
+    )
+    mean = (
+        arr[ring][..., :3].mean(axis=0)
+        if ring.any()
+        else np.array([200, 140, 60], dtype=np.float32)
+    )
+    disk = dist <= r
     for c in range(3):
         channel = arr[..., c].astype(np.float32)
-        channel[fill_mask] = mean[c]
+        channel[disk & (arr[..., 3] > 10)] = mean[c]
         arr[..., c] = np.clip(channel, 0, 255).astype(np.uint8)
     return Image.fromarray(arr, "RGBA")
 
@@ -128,7 +137,7 @@ def build_franchise(franchise: str) -> None:
         if franchise == "riftbound":
             final = _cover_pokeball(final)
             if logo is not None:
-                final = _paste_swirl(final, logo)
+                final = _paste_wordmark(final, logo)
             final = _stamp_rip_pack(final)
         path = out_dir / f"pack_{name}.png"
         final.save(path, "PNG", optimize=True)

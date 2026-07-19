@@ -962,8 +962,8 @@ class _FoilPackFallback extends StatelessWidget {
                 : Image.asset(
                     isMtg
                         ? 'assets/logos/mtg.png'
-                        : 'assets/logos/riftbound.png',
-                    height: isMtg ? 96 : 108,
+                        : 'assets/logos/riftbound_wordmark.png',
+                    height: isMtg ? 96 : 72,
                     fit: BoxFit.contain,
                     errorBuilder: (_, _, _) => isMtg
                         ? Text(
@@ -1066,10 +1066,12 @@ class _CardBack extends StatelessWidget {
                     child: Image.asset(
                       isMtg
                           ? 'assets/logos/mtg.png'
-                          : 'assets/logos/riftbound.png',
-                      width: width * 0.42,
-                      height: width * 0.42,
+                          : 'assets/logos/riftbound_wordmark.png',
+                      width: width * 0.55,
+                      height: width * 0.28,
                       fit: BoxFit.contain,
+                      errorBuilder: (_, _, _) =>
+                          RiftMark(size: width * 0.42, framed: false),
                     ),
                   ),
                 ),
