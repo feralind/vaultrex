@@ -1,7 +1,7 @@
 name: bindora
 description: Bindora - offline TCG collecting. Rip packs, collect, flip, grade.
 publish_to: 'none'
-version: 1.4.0+18
+version: 1.4.5+19
 
 environment:
   sdk: ^3.12.2
