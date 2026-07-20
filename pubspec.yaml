@@ -48,6 +48,10 @@ flutter:
     - assets/rip/frames/
     - assets/sfx/
     - assets/avatars/
+    - assets/mascot/pixel_cat/walk/
+    - assets/mascot/pixel_cat/idle/
+    - assets/mascot/pixel_cat/scratch/
+    - assets/mascot/pixel_cat/happy/
   fonts:
     - family: PlusJakartaSans
       fonts:

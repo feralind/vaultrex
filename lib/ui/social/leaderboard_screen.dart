@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/rival_personas.dart';
+import '../../game/game_clock.dart';
 import '../../game/game_controller.dart';
 import '../../game/rival_sim.dart';
 import '../../theme/app_text.dart';
@@ -38,7 +39,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
       backgroundColor: CC.bg,
       appBar: AppBar(
         title: Text(
-          'Weekly boards',
+          'Daily boards',
           style: AppText.jakarta(fontWeight: FontWeight.w800),
         ),
         backgroundColor: CC.bg,
@@ -49,7 +50,9 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
             child: Text(
-              'Flavor rivals only — not real players. Unlock more as you level ($unlocked/16).',
+              'Flavor rivals only — not real players. '
+              'Board day ≈ 2h real time · ${GameClock.remainingLabel()} · '
+              'Unlock more as you level ($unlocked/16).',
               style: AppText.jakarta(
                 color: CC.inkMuted,
                 fontSize: 12,
@@ -222,7 +225,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
                               Text(
                                 _metric == RivalBoardMetric.greens
                                     ? 'hits'
-                                    : 'this week',
+                                    : 'today',
                                 style: AppText.jakarta(
                                   color: CC.inkMuted,
                                   fontSize: 10,

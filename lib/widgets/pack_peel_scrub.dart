@@ -1,15 +1,12 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:video_player/video_player.dart';
 
+import '../services/bindora_feel.dart';
 import '../theme/app_text.dart';
 
 /// Pre-rendered pack peel driven by finger progress (Rare Candy–style scrub).
 ///
-/// Prefers scrubbing PNG frames (smooth seeks). Falls back to [video_player]
-/// seek on `assets/rip/peel_generic.mp4` when frames are unavailable.
+/// Scrubs PNG frames in [assets/rip/frames/]. The exported tail (≈36–47) is
+/// near-blank, so scrub progress maps onto [0 … lastGoodFrame] only.
 class ScrubPeelStage extends StatefulWidget {
   const ScrubPeelStage({
     super.key,
@@ -21,7 +18,7 @@ class ScrubPeelStage extends StatefulWidget {
     this.onTap,
   });
 
-  /// 0 = sealed, 1 = fully peeled.
+  /// 0 = sealed, 1 = fully peeled (clamped to [lastGoodFrame] artwork).
   final double progress;
   final bool showHint;
   final bool interactive;
@@ -30,7 +27,11 @@ class ScrubPeelStage extends StatefulWidget {
   final VoidCallback? onTap;
 
   static const frameCount = 48;
-  static const videoAsset = 'assets/rip/peel_generic.mp4';
+
+  /// Last frame that still has real peel artwork (unique-color cliff after this).
+  /// Re-export frames 36–47 when source art is fixed, then raise this.
+  static const lastGoodFrame = 35;
+
   static const sealedAsset = 'assets/rip/peel_sealed.png';
 
   static String frameAsset(int index) {
@@ -43,20 +44,13 @@ class ScrubPeelStage extends StatefulWidget {
 }
 
 class _ScrubPeelStageState extends State<ScrubPeelStage> {
-  VideoPlayerController? _video;
-  bool _videoReady = false;
-  bool _useFrames = true;
   int _frameIndex = 0;
-  Duration? _lastSeek;
   double _lastHapticAt = 0;
 
   @override
   void initState() {
     super.initState();
-    _frameIndex =
-        (widget.progress.clamp(0.0, 1.0) * (ScrubPeelStage.frameCount - 1))
-            .round();
-    _initVideo();
+    _frameIndex = _indexForProgress(widget.progress);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _applyProgress(widget.progress);
       _precacheFrames();
@@ -65,39 +59,10 @@ class _ScrubPeelStageState extends State<ScrubPeelStage> {
 
   Future<void> _precacheFrames() async {
     if (!mounted) return;
-    // Warm first/mid/last; rest load on demand via Image.asset cache.
-    for (final i in [0, 16, 32, ScrubPeelStage.frameCount - 1]) {
-      await precacheImage(AssetImage(ScrubPeelStage.frameAsset(i)), context);
-      if (!mounted) return;
-    }
-  }
-
-  Future<void> _initVideo() async {
-    final c = VideoPlayerController.asset(ScrubPeelStage.videoAsset);
-    try {
-      await c.initialize();
-      await c.setLooping(false);
-      await c.setVolume(0);
-      await c.pause();
-      await c.seekTo(Duration.zero);
-      if (!mounted) {
-        await c.dispose();
-        return;
-      }
-      setState(() {
-        _video = c;
-        _videoReady = true;
-        // Frames stay primary for scrub smoothness; video warms for finish.
-      });
-    } catch (_) {
-      await c.dispose();
-      if (mounted) {
-        setState(() {
-          _videoReady = false;
-          _useFrames = true;
-        });
-      }
-    }
+    await Future.wait([
+      for (var i = 0; i <= ScrubPeelStage.lastGoodFrame; i++)
+        precacheImage(AssetImage(ScrubPeelStage.frameAsset(i)), context),
+    ]);
   }
 
   @override
@@ -108,43 +73,25 @@ class _ScrubPeelStageState extends State<ScrubPeelStage> {
     }
   }
 
+  int _indexForProgress(double progress) {
+    final p = progress.clamp(0.0, 1.0);
+    return (p * ScrubPeelStage.lastGoodFrame).round();
+  }
+
   void _applyProgress(double progress) {
     final p = progress.clamp(0.0, 1.0);
-    final idx = (p * (ScrubPeelStage.frameCount - 1)).round();
+    final idx = _indexForProgress(p);
     if (idx != _frameIndex) {
       setState(() => _frameIndex = idx);
     }
 
-    // Milestone haptics.
-    for (final mark in [0.25, 0.5, 0.72, 0.92]) {
+    for (final mark in [0.18, 0.34, 0.5, 0.66, 0.82, 0.94]) {
       if (_lastHapticAt < mark && p >= mark) {
-        HapticFeedback.lightImpact();
+        BindoraHaptics.peelTick();
+        BindoraSounds.peelTick();
         _lastHapticAt = mark;
       }
     }
-
-    final v = _video;
-    if (v == null || !_videoReady || !v.value.isInitialized) return;
-    final dur = v.value.duration;
-    if (dur == Duration.zero) return;
-    final target = Duration(
-      milliseconds: (dur.inMilliseconds * p).round(),
-    );
-    // Throttle seeks ~1/30s to avoid decoder stutter.
-    if (_lastSeek != null &&
-        (target - _lastSeek!).abs() < const Duration(milliseconds: 33)) {
-      return;
-    }
-    _lastSeek = target;
-    unawaited(v.seekTo(target));
-  }
-
-  @override
-  void dispose() {
-    final v = _video;
-    _video = null;
-    v?.dispose();
-    super.dispose();
   }
 
   @override
@@ -187,7 +134,16 @@ class _ScrubPeelStageState extends State<ScrubPeelStage> {
                 height: h,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: _buildPeelVisual(),
+                  child: Image.asset(
+                    ScrubPeelStage.frameAsset(_frameIndex),
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                    filterQuality: FilterQuality.medium,
+                    errorBuilder: (_, _, _) => Image.asset(
+                      ScrubPeelStage.sealedAsset,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -245,32 +201,5 @@ class _ScrubPeelStageState extends State<ScrubPeelStage> {
         );
       },
     );
-  }
-
-  Widget _buildPeelVisual() {
-    if (_useFrames) {
-      return Image.asset(
-        ScrubPeelStage.frameAsset(_frameIndex),
-        fit: BoxFit.cover,
-        gaplessPlayback: true,
-        filterQuality: FilterQuality.medium,
-        errorBuilder: (_, _, _) => Image.asset(
-          ScrubPeelStage.sealedAsset,
-          fit: BoxFit.cover,
-        ),
-      );
-    }
-    final v = _video;
-    if (v != null && _videoReady && v.value.isInitialized) {
-      return FittedBox(
-        fit: BoxFit.cover,
-        child: SizedBox(
-          width: v.value.size.width,
-          height: v.value.size.height,
-          child: VideoPlayer(v),
-        ),
-      );
-    }
-    return Image.asset(ScrubPeelStage.sealedAsset, fit: BoxFit.cover);
   }
 }

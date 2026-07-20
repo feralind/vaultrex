@@ -24,12 +24,50 @@ class _AuctionPitScreenState extends ConsumerState<AuctionPitScreen> {
   String? _focusId;
   int _tick = 0;
   Timer? _timer;
+  final List<String> _liveFeed = [];
+  String? _lastFeedKey;
 
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() => _tick++);
+    _timer = Timer.periodic(const Duration(milliseconds: 350), (_) {
+      if (!mounted) return;
+      final notifier = ref.read(gameProvider.notifier);
+      unawaited(notifier.tickAuctionsLive());
+
+      // Rival nudges ~every 2.45s.
+      if (_tick > 0 && _tick % 7 == 0) {
+        final auctions = ref.read(gameProvider).auctions;
+        for (final a in auctions) {
+          notifier.nudgeAuctionRival(a.id);
+        }
+      }
+
+      final state = ref.read(gameProvider);
+      if (state.auctions.isNotEmpty) {
+        final focus = state.auctions.firstWhere(
+          (a) => a.id == _focusId,
+          orElse: () => state.auctions.first,
+        );
+        final def = notifier.cardById(focus.cardId);
+        final high = focus.playerIsHighBidder
+            ? null
+            : (rivalByHandle(focus.rivalName ?? '') ??
+                rivalByIndex(focus.id.hashCode));
+        final secs = _secsLeft(focus.endsAtMs);
+        _pushFeed(
+          RivalSim.pitFeedFor(
+            highBidder: high,
+            cardName: def?.name ?? focus.cardId,
+            bid: focus.currentBid,
+            endsInTurns: focus.endsInTurns,
+            secsLeft: secs,
+            paddleCount: 6,
+          ),
+        );
+      }
+
+      setState(() => _tick++);
     });
   }
 
@@ -37,6 +75,25 @@ class _AuctionPitScreenState extends ConsumerState<AuctionPitScreen> {
   void dispose() {
     _timer?.cancel();
     super.dispose();
+  }
+
+  int _secsLeft(int? endsAtMs) {
+    if (endsAtMs == null) return 15;
+    final left =
+        ((endsAtMs - DateTime.now().millisecondsSinceEpoch) / 1000).ceil();
+    return left.clamp(0, 99);
+  }
+
+  void _pushFeed(List<String> lines) {
+    final key = lines.join('|');
+    if (key == _lastFeedKey) return;
+    _lastFeedKey = key;
+    for (final line in lines.reversed) {
+      _liveFeed.insert(0, line);
+    }
+    while (_liveFeed.length > 12) {
+      _liveFeed.removeLast();
+    }
   }
 
   @override
@@ -76,6 +133,9 @@ class _AuctionPitScreenState extends ConsumerState<AuctionPitScreen> {
       });
       if (match.isNotEmpty) _focusId = match.first.id;
     }
+    if (!auctions.any((a) => a.id == _focusId)) {
+      _focusId = auctions.first.id;
+    }
     final focus = auctions.firstWhere(
       (a) => a.id == _focusId,
       orElse: () => auctions.first,
@@ -87,19 +147,26 @@ class _AuctionPitScreenState extends ConsumerState<AuctionPitScreen> {
       high = rivalById(widget.focusRivalId!) ?? high;
     }
 
-    final secsLeft = (focus.endsInTurns * 18 - (_tick % 18)).clamp(0, 99);
+    final secsLeft = _secsLeft(focus.endsAtMs);
+    final inPit = <RivalPersona>[
+      high,
+      rivalByIndex(focus.id.hashCode + 1),
+      rivalByIndex(focus.id.hashCode + 2),
+      rivalByIndex(focus.id.hashCode + 3),
+      rivalByIndex(focus.id.hashCode + 4),
+      rivalByIndex(focus.id.hashCode + 5),
+    ];
+
     final feed = RivalSim.pitFeedFor(
       highBidder: focus.playerIsHighBidder ? null : high,
       cardName: def?.name ?? focus.cardId,
       bid: focus.currentBid,
       endsInTurns: focus.endsInTurns,
+      secsLeft: secsLeft,
+      paddleCount: inPit.length,
     );
 
-    final inPit = <RivalPersona>[
-      high,
-      rivalByIndex(focus.id.hashCode + 1),
-      rivalByIndex(focus.id.hashCode + 2),
-    ];
+    final urgent = secsLeft <= 5;
 
     return Scaffold(
       backgroundColor: CC.bg,
@@ -120,6 +187,7 @@ class _AuctionPitScreenState extends ConsumerState<AuctionPitScreen> {
                 final a = auctions[i];
                 final d = notifier.cardById(a.cardId);
                 final selected = a.id == focus.id;
+                final lotSecs = _secsLeft(a.endsAtMs);
                 return InkWell(
                   onTap: () => setState(() => _focusId = a.id),
                   borderRadius: BorderRadius.circular(12),
@@ -149,10 +217,13 @@ class _AuctionPitScreenState extends ConsumerState<AuctionPitScreen> {
                         ),
                         const Spacer(),
                         Text(
-                          '\$${a.currentBid.toStringAsFixed(2)} · ${a.endsInTurns}d',
+                          '\$${a.currentBid.toStringAsFixed(2)} · ${lotSecs}s',
                           style: AppText.jakarta(
-                            color: CC.inkMuted,
+                            color: lotSecs <= 5
+                                ? const Color(0xFFFCA5A5)
+                                : CC.inkMuted,
                             fontSize: 11,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ],
@@ -207,25 +278,43 @@ class _AuctionPitScreenState extends ConsumerState<AuctionPitScreen> {
                         ),
                       ),
                     ),
-                    Container(
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 8,
+                        horizontal: 12,
+                        vertical: 10,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF7F1D1D).withValues(alpha: 0.35),
+                        color: urgent
+                            ? const Color(0xFF7F1D1D).withValues(alpha: 0.55)
+                            : const Color(0xFF7F1D1D).withValues(alpha: 0.35),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: const Color(0xFFF87171).withValues(alpha: 0.5),
+                          color: const Color(0xFFF87171)
+                              .withValues(alpha: urgent ? 0.85 : 0.5),
                         ),
                       ),
-                      child: Text(
-                        'CLOSES ~0:${secsLeft.toString().padLeft(2, '0')}',
-                        style: AppText.jakarta(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
-                          color: const Color(0xFFFCA5A5),
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            urgent ? 'HAMMER' : '15s HAMMER',
+                            style: AppText.jakarta(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 9,
+                              letterSpacing: 0.6,
+                              color: const Color(0xFFFCA5A5),
+                            ),
+                          ),
+                          Text(
+                            '0:${secsLeft.toString().padLeft(2, '0')}',
+                            style: AppText.jakarta(
+                              fontWeight: FontWeight.w900,
+                              fontSize: urgent ? 22 : 18,
+                              color: const Color(0xFFFCA5A5),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -260,19 +349,24 @@ class _AuctionPitScreenState extends ConsumerState<AuctionPitScreen> {
                   ],
                 ),
                 const SizedBox(height: 14),
-                ...feed.map(
-                  (line) => Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Text(
-                      '· $line',
-                      style: AppText.jakarta(
-                        color: CC.inkMuted,
-                        fontSize: 12,
-                        height: 1.35,
+                Text(
+                  'Floor chatter',
+                  style: AppText.jakarta(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 8),
+                ...(_liveFeed.isEmpty ? feed : _liveFeed).take(8).map(
+                      (line) => Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          '· $line',
+                          style: AppText.jakarta(
+                            color: CC.inkMuted,
+                            fontSize: 12,
+                            height: 1.35,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
                 const SizedBox(height: 16),
                 FilledButton(
                   onPressed: () async {

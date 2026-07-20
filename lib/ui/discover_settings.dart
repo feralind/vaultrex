@@ -7,6 +7,7 @@ import '../game/game_controller.dart';
 import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import '../widgets/cash_top_up_sheet.dart';
+import '../widgets/pixel_cat_buddy.dart';
 import 'dev_hub_screen.dart';
 import 'engagement/engagement_hub.dart';
 import 'sealed_inventory.dart';
@@ -14,11 +15,60 @@ import 'social/account_screen.dart';
 import 'social/auction_pit_screen.dart';
 import 'social/leaderboard_screen.dart';
 
-class DiscoverScreen extends ConsumerWidget {
+class DiscoverScreen extends ConsumerStatefulWidget {
   const DiscoverScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DiscoverScreen> createState() => _DiscoverScreenState();
+}
+
+class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _enter;
+  late final Animation<Offset> _slide;
+  late final Animation<double> _fade;
+  late final Animation<double> _scale;
+  bool _tickerWasOn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _enter = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 520),
+    );
+    final curve = CurvedAnimation(
+      parent: _enter,
+      curve: Curves.easeOutCubic,
+    );
+    _slide = Tween<Offset>(
+      begin: const Offset(0, 0.12),
+      end: Offset.zero,
+    ).animate(curve);
+    _fade = Tween<double>(begin: 0, end: 1).animate(curve);
+    _scale = Tween<double>(begin: 0.96, end: 1).animate(curve);
+    _enter.value = 1; // first mount if already visible
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final on = TickerMode.valuesOf(context).enabled;
+    if (on && !_tickerWasOn) {
+      // Tab became active — rise up from behind.
+      _enter.forward(from: 0);
+    }
+    _tickerWasOn = on;
+  }
+
+  @override
+  void dispose() {
+    _enter.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final fid = ref.watch(gameProvider.select((s) => s.franchiseId));
     final lots = ref.watch(gameProvider.select((s) => s.auctions.length));
     final franchise = switch (fid) {
@@ -27,90 +77,113 @@ class DiscoverScreen extends ConsumerWidget {
       _ => 'Riftbound',
     };
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-      children: [
-        Text(
-          'Discover',
-          style: AppText.jakarta(
-            fontSize: 30,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.6,
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(
+        position: _slide,
+        child: ScaleTransition(
+          scale: _scale,
+          alignment: Alignment.bottomCenter,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              ListView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+                children: [
+                  Text(
+                    'Discover',
+                    style: AppText.jakarta(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.6,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '$franchise · live room, rivals, and your shop.',
+                    style: AppText.jakarta(color: CC.inkMuted),
+                  ),
+                  const SizedBox(height: 14),
+                  const MarketEventBanner(),
+                  const OneAwayBanner(),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Destinations',
+                    style: AppText.jakarta(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  GridView.count(
+                    crossAxisCount: 2,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    childAspectRatio: 1.15,
+                    children: [
+                      _DestTile(
+                        title: 'Account',
+                        body: 'Stats, condition, highlights',
+                        color: CC.accent,
+                        icon: Icons.person_outline,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const AccountScreen(),
+                          ),
+                        ),
+                      ),
+                      _DestTile(
+                        title: 'Leaderboard',
+                        body: 'Rivals scale as you level',
+                        color: const Color(0xFFF59E0B),
+                        icon: Icons.emoji_events_outlined,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const LeaderboardScreen(),
+                          ),
+                        ),
+                      ),
+                      _DestTile(
+                        title: 'Auction Pit',
+                        body: lots > 0
+                            ? '$lots live lots'
+                            : 'Restock on Advance Day',
+                        color: const Color(0xFFF472B6),
+                        icon: Icons.gavel_rounded,
+                        pulse: lots > 0,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const AuctionPitScreen(),
+                          ),
+                        ),
+                      ),
+                      _DestTile(
+                        title: 'Collector Hub',
+                        body: 'Daily, upgrades, vault, modes',
+                        color: CC.candy,
+                        icon: Icons.dashboard_customize_outlined,
+                        onTap: () => openEngagementHub(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  _DestTile(
+                    title: 'Sealed inventory',
+                    body: 'Boxes land sealed — open or sell when you want.',
+                    color: const Color(0xFFF59E0B),
+                    icon: Icons.inventory_2_outlined,
+                    wide: true,
+                    onTap: () => showSealedInventory(context),
+                  ),
+                ],
+              ),
+              const WanderingPixelCat(size: 72),
+            ],
           ),
         ),
-        const SizedBox(height: 6),
-        Text(
-          '$franchise · live room, rivals, and your shop.',
-          style: AppText.jakarta(color: CC.inkMuted),
-        ),
-        const SizedBox(height: 14),
-        const MarketEventBanner(),
-        const OneAwayBanner(),
-        const SizedBox(height: 6),
-        Text(
-          'Destinations',
-          style: AppText.jakarta(fontWeight: FontWeight.w800, fontSize: 16),
-        ),
-        const SizedBox(height: 10),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: 1.15,
-          children: [
-            _DestTile(
-              title: 'Account',
-              body: 'Stats, condition, highlights',
-              color: CC.accent,
-              icon: Icons.person_outline,
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const AccountScreen()),
-              ),
-            ),
-            _DestTile(
-              title: 'Leaderboard',
-              body: 'Rivals scale as you level',
-              color: const Color(0xFFF59E0B),
-              icon: Icons.emoji_events_outlined,
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const LeaderboardScreen(),
-                ),
-              ),
-            ),
-            _DestTile(
-              title: 'Auction Pit',
-              body: lots > 0 ? '$lots live lots' : 'Restock on Advance Day',
-              color: const Color(0xFFF472B6),
-              icon: Icons.gavel_rounded,
-              pulse: lots > 0,
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const AuctionPitScreen(),
-                ),
-              ),
-            ),
-            _DestTile(
-              title: 'Collector Hub',
-              body: 'Daily, upgrades, vault, modes',
-              color: CC.candy,
-              icon: Icons.dashboard_customize_outlined,
-              onTap: () => openEngagementHub(context),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        _DestTile(
-          title: 'Sealed inventory',
-          body: 'Boxes land sealed — open or sell when you want.',
-          color: const Color(0xFFF59E0B),
-          icon: Icons.inventory_2_outlined,
-          wide: true,
-          onTap: () => showSealedInventory(context),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -171,11 +244,36 @@ class _DestTileState extends State<_DestTile>
 
   @override
   Widget build(BuildContext context) {
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: widget.wide ? MainAxisSize.min : MainAxisSize.max,
+      children: [
+        Icon(widget.icon, color: widget.color, size: 22),
+        if (widget.wide) ...[
+          const SizedBox(height: 12),
+        ] else
+          const Spacer(),
+        Text(
+          widget.title,
+          style: AppText.jakarta(fontWeight: FontWeight.w800, fontSize: 15),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          widget.body,
+          style: AppText.jakarta(
+            color: CC.inkMuted,
+            fontSize: 11,
+            height: 1.3,
+          ),
+        ),
+      ],
+    );
+
     return AnimatedBuilder(
       animation: _pulse,
       builder: (context, child) {
         final glow = widget.pulse ? 0.10 + _pulse.value * 0.12 : 0.16;
-        return Material(
+        final tile = Material(
           color: CC.card,
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
@@ -200,27 +298,10 @@ class _DestTileState extends State<_DestTile>
             ),
           ),
         );
+
+        return widget.wide ? tile : SizedBox.expand(child: tile);
       },
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(widget.icon, color: widget.color, size: 22),
-          const Spacer(),
-          Text(
-            widget.title,
-            style: AppText.jakarta(fontWeight: FontWeight.w800, fontSize: 15),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            widget.body,
-            style: AppText.jakarta(
-              color: CC.inkMuted,
-              fontSize: 11,
-              height: 1.3,
-            ),
-          ),
-        ],
-      ),
+      child: body,
     );
   }
 }
@@ -306,7 +387,7 @@ class SettingsScreen extends ConsumerWidget {
           contentPadding: EdgeInsets.zero,
           title: Text('Advance day', style: AppText.jakarta(fontWeight: FontWeight.w700)),
           subtitle: Text(
-            'Tick markets, auctions, and events.',
+            '1 day ≈ 2h real time (also auto-ticks when you return).',
             style: AppText.jakarta(color: CC.inkMuted, fontSize: 12),
           ),
           trailing: const Icon(Icons.skip_next_rounded),

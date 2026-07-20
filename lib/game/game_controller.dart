@@ -16,6 +16,7 @@ import '../data/tcgcsv_price_refresh.dart';
 import '../models/enums.dart';
 import '../models/models.dart';
 import 'featured_pack_opener.dart';
+import 'game_clock.dart';
 import 'pack_opener.dart';
 
 part 'rip_session.dart';
@@ -628,7 +629,10 @@ class GameNotifier extends _GameNotifierBase
         if (state.valueHistory.isEmpty) {
           _recordCollectionValue(force: true);
         }
-        await catchUpOnlineSales();
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final last = state.lastPlayedAtMs;
+        await catchUpGameDays(nowMs: now, fromMs: last);
+        await catchUpOnlineSales(nowMs: now, fromMs: last);
         await catchUpGrading();
         await _persist();
         return;
@@ -669,7 +673,10 @@ class GameNotifier extends _GameNotifierBase
       engagement: const EngagementState(),
     );
     state = fresh;
-    await catchUpOnlineSales();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final last = fresh.lastPlayedAtMs;
+    await catchUpGameDays(nowMs: now, fromMs: last);
+    await catchUpOnlineSales(nowMs: now, fromMs: last);
     await catchUpGrading();
     await _persist();
   }
@@ -1112,9 +1119,19 @@ class GameNotifier extends _GameNotifierBase
     return _sellerNames[_rng.nextInt(_sellerNames.length)];
   }
 
-  List<AuctionLot> _generateAuctions() {
+  static const int _auctionPitTarget = 11;
+
+  int _auctionEndsAtMs([int? nowMs]) {
+    final now = nowMs ?? DateTime.now().millisecondsSinceEpoch;
+    // Live hammer: close in ~12–18 seconds.
+    return now + 12000 + _rng.nextInt(6001);
+  }
+
+  List<AuctionLot> _generateAuctions([int? count, int? nowMs]) {
     final cards = List<CardDef>.from(_catalog.cards)..shuffle(_rng);
-    return cards.take(6).map((c) {
+    final n = count ?? (10 + _rng.nextInt(3)); // 10–12
+    final now = nowMs ?? DateTime.now().millisecondsSinceEpoch;
+    return cards.take(n).map((c) {
       final foil = _rng.nextDouble() < 0.35;
       final base = foil ? (c.foilMarketPrice ?? c.marketPrice * 2) : c.marketPrice;
       return AuctionLot(
@@ -1127,10 +1144,92 @@ class GameNotifier extends _GameNotifierBase
         isFake: false,
         currentBid: max(0.5, base * (0.4 + _rng.nextDouble() * 0.3)),
         minIncrement: max(0.5, base * 0.05),
-        endsInTurns: 1 + _rng.nextInt(3),
+        endsInTurns: 1, // day-tick fallback
+        endsAtMs: _auctionEndsAtMs(now),
         rivalName: rivalByIndex(_rng.nextInt(9999)).handle,
       );
     }).toList();
+  }
+
+  OwnedCard _ownedFromAuctionLot(AuctionLot a) => OwnedCard(
+        instanceId: _uuid.v4(),
+        cardId: a.cardId,
+        foil: a.foil,
+        condition: a.condition,
+        centeringLR: a.centeringLR,
+        centeringTB: a.centeringTB,
+        surface: 8.5,
+        edges: 8.5,
+        corners: 8.5,
+        defects: const [],
+      );
+
+  /// Resolve lots whose live timer has hit 0; refill to pit target.
+  Future<void> tickAuctionsLive({int? nowMs}) async {
+    if (!state.ready) return;
+    final now = nowMs ?? DateTime.now().millisecondsSinceEpoch;
+    var auctions = [...state.auctions];
+    var stamped = false;
+    for (final a in auctions) {
+      if (a.endsAtMs == null) {
+        a.endsAtMs = _auctionEndsAtMs(now);
+        stamped = true;
+      }
+    }
+
+    final finished =
+        auctions.where((a) => a.endsAtMs != null && a.endsAtMs! <= now).toList();
+    final underTarget = auctions.length < _auctionPitTarget;
+    if (finished.isEmpty && !stamped && !underTarget) return;
+
+    var player = state.player;
+    var collection = [...state.collection];
+    String? msg;
+    if (finished.isNotEmpty) {
+      for (final a in finished) {
+        if (a.playerIsHighBidder) {
+          if (player.cash >= a.currentBid) {
+            player = player.copyWith(cash: player.cash - a.currentBid);
+            collection.add(_ownedFromAuctionLot(a));
+            final def = _catalog.byId[a.cardId];
+            msg =
+                'Hammer down — won ${def?.name ?? a.cardId} for \$${a.currentBid.toStringAsFixed(2)}.';
+          } else {
+            msg = 'You won the lot but couldn\'t cover the bid.';
+          }
+        }
+      }
+      auctions =
+          auctions.where((a) => a.endsAtMs == null || a.endsAtMs! > now).toList();
+    }
+
+    if (auctions.length < _auctionPitTarget) {
+      auctions = [
+        ...auctions,
+        ..._generateAuctions(_auctionPitTarget - auctions.length, now),
+      ];
+    }
+
+    state = state.copyWith(
+      player: player,
+      collection: collection,
+      auctions: auctions,
+      message: msg,
+    );
+    await _persist();
+  }
+
+  /// Rival paddle bump when they already lead — keeps the pit lively.
+  void nudgeAuctionRival(String id) {
+    final idx = state.auctions.indexWhere((a) => a.id == id);
+    if (idx < 0) return;
+    final lot = state.auctions[idx];
+    if (lot.playerIsHighBidder) return;
+    if (_rng.nextDouble() > 0.55) return;
+    lot.currentBid =
+        double.parse((lot.currentBid + lot.minIncrement).toStringAsFixed(2));
+    lot.rivalName = rivalByIndex(_rng.nextInt(9999)).handle;
+    state = state.copyWith(auctions: [...state.auctions]);
   }
 
   MarketEvent _randomEvent() {
@@ -1333,12 +1432,43 @@ class GameNotifier extends _GameNotifierBase
   static const _catchUpWindowMs = 20 * 60 * 60 * 1000; // 20 hours
   static const _catchUpMaxChecks = 3;
   static const _catchUpChanceMult = 0.85;
+  static const _maxCatchUpGameDays = 6; // ≤12h of auto day ticks
 
-  /// Resolve missed listing sale rolls from real elapsed time (no background).
-  Future<int> catchUpOnlineSales({int? nowMs}) async {
+  /// Advance in-game days from real elapsed time (1 day ≈ [GameClock.dayLength]).
+  Future<int> catchUpGameDays({int? nowMs, int? fromMs}) async {
     if (!state.ready) return 0;
     final now = nowMs ?? DateTime.now().millisecondsSinceEpoch;
-    final last = state.lastPlayedAtMs;
+    final last = fromMs ?? state.lastPlayedAtMs;
+    if (last == null) {
+      state = state.copyWith(lastPlayedAtMs: now);
+      await _persist();
+      return 0;
+    }
+    final days = min(
+      _maxCatchUpGameDays,
+      GameClock.daysElapsed(last, now),
+    );
+    if (days <= 0) return 0;
+
+    for (var i = 0; i < days; i++) {
+      final lastPass = i == days - 1;
+      await advanceDay(
+        nowMsOverride: lastPass ? now : null,
+        bumpLastPlayed: lastPass,
+      );
+    }
+    if (state.lastPlayedAtMs != now) {
+      state = state.copyWith(lastPlayedAtMs: now);
+      await _persist();
+    }
+    return days;
+  }
+
+  /// Resolve missed listing sale rolls from real elapsed time (no background).
+  Future<int> catchUpOnlineSales({int? nowMs, int? fromMs}) async {
+    if (!state.ready) return 0;
+    final now = nowMs ?? DateTime.now().millisecondsSinceEpoch;
+    final last = fromMs ?? state.lastPlayedAtMs;
     if (last == null) {
       state = state.copyWith(lastPlayedAtMs: now);
       await _persist();
@@ -1395,7 +1525,10 @@ class GameNotifier extends _GameNotifierBase
     return soldTotal;
   }
 
-  Future<void> advanceDay() async {
+  Future<void> advanceDay({
+    int? nowMsOverride,
+    bool bumpLastPlayed = true,
+  }) async {
     var events = state.events
         .map((e) => e.copyWith(turnsLeft: e.turnsLeft - 1))
         .where((e) => e.turnsLeft > 0)
@@ -1403,7 +1536,7 @@ class GameNotifier extends _GameNotifierBase
     if (_rng.nextDouble() < 0.55) events = [...events, _randomEvent()];
 
     // Grading: realtime jobs by readyAtMs; legacy day-tick jobs still advance.
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final nowMs = nowMsOverride ?? DateTime.now().millisecondsSinceEpoch;
     final grading = state.grading.map((g) {
       if (!g.ready && !g.revealed) {
         if (g.readyAtMs != null) {
@@ -1454,24 +1587,16 @@ class GameNotifier extends _GameNotifierBase
       if (a.playerIsHighBidder) {
         if (player.cash >= a.currentBid) {
           player = player.copyWith(cash: player.cash - a.currentBid);
-          collection.add(OwnedCard(
-            instanceId: _uuid.v4(),
-            cardId: a.cardId,
-            foil: a.foil,
-            condition: a.condition,
-            centeringLR: a.centeringLR,
-            centeringTB: a.centeringTB,
-            surface: 8.5,
-            edges: 8.5,
-            corners: 8.5,
-            defects: const [],
-          ));
+          collection.add(_ownedFromAuctionLot(a));
         }
       }
     }
     auctions = auctions.where((a) => a.endsInTurns > 0).toList();
-    if (auctions.length < 6) {
-      auctions = [...auctions, ..._generateAuctions().take(6 - auctions.length)];
+    if (auctions.length < _auctionPitTarget) {
+      auctions = [
+        ...auctions,
+        ..._generateAuctions(_auctionPitTarget - auctions.length),
+      ];
     }
 
     final sealed = _generateSealedShop(events);
@@ -1592,7 +1717,7 @@ class GameNotifier extends _GameNotifierBase
       sealedListings: sealed,
       market: market,
       marketOffers: offers,
-      lastPlayedAtMs: nowMs,
+      lastPlayedAtMs: bumpLastPlayed ? nowMs : state.lastPlayedAtMs,
       message: dayMsg,
       engagement: state.engagement.copyWith(
         lastRivalBoardSize:
@@ -1724,6 +1849,68 @@ class GameNotifier extends _GameNotifierBase
     state = state.copyWith(
       binders: state.binders.where((b) => b.id != id).toList(),
       message: 'Binder removed.',
+    );
+    await _persist();
+  }
+
+  Future<void> setBinderCards(String binderId, List<String> instanceIds) async {
+    final idx = state.binders.indexWhere((b) => b.id == binderId);
+    if (idx < 0) return;
+    state = state.copyWith(
+      binders: [
+        for (final b in state.binders)
+          if (b.id == binderId)
+            b.copyWith(cardInstanceIds: List<String>.of(instanceIds))
+          else
+            b,
+      ],
+    );
+    await _persist();
+  }
+
+  Future<bool> addCardToBinder(String binderId, String instanceId) async {
+    final inCollection =
+        state.collection.any((c) => c.instanceId == instanceId);
+    if (!inCollection) return false;
+    for (final b in state.binders) {
+      if (b.cardInstanceIds.contains(instanceId)) return false;
+    }
+    final idx = state.binders.indexWhere((b) => b.id == binderId);
+    if (idx < 0) return false;
+    final binder = state.binders[idx];
+    state = state.copyWith(
+      binders: [
+        for (final b in state.binders)
+          if (b.id == binderId)
+            b.copyWith(
+              cardInstanceIds: [...binder.cardInstanceIds, instanceId],
+            )
+          else
+            b,
+      ],
+    );
+    await _persist();
+    return true;
+  }
+
+  Future<void> removeCardFromBinder(
+    String binderId,
+    String instanceId,
+  ) async {
+    final idx = state.binders.indexWhere((b) => b.id == binderId);
+    if (idx < 0) return;
+    state = state.copyWith(
+      binders: [
+        for (final b in state.binders)
+          if (b.id == binderId)
+            b.copyWith(
+              cardInstanceIds: b.cardInstanceIds
+                  .where((id) => id != instanceId)
+                  .toList(),
+            )
+          else
+            b,
+      ],
     );
     await _persist();
   }

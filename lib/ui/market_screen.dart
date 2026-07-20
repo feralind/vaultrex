@@ -1,3 +1,5 @@
+import 'dart:ui' show lerpDouble;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -54,6 +56,11 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
   bool _buying = false;
   String? _pendingGame;
   late final AnimationController _float;
+  late final ScrollController _listScroll;
+  /// 0 = expanded chrome, 1 = fully collapsed (after ~100px scroll).
+  double _collapse = 0;
+
+  static const double _collapseRange = 100;
 
   @override
   void initState() {
@@ -62,10 +69,20 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
       vsync: this,
       duration: const Duration(milliseconds: 2800),
     )..repeat(reverse: true);
+    _listScroll = ScrollController()..addListener(_onListScroll);
+  }
+
+  void _onListScroll() {
+    if (!_listScroll.hasClients) return;
+    final next = (_listScroll.offset / _collapseRange).clamp(0.0, 1.0);
+    if ((next - _collapse).abs() < 0.008) return;
+    setState(() => _collapse = next);
   }
 
   @override
   void dispose() {
+    _listScroll.removeListener(_onListScroll);
+    _listScroll.dispose();
     _float.dispose();
     super.dispose();
   }
@@ -204,6 +221,14 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
     };
     final openOffers = state.marketOffers.where((o) => o.isOpen).length;
     final dealCount = groups.where((g) => g.dealPct >= 0.08).length;
+    final c = _collapse;
+    final hideExtras = c > 0.7;
+    final titleSize = lerpDouble(30, 22, c)!;
+    final headerPadTop = lerpDouble(8, 2, c)!;
+    final franchiseH = lerpDouble(64, 44, c)!;
+    final searchPadV = lerpDouble(12, 6, c)!;
+    final cashPadV = lerpDouble(8, 5, c)!;
+    final dealPadV = lerpDouble(10, 6, c)!;
 
     return LiveAmbientBackdrop(
       intensity: 0.85,
@@ -211,7 +236,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            padding: EdgeInsets.fromLTRB(16, headerPadTop, 16, 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -223,7 +248,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: AppText.jakarta(
-                          fontSize: 30,
+                          fontSize: titleSize,
                           fontWeight: FontWeight.w800,
                           letterSpacing: -0.6,
                         ),
@@ -234,10 +259,11 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
                       child: InkWell(
                         onTap: () => showCashTopUp(context, ref),
                         borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 120),
+                          padding: EdgeInsets.symmetric(
                             horizontal: 12,
-                            vertical: 8,
+                            vertical: cashPadV,
                           ),
                           decoration: BoxDecoration(
                             color: CC.card,
@@ -252,7 +278,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
                                 style: AppText.jakarta(
                                   fontWeight: FontWeight.w800,
                                   color: const Color(0xFF34D399),
-                                  fontSize: 15,
+                                  fontSize: lerpDouble(15, 13, c),
                                 ),
                               ),
                               const SizedBox(width: 6),
@@ -268,58 +294,87 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '$franchiseLabel · pick a TCG below',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppText.jakarta(
-                          color: CC.inkMuted,
-                          fontSize: 13,
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 160),
+                  curve: Curves.easeOut,
+                  alignment: Alignment.topCenter,
+                  child: hideExtras
+                      ? const SizedBox.shrink()
+                      : Padding(
+                          padding: EdgeInsets.only(
+                            top: lerpDouble(6, 2, c)!,
+                          ),
+                          child: Opacity(
+                            opacity: (1 - (c / 0.7)).clamp(0.0, 1.0),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '$franchiseLabel · pick a TCG below',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppText.jakarta(
+                                      color: CC.inkMuted,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                                _HeaderChip(
+                                  icon: Icons.gavel_rounded,
+                                  label: 'Auctions',
+                                  onTap: () => Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => const AuctionPitScreen(),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                _HeaderChip(
+                                  icon: Icons.local_offer_outlined,
+                                  label: openOffers > 0
+                                      ? 'Offers ($openOffers)'
+                                      : 'Offers',
+                                  emphasized: openOffers > 0,
+                                  onTap: () => _showOffersSheet(context),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                    _HeaderChip(
-                      icon: Icons.gavel_rounded,
-                      label: 'Auctions',
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const AuctionPitScreen(),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    _HeaderChip(
-                      icon: Icons.local_offer_outlined,
-                      label: openOffers > 0 ? 'Offers ($openOffers)' : 'Offers',
-                      emphasized: openOffers > 0,
-                      onTap: () => _showOffersSheet(context),
-                    ),
-                  ],
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: lerpDouble(8, 4, c)!),
           FranchiseIconRow(
             activeId: active,
             onSelect: _switchMarket,
+            height: franchiseH,
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: MarketEventBanner(),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOut,
+            alignment: Alignment.topCenter,
+            child: hideExtras
+                ? const SizedBox.shrink()
+                : Opacity(
+                    opacity: (1 - (c / 0.7)).clamp(0.0, 1.0),
+                    child: const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: MarketEventBanner(),
+                    ),
+                  ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+            padding: EdgeInsets.fromLTRB(16, lerpDouble(6, 4, c)!, 16, 0),
             child: Row(
               children: [
                 Expanded(
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: dealPadV,
+                    ),
                     decoration: BoxDecoration(
                       color: CC.card,
                       borderRadius: BorderRadius.circular(12),
@@ -357,7 +412,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
                     );
                   },
                   style: FilledButton.styleFrom(
-                    minimumSize: const Size(0, 40),
+                    minimumSize: Size(0, lerpDouble(40, 34, c)!),
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                   ),
                   child: Text(
@@ -369,7 +424,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            padding: EdgeInsets.fromLTRB(16, searchPadV, 16, lerpDouble(8, 4, c)!),
             child: TextField(
               onChanged: (q) => setState(() => _query = q),
               style: AppText.jakarta(fontSize: 14),
@@ -379,7 +434,10 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
                 prefixIcon: const Icon(Icons.search, color: CC.inkMuted),
                 filled: true,
                 fillColor: CC.card,
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                isDense: hideExtras,
+                contentPadding: EdgeInsets.symmetric(
+                  vertical: lerpDouble(0, 4, c)!,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -388,7 +446,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
             ),
           ),
           SizedBox(
-            height: 40,
+            height: lerpDouble(40, 36, c)!,
             child: ListView(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -494,6 +552,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
                     ),
                   )
                 : ListView(
+                    controller: _listScroll,
                     padding: const EdgeInsets.fromLTRB(0, 8, 0, 28),
                     children: [
                       if (carousel.isNotEmpty) ...[

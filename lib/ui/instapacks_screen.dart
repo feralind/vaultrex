@@ -13,9 +13,10 @@ import '../widgets/cash_top_up_sheet.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/knockout_image.dart';
 import '../widgets/live_ambient.dart';
-import '../ui/featured_pack_detail.dart';
-import '../ui/pack_detail.dart';
-import '../ui/sealed_inventory.dart';
+import 'engagement/engagement_hub.dart';
+import 'featured_pack_detail.dart';
+import 'pack_detail.dart';
+import 'sealed_inventory.dart';
 
 class InstapacksScreen extends ConsumerStatefulWidget {
   const InstapacksScreen({super.key});
@@ -83,6 +84,14 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen>
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 4, 16, 4),
                 child: SealedInventoryBanner(),
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 0, 16, 4),
+                child: MarketEventBanner(),
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 0, 16, 4),
+                child: FeaturedDropTimer(),
               ),
               SizedBox(
                 height: 64,
@@ -152,12 +161,22 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen>
                 delegate: SliverChildBuilderDelegate(
                   (context, i) {
                     final pack = featuredPacks[i];
-                    return _FeaturedTile(
-                      pack: pack,
-                      chaseArtUrls: _featuredChaseUrls(notifier, pack),
-                      float: _sharedFloat,
-                      franchiseId: active,
-                      onTap: () => showFeaturedPackDetail(context, ref, pack),
+                    return Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        _FeaturedTile(
+                          pack: pack,
+                          chaseArtUrls: _featuredChaseUrls(notifier, pack),
+                          float: _sharedFloat,
+                          franchiseId: active,
+                          onTap: () => showFeaturedPackDetail(context, ref, pack),
+                        ),
+                        Positioned(
+                          left: 6,
+                          top: 6,
+                          child: FeaturedPityChip(packId: pack.id),
+                        ),
+                      ],
                     );
                   },
                   childCount: featuredPacks.length,

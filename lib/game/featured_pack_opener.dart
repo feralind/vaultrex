@@ -17,7 +17,7 @@ class FeaturedPackOpener {
   final math.Random _rng;
   final _uuid = const Uuid();
 
-  List<OwnedCard> open(FeaturedPackDef pack) {
+  List<OwnedCard> open(FeaturedPackDef pack, {double pityBoost = 1.0}) {
     final pool = pack.poolSelector(catalog.cards);
     if (pool.isEmpty) {
       final fallback = catalog.cards
@@ -38,7 +38,7 @@ class FeaturedPackOpener {
       pulls.add(_instantiate(def));
     }
 
-    final highlight = _pickHighlight(pool, fillers);
+    final highlight = _pickHighlight(pool, fillers, pityBoost: pityBoost);
     pulls.add(_instantiate(highlight, forceFoil: true));
     return pulls;
   }
@@ -61,8 +61,9 @@ class FeaturedPackOpener {
   /// dominate the last slot without making every rip identical.
   CardDef _pickHighlight(
     List<({CardDef card, double weight})> pool,
-    List<CardDef> already,
-  ) {
+    List<CardDef> already, {
+    double pityBoost = 1.0,
+  }) {
     final ranked = [...pool]
       ..sort((a, b) => b.card.marketPrice.compareTo(a.card.marketPrice));
     final topN = ranked.take(math.min(24, ranked.length)).toList();
@@ -71,7 +72,10 @@ class FeaturedPackOpener {
       final novelty = already.any((c) => c.id == e.card.id) ? 0.55 : 1.0;
       final ev =
           math.pow(e.card.marketPrice.clamp(0.5, 5000), 1.35).toDouble();
-      boosted.add((card: e.card, weight: e.weight * ev * novelty));
+      boosted.add((
+        card: e.card,
+        weight: e.weight * ev * novelty * pityBoost,
+      ));
     }
     return _weightedPick(boosted);
   }

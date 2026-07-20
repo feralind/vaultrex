@@ -742,6 +742,7 @@ class AuctionLot {
     required this.currentBid,
     required this.minIncrement,
     required this.endsInTurns,
+    this.endsAtMs,
     this.playerIsHighBidder = false,
     this.rivalName,
   });
@@ -756,6 +757,8 @@ class AuctionLot {
   double currentBid;
   final double minIncrement;
   int endsInTurns;
+  /// Wall-clock close time (ms since epoch). Null on older saves — UI/generator assigns.
+  int? endsAtMs;
   bool playerIsHighBidder;
   /// Simulated rival currently pressing the lot (Phase 7).
   String? rivalName;
@@ -771,6 +774,7 @@ class AuctionLot {
         'currentBid': currentBid,
         'minIncrement': minIncrement,
         'endsInTurns': endsInTurns,
+        if (endsAtMs != null) 'endsAtMs': endsAtMs,
         'playerIsHighBidder': playerIsHighBidder,
         'rivalName': rivalName,
       };
@@ -786,6 +790,7 @@ class AuctionLot {
         currentBid: (j['currentBid'] as num).toDouble(),
         minIncrement: (j['minIncrement'] as num).toDouble(),
         endsInTurns: j['endsInTurns'] as int,
+        endsAtMs: (j['endsAtMs'] as num?)?.toInt(),
         playerIsHighBidder: j['playerIsHighBidder'] as bool? ?? false,
         rivalName: j['rivalName'] as String?,
       );

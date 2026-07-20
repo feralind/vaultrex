@@ -68,7 +68,10 @@ HapticTier hapticTierFor({
   return HapticTier.common;
 }
 
-/// Rare Candy–style SFX pool (low-latency overlapping short WAVs).
+/// Rare Candy–style SFX pool (low-latency overlapping shorts).
+///
+/// Pack / flip / flick / click cues use the imported MP3 set under [assets/sfx].
+/// Reveal-tier stingers keep the short WAV bank.
 class BindoraSounds {
   static bool _ready = false;
   static bool _muted = false;
@@ -76,19 +79,22 @@ class BindoraSounds {
   static int _cursor = 0;
   static const _poolSize = 6;
 
-  static const peelTickAsset = 'sfx/peel_tick.wav';
-  static const peelRipAsset = 'sfx/peel_rip.wav';
-  static const packOpenAsset = 'sfx/pack_open.wav';
-  static const flipAsset = 'sfx/flip.wav';
-  static const swipeKeepAsset = 'sfx/swipe_keep.wav';
-  static const swipeSellAsset = 'sfx/swipe_sell.wav';
+  // User pack / interaction set (mp3).
+  static const peelTickAsset = 'sfx/flick.mp3';
+  static const peelRipAsset = 'sfx/pack_unsleeve.mp3';
+  static const packOpenAsset = 'sfx/pack_open.mp3';
+  static const flipAsset = 'sfx/flip_card.mp3';
+  static const swipeKeepAsset = 'sfx/flick.mp3';
+  static const swipeSellAsset = 'sfx/flick_reverse.mp3';
+  static const cardLandAsset = 'sfx/paper_flip.mp3';
+  static const uiClickAsset = 'sfx/click.mp3';
+  static const foilShimmerAsset = 'sfx/paper_flip.mp3';
+
+  // Reveal tiers (existing wav bank).
   static const revealCommonAsset = 'sfx/reveal_common.wav';
   static const revealUncommonAsset = 'sfx/reveal_uncommon.wav';
   static const revealRareAsset = 'sfx/reveal_rare.wav';
   static const revealChaseAsset = 'sfx/reveal_chase.wav';
-  static const foilShimmerAsset = 'sfx/foil_shimmer.wav';
-  static const cardLandAsset = 'sfx/card_land.wav';
-  static const uiClickAsset = 'sfx/ui_click.wav';
 
   static Future<void> init() async {
     if (_ready) return;

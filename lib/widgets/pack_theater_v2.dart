@@ -1,6 +1,4 @@
-import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -13,9 +11,8 @@ import '../models/enums.dart';
 import '../models/models.dart';
 import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
+import '../ui/engagement/engagement_hub.dart';
 import 'brand.dart';
-import 'foil_slab.dart';
-import 'game_widgets.dart';
 
 Future<void> showPackTheaterV2(
   BuildContext context,
@@ -89,6 +86,10 @@ Future<void> showPackTheaterV2(
       );
     },
   );
+
+  if (context.mounted) {
+    await showOpenAnotherSheet(context, ref);
+  }
 }
 
 enum _RipPhaseV2 { sealed, ripping, lineup, deciding }
@@ -119,7 +120,6 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
 
   _RipPhaseV2 _phase = _RipPhaseV2.sealed;
   int _cardIndex = 0;
-  int _tumblingCardCount = 0;
   bool _deciding = false;
   bool _sessionBusy = false;
   double _swipeDx = 0;
@@ -564,7 +564,7 @@ class _SealedStage extends StatelessWidget {
                           ? Image.network(
                               packImageUrl!,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
+                              errorBuilder: (context, error, stackTrace) =>
                                   const ColoredBox(color: Color(0xFF1a1a2e)),
                             )
                           : const ColoredBox(color: Color(0xFF1a1a2e)),
@@ -931,9 +931,11 @@ class _FlipCard extends StatelessWidget {
                   color: const Color(0xFF0C1428),
                   child: Center(
                     child: Image.asset(
-                      'assets/logos/riftbound_wordmark.png',
+                      'assets/logos/bindora.png',
                       width: 100,
                       opacity: const AlwaysStoppedAnimation(0.3),
+                      errorBuilder: (context, error, stackTrace) =>
+                          const SizedBox.shrink(),
                     ),
                   ),
                 )
@@ -941,7 +943,7 @@ class _FlipCard extends StatelessWidget {
                 CachedNetworkImage(
                   imageUrl: artUrl,
                   fit: BoxFit.cover,
-                  errorWidget: (_, __, ___) =>
+                  errorWidget: (context, url, error) =>
                       const ColoredBox(color: Color(0xFF0C1428)),
                 ),
               // Glow overlay - shows for ALL cards but stronger for hits

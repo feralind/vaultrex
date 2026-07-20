@@ -4,8 +4,9 @@ import '../data/riftbound_catalog.dart';
 import '../data/rival_personas.dart';
 import '../models/enums.dart';
 import '../models/models.dart';
+import 'game_clock.dart';
 
-/// Competitive weekly boards — what you're actually racing on.
+/// Competitive daily boards — what you're actually racing on.
 enum RivalBoardMetric {
   binder,
   flips,
@@ -21,7 +22,7 @@ extension RivalBoardMetricX on RivalBoardMetric {
 
   String get blurb => switch (this) {
         RivalBoardMetric.binder =>
-          'Who stacked the fattest portfolio this week.',
+          'Who stacked the fattest portfolio today.',
         RivalBoardMetric.flips =>
           'Estimated cash from cards sold — flip energy.',
         RivalBoardMetric.greens =>
@@ -90,18 +91,17 @@ class RivalShowcaseCard {
 }
 
 class RivalSim {
-  /// Week-stable seed.
-  static int weekSeed([DateTime? now]) {
-    final d = now ?? DateTime.now();
-    return d.year * 100 + (d.difference(DateTime(d.year)).inDays ~/ 7);
-  }
+  /// Day-stable seed — one board day = [GameClock.dayLength] real time (~2h).
+  static int daySeed([DateTime? now]) => GameClock.daySeed(now);
+
+  /// Alias for older call sites — same as [daySeed].
+  static int weekSeed([DateTime? now]) => daySeed(now);
 
   /// Rough cash-from-sales proxy when we don't track lifetime revenue.
   static double playerFlipCash({
     required int cardsSold,
     required double binderValue,
   }) {
-    // Early game: sold count dominates; later binder implies bigger tickets.
     final ticket = math.max(4.0, binderValue / math.max(12, cardsSold + 8));
     return cardsSold * ticket;
   }
@@ -112,9 +112,9 @@ class RivalSim {
     RivalBoardMetric metric = RivalBoardMetric.binder,
     int playerCardsSold = 0,
     int playerGemsPulled = 0,
-    int? week,
+    int? day,
   }) {
-    final seed = week ?? weekSeed();
+    final seed = day ?? daySeed();
     final n = rivalBoardSizeForLevel(businessLevel);
     final roster = rivalPersonas.take(n).toList();
     final playerScore = _playerScore(
@@ -190,7 +190,6 @@ class RivalSim {
     required math.Random local,
     required RivalPersona persona,
   }) {
-    // Personality nudges: whales lean binder, snipers lean flips, hunters lean greens.
     var bias = 1.0;
     final tags = persona.personality;
     switch (metric) {
@@ -215,7 +214,8 @@ class RivalSim {
       RivalBoardMetric.greens => 0.0,
     };
     final spread = 0.45 + local.nextDouble() * 1.05;
-    final jitter = (local.nextDouble() - 0.5) * math.max(1.0, playerScore) * 0.22;
+    final jitter =
+        (local.nextDouble() - 0.5) * math.max(1.0, playerScore) * 0.22;
     final raw = playerScore * spread * bias + jitter;
     if (metric == RivalBoardMetric.greens) {
       return math.max(floor, raw).roundToDouble();
@@ -263,7 +263,7 @@ class RivalSim {
         .toList();
     if (cards.isEmpty) return const [];
 
-    final rng = math.Random(persona.seed * 17 + weekSeed());
+    final rng = math.Random(persona.seed * 17 + daySeed());
     final sorted = [...cards]
       ..sort((a, b) => b.marketPrice.compareTo(a.marketPrice));
     final pool = sorted.take(math.min(80, sorted.length)).toList();
@@ -298,13 +298,24 @@ class RivalSim {
     required String cardName,
     required double bid,
     required int endsInTurns,
+    int? secsLeft,
+    int? paddleCount,
   }) {
     final name = highBidder?.handle ?? 'A rival';
+    final secs = secsLeft;
+    final paddles = paddleCount ?? 4;
     return [
-      if (endsInTurns <= 1)
+      if (secs != null && secs <= 5)
+        'HAMMER — ${secs}s left. Paddles flying.',
+      if (secs != null && secs > 5 && secs <= 10)
+        'Clock bleeding — $secs on the hammer.',
+      if (secs == null && endsInTurns <= 1)
         'Anti-snipe: clock got a slap — paddles up.',
       '$name holds \$${bid.toStringAsFixed(2)} on $cardName.',
       if (highBidder != null) highBidder.quirk,
+      '$paddles paddles still waving in the pit.',
+      if (secs != null && secs <= 3)
+        'Going once… going twice…',
       'Read the room. Don\'t feed the hype.',
     ];
   }
