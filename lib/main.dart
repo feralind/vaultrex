@@ -4,16 +4,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'data/onboarding.dart';
 import 'game/game_controller.dart';
+import 'services/bindora_feel.dart';
 import 'theme/app_theme.dart';
 import 'ui/collection_screen.dart';
 import 'ui/discover_settings.dart';
+import 'ui/engagement/engagement_hub.dart';
 import 'ui/instapacks_screen.dart';
 import 'ui/market_screen.dart';
 import 'ui/onboarding_flow.dart';
 import 'widgets/pack_theater.dart';
+import 'data/engagement_defs.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await BindoraSounds.init();
   runApp(const ProviderScope(child: BindoraApp()));
 }
 
@@ -212,6 +216,44 @@ class _HomeShellState extends ConsumerState<HomeShell>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(msg)),
           );
+        });
+      }
+
+      final resume = next.engagement.pendingResumeMessage;
+      if (resume != null &&
+          resume != prev?.engagement.pendingResumeMessage) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(resume)),
+          );
+          await ref.read(gameProvider.notifier).clearResumeMessage();
+        });
+      }
+
+      final pending = next.engagement.pendingAchievementIds;
+      if (pending.isNotEmpty &&
+          pending != prev?.engagement.pendingAchievementIds) {
+        final id = pending.first;
+        final def = achievementById(id);
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          if (!mounted) return;
+          await BindoraHaptics.success();
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                def == null
+                    ? 'Achievement unlocked!'
+                    : 'Achievement: ${def.title}',
+              ),
+              action: SnackBarAction(
+                label: 'View',
+                onPressed: () => openEngagementHub(context),
+              ),
+            ),
+          );
+          await ref.read(gameProvider.notifier).clearPendingAchievements();
         });
       }
     });

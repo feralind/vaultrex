@@ -1,6 +1,8 @@
 import '../data/scrydex_art.dart';
 import 'enums.dart';
 
+export 'engagement.dart';
+
 class CardDef {
   const CardDef({
     required this.id,
@@ -637,6 +639,8 @@ class MarketOffer {
     required this.expiresOnDay,
     this.counterAmount,
     this.status = MarketOfferStatus.pending,
+    this.npcId,
+    this.flavor,
   });
 
   final String id;
@@ -646,6 +650,9 @@ class MarketOffer {
   MarketOfferStatus status;
   final int createdDay;
   final int expiresOnDay;
+  /// Recurring collector personality (Phase 7).
+  final String? npcId;
+  String? flavor;
 
   bool get isOpen =>
       status == MarketOfferStatus.pending ||
@@ -659,6 +666,8 @@ class MarketOffer {
         'status': status.name,
         'createdDay': createdDay,
         'expiresOnDay': expiresOnDay,
+        'npcId': npcId,
+        'flavor': flavor,
       };
 
   factory MarketOffer.fromJson(Map<String, dynamic> j) => MarketOffer(
@@ -671,6 +680,8 @@ class MarketOffer {
         ),
         createdDay: j['createdDay'] as int? ?? 1,
         expiresOnDay: j['expiresOnDay'] as int? ?? 3,
+        npcId: j['npcId'] as String?,
+        flavor: j['flavor'] as String?,
       );
 }
 
@@ -732,6 +743,7 @@ class AuctionLot {
     required this.minIncrement,
     required this.endsInTurns,
     this.playerIsHighBidder = false,
+    this.rivalName,
   });
 
   final String id;
@@ -745,6 +757,8 @@ class AuctionLot {
   final double minIncrement;
   int endsInTurns;
   bool playerIsHighBidder;
+  /// Simulated rival currently pressing the lot (Phase 7).
+  String? rivalName;
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -758,6 +772,7 @@ class AuctionLot {
         'minIncrement': minIncrement,
         'endsInTurns': endsInTurns,
         'playerIsHighBidder': playerIsHighBidder,
+        'rivalName': rivalName,
       };
 
   factory AuctionLot.fromJson(Map<String, dynamic> j) => AuctionLot(
@@ -772,6 +787,7 @@ class AuctionLot {
         minIncrement: (j['minIncrement'] as num).toDouble(),
         endsInTurns: j['endsInTurns'] as int,
         playerIsHighBidder: j['playerIsHighBidder'] as bool? ?? false,
+        rivalName: j['rivalName'] as String?,
       );
 }
 

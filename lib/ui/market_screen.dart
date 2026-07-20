@@ -14,6 +14,8 @@ import '../widgets/fake_google_pay_sheet.dart';
 import '../widgets/franchise_icon_row.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/live_ambient.dart';
+import 'engagement/engagement_hub.dart';
+import 'social/auction_pit_screen.dart';
 
 enum _MarketFilter { all, raw, psa, foil }
 
@@ -210,104 +212,93 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
                         'Market',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: AppText.jakarta(
                           fontSize: 30,
                           fontWeight: FontWeight.w800,
                           letterSpacing: -0.6,
                         ),
                       ),
-                      Text(
+                    ),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => showCashTopUp(context, ref),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: CC.card,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: CC.line),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '\$${state.player.cash.toStringAsFixed(2)}',
+                                style: AppText.jakarta(
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF34D399),
+                                  fontSize: 15,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Icon(
+                                Icons.add_circle_outline,
+                                size: 16,
+                                color: CC.inkMuted.withValues(alpha: 0.9),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
                         '$franchiseLabel · pick a TCG below',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: AppText.jakarta(
                           color: CC.inkMuted,
                           fontSize: 13,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () => _showOffersSheet(context),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: CC.card,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: openOffers > 0
-                              ? CC.accent.withValues(alpha: 0.55)
-                              : CC.line,
+                    ),
+                    _HeaderChip(
+                      icon: Icons.gavel_rounded,
+                      label: 'Auctions',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AuctionPitScreen(),
                         ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.local_offer_outlined,
-                            size: 16,
-                            color: openOffers > 0 ? CC.accent : CC.inkMuted,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            openOffers > 0 ? 'Offers ($openOffers)' : 'Offers',
-                            style: AppText.jakarta(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                              color: openOffers > 0 ? CC.accent : CC.ink,
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () => showCashTopUp(context, ref),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: CC.card,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: CC.line),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '\$${state.player.cash.toStringAsFixed(2)}',
-                            style: AppText.jakarta(
-                              fontWeight: FontWeight.w800,
-                              color: const Color(0xFF34D399),
-                              fontSize: 15,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Icon(
-                            Icons.add_circle_outline,
-                            size: 16,
-                            color: CC.inkMuted.withValues(alpha: 0.9),
-                          ),
-                        ],
-                      ),
+                    const SizedBox(width: 8),
+                    _HeaderChip(
+                      icon: Icons.local_offer_outlined,
+                      label: openOffers > 0 ? 'Offers ($openOffers)' : 'Offers',
+                      emphasized: openOffers > 0,
+                      onTap: () => _showOffersSheet(context),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),
@@ -316,6 +307,10 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
           FranchiseIconRow(
             activeId: active,
             onSelect: _switchMarket,
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: MarketEventBanner(),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
@@ -773,11 +768,15 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                isCounter
-                                    ? 'Counter \$${o.counterAmount!.toStringAsFixed(2)}'
+                                [
+                                  if (isCounter)
+                                    'Counter \$${o.counterAmount!.toStringAsFixed(2)}'
                                         ' (your \$${o.offerAmount.toStringAsFixed(2)} escrowed)'
-                                    : 'Pending \$${o.offerAmount.toStringAsFixed(2)}'
+                                  else
+                                    'Pending \$${o.offerAmount.toStringAsFixed(2)}'
                                         ' · expires day ${o.expiresOnDay}',
+                                  if (o.flavor != null) o.flavor!,
+                                ].join('\n'),
                                 style: AppText.jakarta(
                                   fontSize: 12,
                                   color: CC.inkMuted,
@@ -898,6 +897,60 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
           },
         );
       },
+    );
+  }
+}
+
+class _HeaderChip extends StatelessWidget {
+  const _HeaderChip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.emphasized = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: CC.card,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: emphasized ? CC.accent.withValues(alpha: 0.55) : CC.line,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 15,
+                color: emphasized ? CC.accent : CC.inkMuted,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: AppText.jakarta(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                  color: emphasized ? CC.accent : CC.ink,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

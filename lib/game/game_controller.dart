@@ -5,11 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../data/database.dart';
+import '../data/engagement_defs.dart';
 import '../data/featured_packs.dart';
 import '../data/pricing.dart';
 import '../data/onboarding.dart';
 import '../data/price_history.dart';
 import '../data/riftbound_catalog.dart';
+import '../data/rival_personas.dart';
 import '../data/tcgcsv_price_refresh.dart';
 import '../models/enums.dart';
 import '../models/models.dart';
@@ -19,6 +21,7 @@ import 'pack_opener.dart';
 part 'rip_session.dart';
 part 'shop_actions.dart';
 part 'grading_actions.dart';
+part 'engagement_actions.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase();
@@ -203,6 +206,7 @@ class GameState {
     this.recentlyKeptIds = const {},
     this.marketOffers = const [],
     this.lastPlayedAtMs,
+    this.engagement = const EngagementState(),
   });
 
   final bool ready;
@@ -230,6 +234,7 @@ class GameState {
   final List<MarketOffer> marketOffers;
   /// Wall-clock ms of last session tick (listing catch-up).
   final int? lastPlayedAtMs;
+  final EngagementState engagement;
 
   factory GameState.loading() => GameState(
         ready: false,
@@ -254,6 +259,7 @@ class GameState {
         recentlyKeptIds: const {},
         marketOffers: const [],
         lastPlayedAtMs: null,
+        engagement: const EngagementState(),
       );
 
   GameState copyWith({
@@ -282,6 +288,7 @@ class GameState {
     Set<String>? recentlyKeptIds,
     List<MarketOffer>? marketOffers,
     int? lastPlayedAtMs,
+    EngagementState? engagement,
   }) {
     return GameState(
       ready: ready ?? this.ready,
@@ -307,6 +314,7 @@ class GameState {
       recentlyKeptIds: recentlyKeptIds ?? this.recentlyKeptIds,
       marketOffers: marketOffers ?? this.marketOffers,
       lastPlayedAtMs: lastPlayedAtMs ?? this.lastPlayedAtMs,
+      engagement: engagement ?? this.engagement,
     );
   }
 
@@ -329,6 +337,7 @@ class GameState {
         'binders': binders.map((e) => e.toJson()).toList(),
         'marketOffers': marketOffers.map((e) => e.toJson()).toList(),
         'lastPlayedAtMs': lastPlayedAtMs,
+        'engagement': engagement.toJson(),
       };
 
   factory GameState.fromJson(Map<String, dynamic> j) {
@@ -359,6 +368,7 @@ class GameState {
         recentlyKeptIds: const {},
         marketOffers: const [],
         lastPlayedAtMs: null,
+        engagement: const EngagementState(),
       );
     }
     final fid = GameCatalog.normalizeId(
@@ -411,6 +421,9 @@ class GameState {
           .map((e) => MarketOffer.fromJson(e as Map<String, dynamic>))
           .toList(),
       lastPlayedAtMs: j['lastPlayedAtMs'] as int?,
+      engagement: EngagementState.fromJson(
+        j['engagement'] as Map<String, dynamic>?,
+      ),
     );
   }
 }
@@ -457,10 +470,23 @@ abstract class _GameNotifierBase extends Notifier<GameState> {
   void _recordCollectionValue({bool force = false});
   double fairFor(OwnedCard card);
   SealedProduct? sealedById(String id);
+
+  /// Engagement hooks (overridden by [_EngagementActions]).
+  void _onEngagementPackOpened() {}
+  void _onEngagementCardListed() {}
+  void _onEngagementGradeSent() {}
+  void _onEngagementGradeRevealed() {}
+  void _recordPullHistory(List<OwnedCard> pulls, {String? packLabel}) {}
+  EngagementState _afterFeaturedRipHook({
+    required String packId,
+    required bool hitChase,
+  }) =>
+      state.engagement;
+  Future<void> checkSetMilestones() async {}
 }
 
 class GameNotifier extends _GameNotifierBase
-    with _RipSession, _ShopActions, _GradingActions {
+    with _RipSession, _ShopActions, _GradingActions, _EngagementActions {
   RiftboundCatalog get catalog => _catalog;
 
   String get activeGameId => _catalog.gameId;
@@ -550,6 +576,7 @@ class GameNotifier extends _GameNotifierBase
       recentlyKeptIds: const {},
       marketOffers: const [],
       lastPlayedAtMs: DateTime.now().millisecondsSinceEpoch,
+      engagement: const EngagementState(),
     );
   }
 
@@ -639,6 +666,7 @@ class GameNotifier extends _GameNotifierBase
       recentlyKeptIds: const {},
       marketOffers: const [],
       lastPlayedAtMs: DateTime.now().millisecondsSinceEpoch,
+      engagement: const EngagementState(),
     );
     state = fresh;
     await catchUpOnlineSales();
@@ -1100,6 +1128,7 @@ class GameNotifier extends _GameNotifierBase
         currentBid: max(0.5, base * (0.4 + _rng.nextDouble() * 0.3)),
         minIncrement: max(0.5, base * 0.05),
         endsInTurns: 1 + _rng.nextInt(3),
+        rivalName: rivalByIndex(_rng.nextInt(9999)).handle,
       );
     }).toList();
   }
@@ -1173,7 +1202,19 @@ class GameNotifier extends _GameNotifierBase
     }
     lot.currentBid = next;
     lot.playerIsHighBidder = true;
-    state = state.copyWith(auctions: [...state.auctions], message: 'You are high bidder.');
+    // Rival pressure — sometimes counters immediately (Phase 7).
+    String? msg = 'You are high bidder.';
+    if (_rng.nextDouble() < 0.42) {
+      final rival = rivalByIndex(_rng.nextInt(9999)).handle;
+      lot.rivalName = rival;
+      final rivalBid = next + lot.minIncrement;
+      lot.currentBid = rivalBid;
+      lot.playerIsHighBidder = false;
+      msg = '$rival outbid you to \$${rivalBid.toStringAsFixed(2)}.';
+    } else {
+      lot.rivalName ??= rivalByIndex(lot.id.hashCode).handle;
+    }
+    state = state.copyWith(auctions: [...state.auctions], message: msg);
     await _persist();
   }
 
@@ -1244,7 +1285,10 @@ class GameNotifier extends _GameNotifierBase
       final def = _catalog.byId[card.cardId];
       if (def == null) continue;
       final fair = Pricing.fairValue(def, card, events: events);
-      final ratio = listing.ask / max(0.01, fair);
+      // NPC buyers: fairBias shifts what they'll pay relative to ask.
+      final buyer = npcForIndex(listing.id.hashCode + listing.listedDay);
+      final willing = fair * buyer.fairBias;
+      final ratio = listing.ask / max(0.01, willing);
       var chance = ratio <= 0.95
           ? 0.62
           : ratio <= 1.05
@@ -1254,7 +1298,8 @@ class GameNotifier extends _GameNotifierBase
                   : ratio <= 1.3
                       ? 0.08
                       : 0.02;
-      chance = (chance * chanceMult).clamp(0.0, 1.0);
+      chance = (chance * chanceMult * (0.85 + buyer.fairBias * 0.15))
+          .clamp(0.0, 1.0);
       if (_rng.nextDouble() < chance) {
         final fee = listing.ask * Pricing.platformFeeRate(p);
         p = p.copyWith(
@@ -1335,6 +1380,12 @@ class GameNotifier extends _GameNotifierBase
       message: soldTotal > 0
           ? 'While you were away: $soldTotal listing(s) sold.'
           : state.message,
+      engagement: soldTotal > 0
+          ? state.engagement.copyWith(
+              pendingResumeMessage:
+                  'While away: $soldTotal listing(s) sold.',
+            )
+          : state.engagement,
     );
     if (soldTotal > 0) {
       _recordCollectionValue();
@@ -1451,11 +1502,15 @@ class GameNotifier extends _GameNotifierBase
         continue;
       }
       final listing = market[listingIdx];
-      final ratio = o.offerAmount / max(0.01, listing.price);
+      final npc = o.npcId != null ? npcById(o.npcId!) : npcForIndex(o.id.hashCode);
+      // fairBias softens/hardens how "fair" the offer looks to the NPC.
+      final ratio =
+          (o.offerAmount / max(0.01, listing.price)) / max(0.5, npc.fairBias);
       final decision = _sellerOfferDecision(listing.sellerType, ratio);
 
       if (decision == _OfferDecision.accept) {
         o.status = MarketOfferStatus.accepted;
+        o.flavor = '${npc.name} accepted — ${npc.quirk}';
         collection.add(_ownedFromMarketListing(listing));
         acceptedListingIds.add(listing.id);
         offerUpdates++;
@@ -1466,8 +1521,10 @@ class GameNotifier extends _GameNotifierBase
           SellerType.goblin => 0.94,
           SellerType.scammy => 0.95,
         };
+        // Cheapskate NPCs push counters higher; generous ones meet closer.
+        final biasMult = (1.04 - (npc.fairBias - 1.0) * 0.08).clamp(0.90, 1.08);
         o.counterAmount = double.parse(
-          max(o.offerAmount + 0.01, listing.price * counterMult)
+          max(o.offerAmount + 0.01, listing.price * counterMult * biasMult)
               .toStringAsFixed(2),
         );
         // Soft-counter never above ask.
@@ -1477,13 +1534,17 @@ class GameNotifier extends _GameNotifierBase
         }
         if (o.counterAmount! <= o.offerAmount) {
           o.status = MarketOfferStatus.rejected;
+          o.flavor = '${npc.name} walked — ${npc.quirk}';
           player = player.copyWith(cash: player.cash + o.offerAmount);
         } else {
           o.status = MarketOfferStatus.countered;
+          o.flavor =
+              '${npc.name} countered at \$${o.counterAmount!.toStringAsFixed(2)} — ${npc.quirk}';
         }
         offerUpdates++;
       } else {
         o.status = MarketOfferStatus.rejected;
+        o.flavor = '${npc.name} rejected — ${npc.quirk}';
         player = player.copyWith(cash: player.cash + o.offerAmount);
         offerUpdates++;
       }
@@ -1533,6 +1594,11 @@ class GameNotifier extends _GameNotifierBase
       marketOffers: offers,
       lastPlayedAtMs: nowMs,
       message: dayMsg,
+      engagement: state.engagement.copyWith(
+        lastRivalBoardSize:
+            rivalBoardSizeForLevel(player.businessLevel),
+        rivalMoodSeed: state.day * 17 + nextDay,
+      ),
     );
     state = _sanitizeEconomy(next);
     _checkAchievements();
@@ -1545,15 +1611,41 @@ class GameNotifier extends _GameNotifierBase
     final p = state.player;
     final next = {...p.unlockedAchievements};
     if (p.packsOpened >= 10) next.add('ripper_10');
+    if (p.packsOpened >= 50) next.add('ripper_50');
     if (p.gemsPulled >= 1) next.add('first_gem');
     if (p.cardsSold >= 5) next.add('seller_5');
+    if (p.cardsSold >= 25) next.add('seller_25');
     if (state.collection.length >= 50) next.add('binder_50');
+    if (state.collection.length >= 150) next.add('binder_150');
+    if (state.engagement.gradedRevealedCount >= 1) next.add('grader_1');
+    if (state.engagement.dailyStreak >= 3) next.add('streak_3');
+    for (final key in state.engagement.setMilestonesClaimed) {
+      if (key.endsWith(':100')) {
+        next.add('set_complete');
+        break;
+      }
+    }
     if (next.length == p.unlockedAchievements.length &&
         next.containsAll(p.unlockedAchievements)) {
       return;
     }
+    final newly = next.difference(p.unlockedAchievements).toList();
+    final level = businessLevelFromXp(p.xp);
     state = state.copyWith(
-      player: p.copyWith(unlockedAchievements: next),
+      player: p.copyWith(
+        unlockedAchievements: next,
+        businessLevel: level,
+      ),
+      engagement: state.engagement.copyWith(
+        pendingAchievementIds: [
+          ...newly,
+          ...state.engagement.pendingAchievementIds,
+        ],
+        binderPagesUnlocked: max(
+          state.engagement.binderPagesUnlocked,
+          binderPagesForLevel(level),
+        ),
+      ),
     );
   }
 

@@ -33,6 +33,7 @@ mixin _RipSession on _GameNotifierBase {
       final player = state.player.copyWith(
         packsOpened: state.player.packsOpened + 1,
         xp: state.player.xp + 2,
+        businessLevel: businessLevelFromXp(state.player.xp + 2),
       );
       state = state.copyWith(
         player: player,
@@ -40,6 +41,8 @@ mixin _RipSession on _GameNotifierBase {
         lastRip: pulls,
         message: 'Ripping ${pack.setCode}…',
       );
+      _recordPullHistory(pulls, packLabel: pack.setCode);
+      _onEngagementPackOpened();
       _checkAchievements();
       await _persist();
       return true;
@@ -197,6 +200,8 @@ mixin _RipSession on _GameNotifierBase {
             },
           );
           _recordCollectionValue();
+          // Fire-and-forget set milestone candy (Phase 3).
+          unawaited(checkSetMilestones());
         } else {
           state = state.copyWith(clearLastRip: true);
         }

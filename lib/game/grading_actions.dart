@@ -32,6 +32,7 @@ mixin _GradingActions on _GameNotifierBase {
       grading: [...state.grading, job],
       message: 'Sent to ${company.label} · ~${secs}s.',
     );
+    _onEngagementGradeSent();
     await _persist();
     // Complete in the background so the card sheet can be dismissed.
     unawaited(_finishRealtimeWhenReady(job.id, secs));
@@ -57,6 +58,19 @@ mixin _GradingActions on _GameNotifierBase {
     for (final id in pending) {
       await revealSlab(id);
       n++;
+    }
+    if (n > 0) {
+      final prev = state.engagement.pendingResumeMessage;
+      final slabMsg = n == 1
+          ? 'A slab is ready — check Collection.'
+          : '$n slabs ready — check Collection.';
+      state = state.copyWith(
+        engagement: state.engagement.copyWith(
+          pendingResumeMessage:
+              prev == null ? slabMsg : '$prev · $slabMsg',
+        ),
+      );
+      await _persist();
     }
     return n;
   }
@@ -135,6 +149,7 @@ mixin _GradingActions on _GameNotifierBase {
           ? 'GEM MINT 10!'
           : '${job.company.label} ${grade.toStringAsFixed(1)}',
     );
+    _onEngagementGradeRevealed();
     _checkAchievements();
     _recordCollectionValue();
     await _persist();

@@ -105,7 +105,11 @@ mixin _ShopActions on _GameNotifierBase {
         player = player.copyWith(candy: player.candy - candyCost);
       }
 
-      final pulls = _featuredOpener.open(pack);
+      final dry = state.engagement.featuredPity[pack.id] ?? 0;
+      final pulls = _featuredOpener.open(
+        pack,
+        pityBoost: pityWeightBoost(dry),
+      );
       if (pulls.isEmpty) {
         // Refund on empty open (should not happen with a loaded catalog).
         player = payWith == PaymentMethod.cash
@@ -118,16 +122,34 @@ mixin _ShopActions on _GameNotifierBase {
         return false;
       }
 
+      final maxFair = pulls.fold<double>(0, (m, o) {
+        final f = fairFor(o);
+        return f > m ? f : m;
+      });
+      final hitChase = maxFair >= 8 ||
+          pulls.any((o) {
+            final d = _catalog.byId[o.cardId];
+            return d != null && d.rarity.isRarePlus && o.foil;
+          });
+
       player = player.copyWith(
         packsOpened: player.packsOpened + 1,
         xp: player.xp + 3,
+        gemsPulled: hitChase ? player.gemsPulled + 1 : player.gemsPulled,
+        businessLevel: businessLevelFromXp(player.xp + 3),
       );
       state = state.copyWith(
         player: player,
         lastRip: pulls,
         lastRipPaid: total,
+        engagement: _afterFeaturedRipHook(
+          packId: pack.id,
+          hitChase: hitChase,
+        ),
         message: 'Ripping ${pack.name}…',
       );
+      _recordPullHistory(pulls, packLabel: pack.name);
+      _onEngagementPackOpened();
       _checkAchievements();
       await _persist();
       return true;
@@ -229,18 +251,21 @@ mixin _ShopActions on _GameNotifierBase {
       state = state.copyWith(message: 'Not enough cash to escrow this offer.');
       return;
     }
+    final npc = npcForIndex(listingId.hashCode);
     final o = MarketOffer(
       id: _uuid.v4(),
       listingId: listingId,
       offerAmount: offer,
       createdDay: state.day,
       expiresOnDay: state.day + 2,
+      npcId: npc.id,
+      flavor: '${npc.name} is reviewing — ${npc.quirk}',
     );
     state = state.copyWith(
       player: state.player.copyWith(cash: state.player.cash - offer),
       marketOffers: [...state.marketOffers, o],
       message:
-          'Offer \$${offer.toStringAsFixed(2)} sent (escrowed). Resolves on Advance Day.',
+          '${npc.name} got your \$${offer.toStringAsFixed(2)} offer (escrowed).',
     );
     await _persist();
   }
@@ -353,6 +378,7 @@ mixin _ShopActions on _GameNotifierBase {
       onlineListings: [...state.onlineListings, listing],
       message: 'Listed online for \$${ask.toStringAsFixed(2)}.',
     );
+    _onEngagementCardListed();
     await _persist();
   }
 

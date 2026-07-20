@@ -18,7 +18,7 @@ dependencies:
   shared_preferences: ^2.5.5
   flutter_svg: ^2.3.0
   http: ^1.4.0
-  video_player: ^2.10.0
+  audioplayers: ^6.8.1
 
 dev_dependencies:
   flutter_test:
@@ -46,6 +46,8 @@ flutter:
     - assets/instapacks/
     - assets/rip/
     - assets/rip/frames/
+    - assets/sfx/
+    - assets/avatars/
   fonts:
     - family: PlusJakartaSans
       fonts:

@@ -3,35 +3,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/onboarding.dart';
-import '../data/riftbound_catalog.dart';
 import '../game/game_controller.dart';
 import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
-import '../widgets/brand.dart';
 import '../widgets/cash_top_up_sheet.dart';
 import 'dev_hub_screen.dart';
+import 'engagement/engagement_hub.dart';
 import 'sealed_inventory.dart';
+import 'social/account_screen.dart';
+import 'social/auction_pit_screen.dart';
+import 'social/leaderboard_screen.dart';
 
 class DiscoverScreen extends ConsumerWidget {
   const DiscoverScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final fid =
-        ref.watch(gameProvider.select((s) => s.franchiseId));
+    final fid = ref.watch(gameProvider.select((s) => s.franchiseId));
+    final lots = ref.watch(gameProvider.select((s) => s.auctions.length));
     final franchise = switch (fid) {
       'pokemon' => 'Pokémon',
       'mtg' => 'Magic',
       _ => 'Riftbound',
     };
-    final packBlurb = switch (fid) {
-      'pokemon' =>
-        'Rip Scarlet & Violet–era packs with real street pricing.',
-      'mtg' =>
-        'Rip Foundations, MH3, and Bloomburrow packs with real street pricing.',
-      _ =>
-        'Rip Origins, Spiritforged, and Unleashed packs with real street pricing.',
-    };
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
       children: [
@@ -45,82 +40,183 @@ class DiscoverScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 6),
         Text(
-          '$franchise drops, trends, and collector tips.',
+          '$franchise · live room, rivals, and your shop.',
           style: AppText.jakarta(color: CC.inkMuted),
         ),
-        const SizedBox(height: 18),
-        Builder(
-          builder: (context) {
-            return Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () => showSealedInventory(context),
-                borderRadius: BorderRadius.circular(16),
-                child: _banner(
-                  title: 'Sealed inventory',
-                  body:
-                      'Boxes land here sealed. Open packs when you want — or sell them back.',
-                  color: const Color(0xFFF59E0B),
+        const SizedBox(height: 14),
+        const MarketEventBanner(),
+        const OneAwayBanner(),
+        const SizedBox(height: 6),
+        Text(
+          'Destinations',
+          style: AppText.jakarta(fontWeight: FontWeight.w800, fontSize: 16),
+        ),
+        const SizedBox(height: 10),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 1.15,
+          children: [
+            _DestTile(
+              title: 'Account',
+              body: 'Stats, condition, highlights',
+              color: CC.accent,
+              icon: Icons.person_outline,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const AccountScreen()),
+              ),
+            ),
+            _DestTile(
+              title: 'Leaderboard',
+              body: 'Rivals scale as you level',
+              color: const Color(0xFFF59E0B),
+              icon: Icons.emoji_events_outlined,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const LeaderboardScreen(),
                 ),
               ),
-            );
-          },
+            ),
+            _DestTile(
+              title: 'Auction Pit',
+              body: lots > 0 ? '$lots live lots' : 'Restock on Advance Day',
+              color: const Color(0xFFF472B6),
+              icon: Icons.gavel_rounded,
+              pulse: lots > 0,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const AuctionPitScreen(),
+                ),
+              ),
+            ),
+            _DestTile(
+              title: 'Collector Hub',
+              body: 'Daily, upgrades, vault, modes',
+              color: CC.candy,
+              icon: Icons.dashboard_customize_outlined,
+              onTap: () => openEngagementHub(context),
+            ),
+          ],
         ),
-        const SizedBox(height: 12),
-        _banner(
-          title: 'Instapacks are live',
-          body: packBlurb,
-          color: CC.accent,
-        ),
-        const SizedBox(height: 12),
-        _banner(
-          title: 'Track every pull',
-          body: 'Foil, centering, condition, and slab grades — all in your Collection.',
-          color: const Color(0xFF22D3EE),
-        ),
-        const SizedBox(height: 12),
-        _banner(
-          title: 'List online',
-          body: 'Price your cards and let simulated buyers fill over time.',
-          color: CC.candy,
+        const SizedBox(height: 10),
+        _DestTile(
+          title: 'Sealed inventory',
+          body: 'Boxes land sealed — open or sell when you want.',
+          color: const Color(0xFFF59E0B),
+          icon: Icons.inventory_2_outlined,
+          wide: true,
+          onTap: () => showSealedInventory(context),
         ),
       ],
     );
   }
+}
 
-  Widget _banner({
-    required String title,
-    required String body,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: CC.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: CC.line),
-        gradient: RadialGradient(
-          center: Alignment.topRight,
-          radius: 1.2,
-          colors: [color.withValues(alpha: 0.18), Colors.transparent],
-        ),
-      ),
+class _DestTile extends StatefulWidget {
+  const _DestTile({
+    required this.title,
+    required this.body,
+    required this.color,
+    required this.icon,
+    required this.onTap,
+    this.pulse = false,
+    this.wide = false,
+  });
+
+  final String title;
+  final String body;
+  final Color color;
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool pulse;
+  final bool wide;
+
+  @override
+  State<_DestTile> createState() => _DestTileState();
+}
+
+class _DestTileState extends State<_DestTile>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    if (widget.pulse) _pulse.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _DestTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.pulse && !_pulse.isAnimating) {
+      _pulse.repeat(reverse: true);
+    } else if (!widget.pulse && _pulse.isAnimating) {
+      _pulse.stop();
+      _pulse.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (context, child) {
+        final glow = widget.pulse ? 0.10 + _pulse.value * 0.12 : 0.16;
+        return Material(
+          color: CC.card,
+          borderRadius: BorderRadius.circular(16),
+          child: InkWell(
+            onTap: widget.onTap,
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              width: widget.wide ? double.infinity : null,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: CC.line),
+                gradient: RadialGradient(
+                  center: Alignment.topRight,
+                  radius: 1.15,
+                  colors: [
+                    widget.color.withValues(alpha: glow),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+              child: child,
+            ),
+          ),
+        );
+      },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Icon(widget.icon, color: widget.color, size: 22),
+          const Spacer(),
           Text(
-            title,
-            style: AppText.jakarta(
-              fontWeight: FontWeight.w800,
-              fontSize: 16,
-            ),
+            widget.title,
+            style: AppText.jakarta(fontWeight: FontWeight.w800, fontSize: 15),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
-            body,
+            widget.body,
             style: AppText.jakarta(
               color: CC.inkMuted,
-              height: 1.4,
+              fontSize: 11,
+              height: 1.3,
             ),
           ),
         ],
@@ -178,93 +274,63 @@ class SettingsScreen extends ConsumerWidget {
               const SizedBox(height: 14),
               Row(
                 children: [
-                  CashBalance(cash),
-                  const SizedBox(width: 8),
-                  CandyBalance(candy),
-                  const Spacer(),
-                ],
-              ),
-              const SizedBox(height: 14),
-              SizedBox(
-                height: 48,
-                child: FilledButton.icon(
-                  onPressed: () => showCashTopUp(context, ref),
-                  icon: const Icon(Icons.add_card_outlined, size: 18),
-                  label: Text(
-                    'Top up with Google Pay',
-                    style: AppText.jakarta(fontWeight: FontWeight.w800),
-                  ),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: CC.accent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                  Expanded(
+                    child: Text(
+                      '\$${cash.toStringAsFixed(2)}',
+                      style: AppText.jakarta(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 20,
+                        color: const Color(0xFF34D399),
+                      ),
                     ),
                   ),
-                ),
+                  Text(
+                    '$candy candy',
+                    style: AppText.jakarta(
+                      fontWeight: FontWeight.w700,
+                      color: CC.candy,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: () => showCashTopUp(context, ref),
+                child: const Text('Top up cash'),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         ListTile(
-          tileColor: CC.card,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          title: const Text('Advance day'),
-          subtitle: const Text(
-            'Restock shop · listings also update when you return',
+          contentPadding: EdgeInsets.zero,
+          title: Text('Advance day', style: AppText.jakarta(fontWeight: FontWeight.w700)),
+          subtitle: Text(
+            'Tick markets, auctions, and events.',
+            style: AppText.jakarta(color: CC.inkMuted, fontSize: 12),
           ),
-          trailing: const Icon(Icons.chevron_right),
+          trailing: const Icon(Icons.skip_next_rounded),
           onTap: () => ref.read(gameProvider.notifier).advanceDay(),
         ),
-        const SizedBox(height: 10),
         ListTile(
-          tileColor: CC.card,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          title: const Text('Replay intro'),
+          contentPadding: EdgeInsets.zero,
+          title: Text('Replay intro', style: AppText.jakarta(fontWeight: FontWeight.w700)),
           onTap: () async {
             await OnboardingStore.reset();
-            GameCatalog.clearCache();
-            if (context.mounted) {
-              // Parent shell watches onboarding via restart — show snack.
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Restart the app to see onboarding again.')),
-              );
-            }
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Restart the app to replay onboarding.')),
+            );
           },
         ),
-        if (kDebugMode) ...[
-          const SizedBox(height: 10),
+        if (kDebugMode)
           ListTile(
-            tileColor: CC.card,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+            contentPadding: EdgeInsets.zero,
+            title: Text('Dev Hub', style: AppText.jakarta(fontWeight: FontWeight.w700)),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const DevHubScreen()),
             ),
-            leading: const Icon(Icons.construction_outlined, color: CC.accent),
-            title: const Text('Dev Hub'),
-            subtitle: const Text('Nudge layout · swap art · tilt preview'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => openDevHub(context),
           ),
-        ],
-        const SizedBox(height: 18),
-        Text(
-          'Legal',
-          style: AppText.jakarta(fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Bindora is a personal offline collecting/market sim. '
-          'Riftbound names and related IP belong to Riot Games. '
-          'Pokémon and Pokémon TCG names/marks belong to Nintendo / Creatures / Game Freak / The Pokémon Company. '
-          'Magic: The Gathering names and marks belong to Wizards of the Coast. '
-          'Prices from TCGCSV/TCGplayer public data. '
-          'Not affiliated with or endorsed by those rights holders.',
-          style: AppText.jakarta(
-            color: CC.inkMuted,
-            height: 1.45,
-            fontSize: 13,
-          ),
-        ),
       ],
     );
   }
