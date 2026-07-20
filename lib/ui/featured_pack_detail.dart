@@ -567,14 +567,14 @@ class _HeroStage extends StatelessWidget {
             ),
           KnockoutProductImage(
             url: pack.assetPath,
-            width: 168,
-            height: 236,
+            width: 168 * 0.825,
+            height: 236 * 0.825,
             fit: BoxFit.contain,
             error: PackVisual(
               title: pack.tier.label,
               colors: pack.tier.bloomColors,
-              width: 140,
-              height: 200,
+              width: 140 * 0.825,
+              height: 200 * 0.825,
               franchiseId: franchiseId,
             ),
           ),

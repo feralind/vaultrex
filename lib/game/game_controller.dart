@@ -933,7 +933,8 @@ class GameNotifier extends _GameNotifierBase
               m.condition.valueMult *
               Pricing.trendMult(state.events, def.setCode);
       final bargain = m.price <= fair * 0.92;
-      final keepChance = bargain ? 0.72 : 0.45;
+      // Hotter turnover so the shop feels alive between days.
+      final keepChance = bargain ? 0.62 : 0.32;
       if (_rng.nextDouble() < keepChance) {
         keep.add(m);
       } else {
@@ -941,10 +942,25 @@ class GameNotifier extends _GameNotifierBase
       }
     }
     final fresh = _generateSinglesMarket();
-    final replaceN = max(drop.length, (valid.length * 0.35).round());
+    final replaceN = max(drop.length, (valid.length * 0.45).round());
     final next = [...keep, ...fresh.take(replaceN)];
     next.shuffle(_rng);
     return next.take(min(180, next.length)).toList();
+  }
+
+  /// Soft market restock without advancing the day clock.
+  Future<void> refreshMarketListings() async {
+    if (!state.ready) return;
+    final before = state.market.length;
+    final next = _churnSinglesMarket(state.market);
+    final sealed = _generateSealedShop(state.events);
+    state = state.copyWith(
+      market: next,
+      sealedListings: sealed,
+      message:
+          'Market refreshed — ${next.length} live listings (was $before).',
+    );
+    await _persist();
   }
 
   MarketListing _makeMarketListing(

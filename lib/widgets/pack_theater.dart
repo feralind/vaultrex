@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -6,6 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/onboarding.dart';
+import '../dev/dev_studio.dart';
+import '../dev/dev_studio_panel.dart';
 import '../game/game_controller.dart';
 import '../models/enums.dart';
 import '../models/models.dart';
@@ -14,7 +17,7 @@ import '../theme/app_theme.dart';
 import 'brand.dart';
 import 'foil_slab.dart';
 import 'game_widgets.dart';
-import 'knockout_image.dart';
+import 'pack_peel_scrub.dart';
 
 Future<void> showPackTheater(
   BuildContext context,
@@ -131,6 +134,7 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
   bool _sessionBusy = false;
   bool _fastRip = false;
   Future<void>? _inFlightDecide;
+  double _peelStartTear = 0;
 
   late final AnimationController _peelOut;
   late final AnimationController _flip;
@@ -196,23 +200,49 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
 
   void _onTearUpdate(DragUpdateDetails d) {
     if (_phase != _RipPhase.sealed || _sessionBusy) return;
+    if (_fastRip) {
+      setState(() => _tear = 1.0);
+      unawaited(_openPack());
+      return;
+    }
     // Vertical swipe drives tear; downward motion only.
     final across = math.max(0.0, d.delta.dy) + d.delta.dx.abs() * 0.15;
     _dragAccum = (_dragAccum + across).clamp(0.0, 220.0);
     setState(() => _tear = (_dragAccum / 150).clamp(0.0, 1.0));
-    if (_tear >= 1) _openPack();
+    if (_tear >= 1) unawaited(_openPack());
   }
 
   Future<void> _openPack() async {
     if (_phase != _RipPhase.sealed || _sessionBusy) return;
     HapticFeedback.mediumImpact();
+    _peelStartTear = _fastRip ? 1.0 : _tear.clamp(0.0, 1.0);
     setState(() {
       _sessionBusy = true;
       _phase = _RipPhase.peeling;
-      _tear = 1;
+      if (_fastRip) _tear = 1.0;
     });
-    await _peelOut.forward(from: 0);
+
+    if (!_fastRip) {
+      // Ease remaining scrub to fully peeled (pre-render finish).
+      final start = _peelStartTear;
+      _peelOut.duration = Duration(
+        milliseconds: (380 * (1.0 - start)).round().clamp(120, 420),
+      );
+      _peelOut
+        ..removeListener(_onPeelOutTick)
+        ..addListener(_onPeelOutTick);
+      await _peelOut.forward(from: 0);
+      _peelOut.removeListener(_onPeelOutTick);
+      if (!mounted) return;
+      setState(() => _tear = 1.0);
+    }
+
+    // Brief hold on last peel frame before card reveal.
+    await Future<void>.delayed(
+      Duration(milliseconds: _fastRip ? 40 : 140),
+    );
     if (!mounted) return;
+
     HapticFeedback.heavyImpact();
     setState(() {
       _phase = _RipPhase.reveal;
@@ -225,6 +255,13 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
     });
     if (!mounted || _phase != _RipPhase.reveal) return;
     await _presentCard();
+  }
+
+  void _onPeelOutTick() {
+    if (!mounted || _phase != _RipPhase.peeling) return;
+    final from = _peelStartTear;
+    final t = Curves.easeOutCubic.transform(_peelOut.value);
+    setState(() => _tear = from + (1.0 - from) * t);
   }
 
   Future<void> _presentCard() async {
@@ -456,23 +493,22 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
                         }
                       },
                     )
-                  : AnimatedBuilder(
-                      animation: _peelOut,
-                      builder: (context, _) {
-                        // 0..1 user rip, then +0..1 auto peel-out.
-                        final progress = _tear.clamp(0.0, 1.0) +
-                            (_phase == _RipPhase.peeling ? _peelOut.value : 0.0);
-                        return _PackPeelStage(
-                          tear: progress,
-                          imageUrl: widget.packImageUrl,
-                          showHint: _phase == _RipPhase.sealed,
-                          interactive: _phase == _RipPhase.sealed,
-                          onTearUpdate: _onTearUpdate,
-                          onTearEnd: () {
-                            if (_tear >= 0.72) _openPack();
-                          },
-                        );
+                  : ScrubPeelStage(
+                      progress: _tear.clamp(0.0, 1.0),
+                      showHint: _phase == _RipPhase.sealed && !_fastRip,
+                      interactive: _phase == _RipPhase.sealed,
+                      onTearUpdate: _onTearUpdate,
+                      onTearEnd: () {
+                        if (_fastRip || _tear >= 0.72) {
+                          unawaited(_openPack());
+                        }
                       },
+                      onTap: _fastRip
+                          ? () {
+                              setState(() => _tear = 1.0);
+                              unawaited(_openPack());
+                            }
+                          : null,
                     ),
             ),
             if (inReveal && _deciding)
@@ -556,452 +592,6 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
   }
 }
 
-/// Diagonal wrapper tear — vertical swipe, candy-wrapper flaps peel sideways.
-/// [tear] 0..1 = user rip; 1..2 = flaps fly clear and pack dissolves.
-class _PackPeelStage extends StatelessWidget {
-  const _PackPeelStage({
-    required this.tear,
-    required this.showHint,
-    required this.interactive,
-    this.imageUrl,
-    this.onTearUpdate,
-    this.onTearEnd,
-  });
-
-  final double tear;
-  final String? imageUrl;
-  final bool showHint;
-  final bool interactive;
-  final void Function(DragUpdateDetails)? onTearUpdate;
-  final VoidCallback? onTearEnd;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = tear.clamp(0.0, 1.0);
-    final exit = (tear - 1.0).clamp(0.0, 1.0);
-    final peel = Curves.easeOutCubic.transform(t);
-    final stripFly = Curves.easeOutCubic.transform(exit);
-    final packFade =
-        Curves.easeInCubic.transform((1.0 - stripFly * 1.05).clamp(0.0, 1.0));
-    final cardReveal = Curves.easeOutCubic.transform(
-      ((peel - 0.06) / 0.5 + stripFly * 0.65).clamp(0.0, 1.0),
-    );
-    final torn = peel > 0.05;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const targetPackW = 340.0;
-        const targetPackH = 500.0;
-        final availW = constraints.maxWidth * 0.72;
-        final availH = constraints.maxHeight * 0.68;
-        final scale = math.min(availW / targetPackW, availH / targetPackH);
-        final packW = targetPackW * scale;
-        final packH = targetPackH * scale;
-        final cardW = packW * 0.90;
-        final cardH = packH * 0.86;
-
-        Widget packArt() => _PackBody(
-              imageUrl: imageUrl,
-              width: packW,
-              height: packH,
-            );
-
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    center: const Alignment(0, -0.08),
-                    radius: 0.9,
-                    colors: [
-                      const Color(0xFF1A2240).withValues(alpha: 0.55),
-                      CC.bg.withValues(alpha: 0.35),
-                      CC.bg,
-                    ],
-                    stops: const [0.0, 0.48, 1.0],
-                  ),
-                ),
-              ),
-            ),
-            Center(
-              child: SizedBox(
-                width: packW * 1.08,
-                height: packH * 1.12,
-                child: Stack(
-                  alignment: Alignment.center,
-                  clipBehavior: Clip.none,
-                  children: [
-                    // Inner wrapper / card back briefly under the flaps.
-                    if (cardReveal > 0.02)
-                      Opacity(
-                        opacity: cardReveal.clamp(0.0, 1.0),
-                        child: Transform.scale(
-                          scale: 0.96 + stripFly * 0.04,
-                          child: _CardBack(width: cardW, height: cardH),
-                        ),
-                      ),
-
-                    // Intact sealed pack.
-                    if (!torn && packFade > 0.02)
-                      Opacity(opacity: packFade, child: packArt()),
-
-                    // Right/upper flap — peels open to the right.
-                    if (torn)
-                      Transform.translate(
-                        offset: Offset(
-                          stripFly * packW * 0.55,
-                          -stripFly * packH * 0.15,
-                        ),
-                        child: Transform.rotate(
-                          alignment: Alignment.topRight,
-                          angle: peel * 0.18 + stripFly * 0.75,
-                          child: Opacity(
-                            opacity: packFade,
-                            child: SizedBox(
-                              width: packW,
-                              height: packH,
-                              child: ClipPath(
-                                clipper: _DiagonalFlapClipper(
-                                  keepLeft: false,
-                                  progress: peel,
-                                ),
-                                child: packArt(),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                    // Left/lower flap — peels open to the left.
-                    if (torn)
-                      Transform.translate(
-                        offset: Offset(
-                          -stripFly * packW * 0.55,
-                          stripFly * packH * 0.15,
-                        ),
-                        child: Transform.rotate(
-                          alignment: Alignment.bottomLeft,
-                          angle: -peel * 0.18 - stripFly * 0.75,
-                          child: Opacity(
-                            opacity: packFade,
-                            child: SizedBox(
-                              width: packW,
-                              height: packH,
-                              child: ClipPath(
-                                clipper: _DiagonalFlapClipper(
-                                  keepLeft: true,
-                                  progress: peel,
-                                ),
-                                child: packArt(),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                    // Diagonal tear slash on top.
-                    if (torn)
-                      IgnorePointer(
-                        child: CustomPaint(
-                          size: Size(packW, packH),
-                          painter: _DiagonalTearPainter(
-                            progress: peel.clamp(0.0, 1.0),
-                            glow: 0.55 + peel * 0.45,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-
-            if (interactive)
-              Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onVerticalDragUpdate: onTearUpdate,
-                  onVerticalDragEnd: (_) => onTearEnd?.call(),
-                  child: showHint
-                      ? AnimatedOpacity(
-                          opacity: t < 0.15 ? 1 : (1 - t * 1.2).clamp(0.0, 1.0),
-                          duration: const Duration(milliseconds: 160),
-                          child: Align(
-                            alignment: const Alignment(0, -0.78),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.keyboard_arrow_down_rounded,
-                                  size: 28,
-                                  color: Colors.white.withValues(alpha: 0.92),
-                                ),
-                                Text(
-                                  'Swipe down to rip',
-                                  style: AppText.jakarta(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 16,
-                                    color: Colors.white.withValues(alpha: 0.92),
-                                    letterSpacing: 0.2,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      : const SizedBox.expand(),
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-/// Clips a rectangle along a diagonal line from top-right to bottom-left.
-/// [keepLeft] = true keeps the left/lower flap, false keeps the right/upper.
-class _DiagonalFlapClipper extends CustomClipper<Path> {
-  _DiagonalFlapClipper({required this.keepLeft, this.progress = 1.0});
-
-  final bool keepLeft;
-  final double progress;
-
-  @override
-  Path getClip(Size size) {
-    final p = progress.clamp(0.0, 1.0);
-    final start = Offset(size.width * 0.78, 0);
-    final end = Offset(
-      size.width * 0.78 - size.width * 0.62 * p,
-      size.height * p,
-    );
-    final path = Path();
-    if (keepLeft) {
-      path
-        ..moveTo(0, 0)
-        ..lineTo(start.dx, start.dy)
-        ..lineTo(end.dx, end.dy)
-        ..lineTo(0, size.height)
-        ..close();
-    } else {
-      path
-        ..moveTo(size.width, 0)
-        ..lineTo(start.dx, start.dy)
-        ..lineTo(end.dx, end.dy)
-        ..lineTo(size.width, size.height)
-        ..close();
-    }
-    return path;
-  }
-
-  @override
-  bool shouldReclip(covariant _DiagonalFlapClipper oldClipper) =>
-      oldClipper.progress != progress || oldClipper.keepLeft != keepLeft;
-}
-
-/// Diagonal jagged tear line, top-right to bottom-left, growing with [progress].
-class _DiagonalTearPainter extends CustomPainter {
-  _DiagonalTearPainter({required this.progress, required this.glow});
-
-  final double progress;
-  final double glow;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = progress.clamp(0.0, 1.0);
-    final start = Offset(size.width * 0.78, 0);
-    final end = Offset(
-      size.width * 0.78 - size.width * 0.62 * p,
-      size.height * p,
-    );
-    const segs = 18;
-    final path = Path()..moveTo(start.dx, start.dy);
-    for (var i = 1; i <= segs; i++) {
-      final t = i / segs;
-      final x = start.dx + (end.dx - start.dx) * t;
-      final y = start.dy + (end.dy - start.dy) * t;
-      final perp = Offset(-(end.dy - start.dy), end.dx - start.dx);
-      final perpLen = perp.distance == 0 ? 1.0 : perp.distance;
-      final n = Offset(perp.dx / perpLen, perp.dy / perpLen);
-      final zig = math.sin(i * 1.9) * 4.5 + (i.isEven ? -2.0 : 2.0);
-      path.lineTo(x + n.dx * zig, y + n.dy * zig);
-    }
-
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = CC.accent.withValues(alpha: 0.3 * glow)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 7
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
-    );
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = Colors.white.withValues(alpha: 0.95 * glow)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.4
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _DiagonalTearPainter oldDelegate) =>
-      oldDelegate.progress != progress || oldDelegate.glow != glow;
-}
-
-class _PackBody extends StatelessWidget {
-  const _PackBody({
-    required this.width,
-    required this.height,
-    this.imageUrl,
-  });
-
-  final double width;
-  final double height;
-  final String? imageUrl;
-
-  @override
-  Widget build(BuildContext context) {
-    final hasArt = imageUrl != null && imageUrl!.isNotEmpty;
-    final art = hasArt
-        ? KnockoutProductImage(
-            url: imageUrl!,
-            width: width,
-            height: height,
-            fit: BoxFit.fill,
-            placeholder: const _FoilPackFallback(),
-            error: const _FoilPackFallback(),
-          )
-        : SizedBox(
-            width: width,
-            height: height,
-            child: const _FoilPackFallback(),
-          );
-
-    return SizedBox(
-      width: width,
-      height: height,
-      child: Stack(
-        fit: StackFit.expand,
-        clipBehavior: Clip.hardEdge,
-        children: [
-          Positioned(
-            left: width * 0.14,
-            right: width * 0.14,
-            top: height * 0.14,
-            bottom: height * 0.1,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(22),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.5),
-                    blurRadius: 26,
-                    offset: const Offset(0, 14),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          art,
-        ],
-      ),
-    );
-  }
-}
-
-class _FoilPackFallback extends StatelessWidget {
-  const _FoilPackFallback();
-
-  @override
-  Widget build(BuildContext context) {
-    final franchise = refCatalogFranchise(context);
-    final isPokemon = franchise == 'pokemon';
-    final isMtg = franchise == 'mtg';
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isPokemon
-              ? const [
-                  Color(0xFF0D1B4C),
-                  Color(0xFF1E3A8A),
-                  Color(0xFFFFCB05),
-                ]
-              : isMtg
-                  ? const [
-                      Color(0xFF1A0A05),
-                      Color(0xFF7C2D12),
-                      Color(0xFFF97316),
-                    ]
-                  : const [
-                      Color(0xFF2A3A6A),
-                      Color(0xFF5B8CFF),
-                      Color(0xFFA78BFA),
-                    ],
-        ),
-      ),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Center(
-            child: isPokemon
-                ? Text(
-                    'Pokémon',
-                    style: AppText.jakarta(
-                      color: const Color(0xFFFFCB05),
-                      fontWeight: FontWeight.w900,
-                      fontSize: 28,
-                      letterSpacing: 1.2,
-                    ),
-                  )
-                : Image.asset(
-                    isMtg
-                        ? 'assets/logos/mtg.png'
-                        : 'assets/logos/riftbound_wordmark.png',
-                    height: isMtg ? 96 : 72,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, _, _) => isMtg
-                        ? Text(
-                            'MAGIC',
-                            style: AppText.jakarta(
-                              color: const Color(0xFFF97316),
-                              fontWeight: FontWeight.w900,
-                              fontSize: 28,
-                            ),
-                          )
-                        : const RiftMark(size: 72, framed: false),
-                  ),
-          ),
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 28,
-            child: Text(
-              isPokemon
-                  ? 'POKÉMON'
-                  : isMtg
-                      ? 'MAGIC'
-                      : 'RIFTBOUND',
-              textAlign: TextAlign.center,
-              style: AppText.jakarta(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 16,
-                letterSpacing: 1.4,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// Official card back art for face-down cards in theater.
 class _CardBack extends StatelessWidget {
   const _CardBack({this.width = 200, this.height = 280});
@@ -1018,66 +608,99 @@ class _CardBack extends StatelessWidget {
     final franchise = refCatalogFranchise(context);
     final isPokemon = franchise == 'pokemon';
     final isMtg = franchise == 'mtg';
-    final path = switch (franchise) {
+    final rawPath = switch (franchise) {
       'pokemon' => pokemonPath,
       'mtg' => mtgPath,
       _ => riftboundPath,
     };
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.42),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Image.asset(
-          path,
-          width: width,
-          height: height,
-          fit: BoxFit.cover,
-          errorBuilder: (_, _, _) => isPokemon
-              ? ColoredBox(
-                  color: const Color(0xFF0D1B4C),
-                  child: Center(
-                    child: Text(
-                      'Pokémon',
-                      style: AppText.jakarta(
-                        color: const Color(0xFFFFCB05),
-                        fontWeight: FontWeight.w900,
-                        fontSize: width * 0.16,
-                        letterSpacing: 1.2,
+
+    return ListenableBuilder(
+      listenable: DevStudio.instance,
+      builder: (context, _) {
+        final path = DevStudio.instance.resolveImage(rawPath);
+        return GestureDetector(
+          onLongPress: () =>
+              devSelectImageSource(context, rawPath, label: 'Card back'),
+          child: Container(
+            width: width,
+            height: height,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.42),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: path.startsWith('http')
+                  ? Image.network(
+                      path,
+                      width: width,
+                      height: height,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => _backFallback(
+                        isPokemon: isPokemon,
+                        isMtg: isMtg,
+                        width: width,
+                      ),
+                    )
+                  : Image.asset(
+                      path,
+                      width: width,
+                      height: height,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => _backFallback(
+                        isPokemon: isPokemon,
+                        isMtg: isMtg,
+                        width: width,
                       ),
                     ),
-                  ),
-                )
-              : ColoredBox(
-                  color: isMtg
-                      ? const Color(0xFF1A0A05)
-                      : const Color(0xFF0C1428),
-                  child: Center(
-                    child: Image.asset(
-                      isMtg
-                          ? 'assets/logos/mtg.png'
-                          : 'assets/logos/riftbound_wordmark.png',
-                      width: width * 0.55,
-                      height: width * 0.28,
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, _, _) =>
-                          RiftMark(size: width * 0.42, framed: false),
-                    ),
-                  ),
-                ),
-        ),
-      ),
+            ),
+          ),
+        );
+      },
     );
+  }
+
+  Widget _backFallback({
+    required bool isPokemon,
+    required bool isMtg,
+    required double width,
+  }) {
+    return isPokemon
+        ? ColoredBox(
+            color: const Color(0xFF0D1B4C),
+            child: Center(
+              child: Text(
+                'Pokémon',
+                style: AppText.jakarta(
+                  color: const Color(0xFFFFCB05),
+                  fontWeight: FontWeight.w900,
+                  fontSize: width * 0.16,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+          )
+        : ColoredBox(
+            color: isMtg ? const Color(0xFF1A0A05) : const Color(0xFF0C1428),
+            child: Center(
+              child: Image.asset(
+                isMtg
+                    ? 'assets/logos/mtg.png'
+                    : 'assets/logos/riftbound_wordmark.png',
+                width: width * 0.55,
+                height: width * 0.28,
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) =>
+                    RiftMark(size: width * 0.42, framed: false),
+              ),
+            ),
+          );
   }
 }
 

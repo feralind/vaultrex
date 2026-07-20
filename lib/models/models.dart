@@ -1,3 +1,4 @@
+import '../data/scrydex_art.dart';
 import 'enums.dart';
 
 class CardDef {
@@ -16,6 +17,7 @@ class CardDef {
     this.cardType,
     this.domain,
     this.foilMarketPrice,
+    this.artist,
   });
 
   final String id;
@@ -32,14 +34,25 @@ class CardDef {
   final String imageUrl;
   final String imageUrlSmall;
   final String imageKey;
+  /// Illustrator when known (Scrydex / catalog enrichment).
+  final String? artist;
 
-  /// Full-res art for grids, slabs, and detail. Prefer [imageUrl] (HD CDN).
-  String get displayArtUrl =>
-      imageUrl.isNotEmpty ? imageUrl : imageUrlSmall;
+  /// Full-res art for grids, slabs, and detail. Prefer Scrydex HD when mapped.
+  String get displayArtUrl {
+    final scry = ScrydexArt.imageUrl(this, size: 'large');
+    if (scry != null) return scry;
+    return imageUrl.isNotEmpty ? imageUrl : imageUrlSmall;
+  }
 
-  /// Tiny thumbs only (list rows ~64px). Prefer small when present.
-  String get thumbArtUrl =>
-      imageUrlSmall.isNotEmpty ? imageUrlSmall : imageUrl;
+  /// Max-res art for fullscreen inspect (same CDN; large is already full scan).
+  String get inspectArtUrl => displayArtUrl;
+
+  /// Tiny thumbs only (list rows ~64px). Prefer Scrydex medium, else small.
+  String get thumbArtUrl {
+    final scry = ScrydexArt.imageUrl(this, size: 'medium');
+    if (scry != null) return scry;
+    return imageUrlSmall.isNotEmpty ? imageUrlSmall : imageUrl;
+  }
 
   /// Riftbound Battlefields are printed landscape; TCGPlayer art is face-on
   /// (horizontal long edge) — use landscape frame + [BoxFit.contain], do not
@@ -110,6 +123,8 @@ class CardDef {
     String? domain,
     double? foilMarketPrice,
     bool clearFoilMarketPrice = false,
+    String? artist,
+    bool clearArtist = false,
   }) {
     return CardDef(
       id: id ?? this.id,
@@ -128,6 +143,7 @@ class CardDef {
       foilMarketPrice: clearFoilMarketPrice
           ? null
           : (foilMarketPrice ?? this.foilMarketPrice),
+      artist: clearArtist ? null : (artist ?? this.artist),
     );
   }
 
@@ -147,6 +163,7 @@ class CardDef {
       imageUrl: m['imageUrl'] as String? ?? '',
       imageUrlSmall: m['imageUrlSmall'] as String? ?? '',
       imageKey: m['imageKey'] as String? ?? m['id'] as String,
+      artist: m['artist'] as String?,
     );
   }
 

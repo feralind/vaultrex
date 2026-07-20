@@ -18,6 +18,7 @@ dependencies:
   shared_preferences: ^2.5.5
   flutter_svg: ^2.3.0
   http: ^1.4.0
+  video_player: ^2.10.0
 
 dev_dependencies:
   flutter_test:
@@ -41,6 +42,10 @@ flutter:
     - assets/featured_packs/riftbound/
     - assets/featured_packs/pokemon/
     - assets/featured_packs/mtg/
+    - assets/onboarding/
+    - assets/instapacks/
+    - assets/rip/
+    - assets/rip/frames/
   fonts:
     - family: PlusJakartaSans
       fonts:

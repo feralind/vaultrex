@@ -84,6 +84,39 @@ class Pricing {
     return max(0.01, v);
   }
 
+  /// Fair ask for a market listing (no owned-card defects).
+  static double fairForListing(
+    CardDef def,
+    MarketListing listing, {
+    List<MarketEvent> events = const [],
+  }) {
+    double base;
+    if (def.isUnlisted) {
+      base = speculativeBase(def);
+      if (listing.foil) base *= 2.0;
+    } else {
+      base = listing.foil
+          ? (def.foilMarketPrice ?? def.marketPrice * 2.2)
+          : def.marketPrice;
+    }
+    var v = base * listing.condition.valueMult;
+    if (listing.graded && listing.grade != null) {
+      final g = listing.grade!;
+      final gradeMult = g >= 10
+          ? 3.2
+          : g >= 9.5
+              ? 2.2
+              : g >= 9
+                  ? 1.55
+                  : g >= 8
+                      ? 1.2
+                      : 0.95;
+      v *= gradeMult * 1.2;
+    }
+    v *= trendMult(events, def.setCode);
+    return max(0.01, v);
+  }
+
   static double platformFeeRate(PlayerStats player) {
     if (player.ownedUpgrades.contains('fee_cut')) return 0.10;
     return 0.14;

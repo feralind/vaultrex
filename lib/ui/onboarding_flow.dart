@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../data/onboarding.dart';
@@ -114,20 +116,29 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
 class _IntroPage extends StatelessWidget {
   const _IntroPage();
 
-  // Featured pack arts (same assets as Instapacks).
-  static const _packLeft = 'assets/featured_packs/riftbound/pack_legendary.png';
-  static const _packRight = 'assets/featured_packs/riftbound/pack_mythic.png';
-  static const _packFront = 'assets/featured_packs/riftbound/pack_rare.png';
+  // Dedicated onboarding entities — not shared with shop pack tiers.
+  static const _packLeft = 'assets/onboarding/onboarding_firstscreen_left.png';
+  static const _packRight = 'assets/onboarding/onboarding_firstscreen_right.png';
+  static const _packMiddle =
+      'assets/onboarding/onboarding_firstscreen_middle.png';
+
+  /// 17.5% smaller baseline, then +20% for this screen.
+  static const _packScale = 0.825 * 1.20;
 
   @override
   Widget build(BuildContext context) {
+    const leftW = 148.0 * _packScale;
+    const leftH = 222.0 * _packScale;
+    const midW = 196.0 * _packScale;
+    const midH = 294.0 * _packScale;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         children: [
           const Spacer(),
           SizedBox(
-            height: 360,
+            height: 360 * _packScale + 40,
             child: Stack(
               alignment: Alignment.center,
               clipBehavior: Clip.none,
@@ -150,27 +161,50 @@ class _IntroPage extends StatelessWidget {
                     ),
                   ),
                 ),
+                // Art is already tilted — pull side packs in toward center.
+                // Each pack floats on its own rhythm (phase + duration).
                 Positioned(
-                  left: -4,
-                  top: 48,
-                  child: Transform.rotate(
-                    angle: -0.22,
-                    child: _HeroPackImage(asset: _packLeft, width: 148, height: 222),
+                  left: 36,
+                  top: 52,
+                  child: _PackHover(
+                    duration: const Duration(milliseconds: 2650),
+                    amplitude: 5.5,
+                    start: 0.0,
+                    child: _HeroPackImage(
+                      asset: _packLeft,
+                      width: leftW,
+                      height: leftH,
+                    ),
                   ),
                 ),
                 Positioned(
-                  right: -4,
-                  top: 36,
-                  child: Transform.rotate(
-                    angle: 0.2,
-                    child: _HeroPackImage(asset: _packRight, width: 148, height: 222),
+                  right: 36,
+                  top: 40,
+                  child: _PackHover(
+                    duration: const Duration(milliseconds: 3920),
+                    amplitude: 6.5,
+                    start: 0.62,
+                    child: _HeroPackImage(
+                      asset: _packRight,
+                      width: leftW,
+                      height: leftH,
+                    ),
                   ),
                 ),
                 Positioned(
                   bottom: 0,
-                  child: Transform.rotate(
-                    angle: -0.04,
-                    child: _HeroPackImage(asset: _packFront, width: 196, height: 294),
+                  child: _PackHover(
+                    duration: const Duration(milliseconds: 3180),
+                    amplitude: 7.5,
+                    start: 0.28,
+                    child: Transform.rotate(
+                      angle: -0.04,
+                      child: _HeroPackImage(
+                        asset: _packMiddle,
+                        width: midW,
+                        height: midH,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -235,6 +269,66 @@ class _HeroPackImage extends StatelessWidget {
   }
 }
 
+/// Independent vertical hover — each pack gets its own duration / phase.
+class _PackHover extends StatefulWidget {
+  const _PackHover({
+    required this.child,
+    required this.duration,
+    required this.amplitude,
+    this.start = 0,
+  });
+
+  final Widget child;
+  final Duration duration;
+  final double amplitude;
+  /// Initial controller value 0..1 so packs don't start in sync.
+  final double start;
+
+  @override
+  State<_PackHover> createState() => _PackHoverState();
+}
+
+class _PackHoverState extends State<_PackHover>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c;
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+      vsync: this,
+      duration: widget.duration,
+      value: widget.start.clamp(0.0, 1.0),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, child) {
+        // Soft sine-ish bob from reverse easeInOut.
+        final t = Curves.easeInOut.transform(_c.value);
+        final dy = (t * 2 - 1) * widget.amplitude;
+        // Tiny secondary wobble so motion isn't a perfect mirror of neighbors.
+        final wobble =
+            math.sin(_c.value * math.pi * 2 + widget.start * math.pi) * 0.6;
+        return Transform.translate(
+          offset: Offset(0, dy + wobble),
+          child: child,
+        );
+      },
+      child: widget.child,
+    );
+  }
+}
+
 class _RipPacksPage extends StatefulWidget {
   const _RipPacksPage();
 
@@ -244,10 +338,16 @@ class _RipPacksPage extends StatefulWidget {
 
 class _RipPacksPageState extends State<_RipPacksPage>
     with SingleTickerProviderStateMixin {
-  // Featured pack arts — fanned like the onboarding reference.
-  static const _packLeft = 'assets/featured_packs/riftbound/pack_legendary.png';
-  static const _packRight = 'assets/featured_packs/riftbound/pack_mythic.png';
-  static const _packCenter = 'assets/featured_packs/riftbound/pack_rare.png';
+  // Dedicated onboarding screen-2 entities — not shared with shop tiers.
+  static const _packLeft =
+      'assets/onboarding/onboarding_secondscreen_left.png';
+  static const _packRight =
+      'assets/onboarding/onboarding_secondscreen_right.png';
+  static const _packCenter =
+      'assets/onboarding/onboarding_secondscreen_middle.png';
+
+  /// 17.5% smaller baseline, then +20% for this screen.
+  static const _packScale = 0.825 * 1.20;
 
   late final AnimationController _c;
 
@@ -268,10 +368,10 @@ class _RipPacksPageState extends State<_RipPacksPage>
 
   @override
   Widget build(BuildContext context) {
-    // ~2× the previous onboarding fan (~104×156 → ~200×300).
-    const packW = 200.0;
-    const packH = 300.0;
-    const fanSpread = 72.0;
+    // Fan packs: +20% size, spread farther apart.
+    const packW = 200.0 * _packScale;
+    const packH = 300.0 * _packScale;
+    const fanSpread = 104.0;
 
     return AnimatedBuilder(
       animation: _c,
@@ -283,7 +383,7 @@ class _RipPacksPageState extends State<_RipPacksPage>
             children: [
               const Spacer(),
               SizedBox(
-                height: 380,
+                height: 420,
                 width: double.infinity,
                 child: Stack(
                   alignment: Alignment.center,
@@ -321,10 +421,15 @@ class _RipPacksPageState extends State<_RipPacksPage>
                         opacity: t,
                         child: Transform.rotate(
                           angle: -0.32, // ~18°
-                          child: _HeroPackImage(
-                            asset: _packLeft,
-                            width: packW,
-                            height: packH,
+                          child: _PackHover(
+                            duration: const Duration(milliseconds: 2780),
+                            amplitude: 6,
+                            start: 0.12,
+                            child: _HeroPackImage(
+                              asset: _packLeft,
+                              width: packW,
+                              height: packH,
+                            ),
                           ),
                         ),
                       ),
@@ -339,10 +444,15 @@ class _RipPacksPageState extends State<_RipPacksPage>
                         opacity: t,
                         child: Transform.rotate(
                           angle: 0.32, // ~18°
-                          child: _HeroPackImage(
-                            asset: _packRight,
-                            width: packW,
-                            height: packH,
+                          child: _PackHover(
+                            duration: const Duration(milliseconds: 4050),
+                            amplitude: 7,
+                            start: 0.71,
+                            child: _HeroPackImage(
+                              asset: _packRight,
+                              width: packW,
+                              height: packH,
+                            ),
                           ),
                         ),
                       ),
@@ -352,10 +462,15 @@ class _RipPacksPageState extends State<_RipPacksPage>
                       offset: Offset(0, 36 * (1 - t)),
                       child: Opacity(
                         opacity: t,
-                        child: _HeroPackImage(
-                          asset: _packCenter,
-                          width: packW + 12,
-                          height: packH + 18,
+                        child: _PackHover(
+                          duration: const Duration(milliseconds: 3360),
+                          amplitude: 8,
+                          start: 0.41,
+                          child: _HeroPackImage(
+                            asset: _packCenter,
+                            width: packW + 12,
+                            height: packH + 18,
+                          ),
                         ),
                       ),
                     ),

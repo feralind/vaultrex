@@ -1,1 +1,8 @@
-﻿Vaultrex — Riftbound card back assets
+﻿Bindora — card back assets
+
+- riftbound_back.png — League of Legends / Riftbound style card back
+  (user-supplied; used in pack theater face-down reveal)
+- pokemon_back.png — Pokémon TCG card back (user-supplied; corner fringe cleaned)
+- mtg_back.png — Magic: The Gathering card back
+
+All trademarks belong to their respective owners.

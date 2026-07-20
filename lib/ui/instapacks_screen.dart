@@ -246,9 +246,11 @@ class _InstapacksHero extends StatefulWidget {
 
 class _InstapacksHeroState extends State<_InstapacksHero>
     with SingleTickerProviderStateMixin {
-  static const _left = 'assets/featured_packs/riftbound/pack_legendary.png';
-  static const _center = 'assets/featured_packs/riftbound/pack_rare.png';
-  static const _right = 'assets/featured_packs/riftbound/pack_mythic.png';
+  // Dedicated Instapacks top-border entities (not shop tier assets).
+  static const _left = 'assets/instapacks/border_left.png';
+  static const _center = 'assets/instapacks/border_middle.png';
+  static const _right = 'assets/instapacks/border_right.png';
+  static const _packScale = 0.825 * 1.20; // +20% vs prior Instapacks border size
 
   late final AnimationController _float;
 
@@ -384,7 +386,10 @@ class _InstapacksHeroState extends State<_InstapacksHero>
                               bottom: -70 + bob * 5,
                               child: Transform.rotate(
                                 angle: -0.28,
-                                child: _HeroFanPack(asset: _left, width: 148),
+                                child: _HeroFanPack(
+                                  asset: _left,
+                                  width: 148 * _packScale,
+                                ),
                               ),
                             ),
                             // Right — behind, tilted CW.
@@ -393,7 +398,10 @@ class _InstapacksHeroState extends State<_InstapacksHero>
                               bottom: -70 + bob * 5,
                               child: Transform.rotate(
                                 angle: 0.28,
-                                child: _HeroFanPack(asset: _right, width: 148),
+                                child: _HeroFanPack(
+                                  asset: _right,
+                                  width: 148 * _packScale,
+                                ),
                               ),
                             ),
                             // Center — front, slight float.
@@ -401,7 +409,10 @@ class _InstapacksHeroState extends State<_InstapacksHero>
                               bottom: -78 + bob * 7,
                               child: Transform.rotate(
                                 angle: -0.02,
-                                child: _HeroFanPack(asset: _center, width: 168),
+                                child: _HeroFanPack(
+                                  asset: _center,
+                                  width: 168 * _packScale,
+                                ),
                               ),
                             ),
                           ],
@@ -612,15 +623,18 @@ class _FeaturedTileState extends State<_FeaturedTile>
                             hitUrl != null ? 36 : 18,
                             8,
                           ),
-                          child: KnockoutProductImage(
-                            url: pack.assetPath,
-                            fit: BoxFit.contain,
-                            error: PackVisual(
-                              title: pack.tier.label,
-                              colors: pack.tier.bloomColors,
-                              width: 110,
-                              height: 160,
-                              franchiseId: widget.franchiseId,
+                          child: Transform.scale(
+                            scale: 0.825,
+                            child: KnockoutProductImage(
+                              url: pack.assetPath,
+                              fit: BoxFit.contain,
+                              error: PackVisual(
+                                title: pack.tier.label,
+                                colors: pack.tier.bloomColors,
+                                width: 110,
+                                height: 160,
+                                franchiseId: widget.franchiseId,
+                              ),
                             ),
                           ),
                         ),

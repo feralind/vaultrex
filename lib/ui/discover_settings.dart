@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,6 +9,7 @@ import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import '../widgets/brand.dart';
 import '../widgets/cash_top_up_sheet.dart';
+import 'dev_hub_screen.dart';
 import 'sealed_inventory.dart';
 
 class DiscoverScreen extends ConsumerWidget {
@@ -230,6 +232,20 @@ class SettingsScreen extends ConsumerWidget {
             }
           },
         ),
+        if (kDebugMode) ...[
+          const SizedBox(height: 10),
+          ListTile(
+            tileColor: CC.card,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            leading: const Icon(Icons.construction_outlined, color: CC.accent),
+            title: const Text('Dev Hub'),
+            subtitle: const Text('Nudge layout · swap art · tilt preview'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => openDevHub(context),
+          ),
+        ],
         const SizedBox(height: 18),
         Text(
           'Legal',

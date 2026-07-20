@@ -1,7 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../dev/dev_studio.dart';
+import '../dev/dev_studio_panel.dart';
 import '../game/game_controller.dart';
 import '../models/enums.dart';
 import '../models/models.dart';
@@ -48,32 +51,62 @@ class CardArt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!kDebugMode) return _buildArt(context, url);
+
+    return ListenableBuilder(
+      listenable: DevStudio.instance,
+      builder: (context, _) {
+        final resolved = DevStudio.instance.resolveImage(url);
+        return GestureDetector(
+          onLongPress: () =>
+              devSelectImageSource(context, url, label: 'Card art'),
+          child: _buildArt(context, resolved),
+        );
+      },
+    );
+  }
+
+  Widget _buildArt(BuildContext context, String resolved) {
     final dpr = MediaQuery.devicePixelRatioOf(context);
-    // Decode at ~2× display CSS px (one axis only to preserve aspect).
-    // Omit when size is unbounded so grids get full HD decode.
     final int? cacheW = (width.isFinite && width > 0)
         ? (width * dpr * 2).round().clamp(1, 2000)
         : null;
     final int? cacheH = (cacheW == null && height.isFinite && height > 0)
         ? (height * dpr * 2).round().clamp(1, 2000)
         : null;
-    Widget image = ClipRRect(
+
+    Widget image;
+    if (resolved.isEmpty) {
+      image = _ph();
+    } else if (resolved.startsWith('assets/')) {
+      image = Image.asset(
+        resolved,
+        width: width.isFinite ? width : null,
+        height: height.isFinite ? height : null,
+        fit: fit,
+        alignment: Alignment.center,
+        filterQuality: FilterQuality.high,
+        errorBuilder: (_, _, _) => _ph(),
+      );
+    } else {
+      image = CachedNetworkImage(
+        imageUrl: resolved,
+        width: width.isFinite ? width : null,
+        height: height.isFinite ? height : null,
+        fit: fit,
+        alignment: Alignment.center,
+        filterQuality: FilterQuality.high,
+        memCacheWidth: cacheW,
+        memCacheHeight: cacheH,
+        fadeInDuration: const Duration(milliseconds: 180),
+        placeholder: (context, _) => _ph(),
+        errorWidget: (context, _, _) => _ph(),
+      );
+    }
+
+    image = ClipRRect(
       borderRadius: BorderRadius.circular(radius),
-      child: url.isEmpty
-          ? _ph()
-          : CachedNetworkImage(
-              imageUrl: url,
-              width: width.isFinite ? width : null,
-              height: height.isFinite ? height : null,
-              fit: fit,
-              alignment: Alignment.center,
-              filterQuality: FilterQuality.high,
-              memCacheWidth: cacheW,
-              memCacheHeight: cacheH,
-              fadeInDuration: const Duration(milliseconds: 180),
-              placeholder: (context, _) => _ph(),
-              errorWidget: (context, _, _) => _ph(),
-            ),
+      child: image,
     );
     if (width.isFinite && height.isFinite) {
       image = SizedBox(width: width, height: height, child: image);

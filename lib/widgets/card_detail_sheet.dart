@@ -3,12 +3,14 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../data/price_history.dart';
+import '../data/scrydex_art.dart';
 import '../models/enums.dart';
 import '../models/models.dart';
 import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import 'foil_slab.dart';
 import 'game_widgets.dart';
+import 'card_inspect_page.dart';
 import 'psa_grading_progress.dart';
 
 enum CardDetailMode { buy, owned }
@@ -415,9 +417,46 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Hero(
-          tag: heroTag,
-          child: art,
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => openCardInspect(
+              context,
+              def: def,
+              foil: _foil,
+              grade: _graded ? _grade : null,
+              company: _company,
+              heroTag: heroTag,
+            ),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Hero(
+                  tag: heroTag,
+                  child: art,
+                ),
+                Positioned(
+                  right: 4,
+                  bottom: 4,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.open_in_full_rounded,
+                        size: 14,
+                        color: Colors.white70,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
         const SizedBox(width: 14),
         Expanded(
@@ -427,10 +466,25 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
+                  if (ScrydexArt.expansionLogoUrl(def) != null)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 2),
+                      child: ScrydexExpansionLogo(
+                        setCode: def.setCode,
+                        height: 16,
+                      ),
+                    ),
                   _TagChip(label: def.franchiseTag),
                   _TagChip(label: def.setCode),
                   const _TagChip(label: 'EN'),
+                  if (def.cardType != null && def.cardType!.isNotEmpty)
+                    _TagChip(
+                      label: def.cardType!.split(';').first.trim().toUpperCase(),
+                    ),
+                  if (def.domain != null && def.domain!.isNotEmpty)
+                    _TagChip(label: def.domain!.toUpperCase()),
                   if (_graded) const _TagChip(label: 'PSA'),
                   if (def.isUnlisted)
                     const _TagChip(label: 'NOT ON MARKET'),
@@ -459,7 +513,17 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
                   letterSpacing: -0.3,
                 ),
               ),
-              if (def.number != null) ...[
+              if (ScrydexArt.printedNumberLabel(def) != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  ScrydexArt.printedNumberLabel(def)!,
+                  style: AppText.jakarta(
+                    color: CC.inkMuted,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+              ] else if (def.number != null) ...[
                 const SizedBox(height: 4),
                 Text(
                   '${def.setCode} ${def.number}',
@@ -472,10 +536,34 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
               ],
               const SizedBox(height: 8),
               Text(
-                def.setName,
+                () {
+                  final exp = ScrydexArt.riftboundExpansion(def.setCode);
+                  if (exp != null) return exp.subtitle;
+                  return ScrydexArt.displaySetName(def);
+                }(),
                 style: AppText.jakarta(
                   color: CC.inkMuted,
                   fontSize: 12,
+                ),
+              ),
+              if (def.artist != null && def.artist!.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Illus. ${def.artist}',
+                  style: AppText.jakarta(
+                    color: CC.inkMuted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 6),
+              Text(
+                'Tap art to inspect',
+                style: AppText.jakarta(
+                  color: CC.accent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 10),
