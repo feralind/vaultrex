@@ -13,7 +13,7 @@ import '../widgets/brand.dart';
 import '../widgets/fake_google_pay_sheet.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/knockout_image.dart';
-import '../widgets/pack_theater.dart';
+import '../widgets/pack_theater_v2.dart';
 
 Future<void> showFeaturedPackDetail(
   BuildContext context,
@@ -38,9 +38,11 @@ class FeaturedPackDetailPage extends ConsumerStatefulWidget {
 }
 
 class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final AnimationController _spin;
+  late final AnimationController _bob;
   bool _busy = false;
+  bool _showcase = false;
 
   FeaturedPackDef get pack => widget.pack;
 
@@ -51,6 +53,10 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
       vsync: this,
       duration: const Duration(seconds: 18),
     )..repeat();
+    _bob = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 4200),
+    )..repeat();
   }
 
   @override
@@ -60,31 +66,49 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
     final active = route?.isCurrent ?? true;
     if (active) {
       if (!_spin.isAnimating) _spin.repeat();
+      if (!_bob.isAnimating) _bob.repeat();
     } else {
       _spin.stop();
+      _bob.stop();
     }
   }
 
   @override
   void dispose() {
     _spin.dispose();
+    _bob.dispose();
     super.dispose();
   }
 
   List<CardDef> _resolveHits(GameNotifier notifier) {
+    final seen = <String>{};
     final out = <CardDef>[];
     for (final hit in pack.topHitIds) {
       final c = notifier.cardById(hit.cardId);
-      if (c != null) out.add(c);
+      if (c == null || !seen.add(c.id)) continue;
+      out.add(c);
     }
-    if (out.isNotEmpty) return out;
+    // Rare Candy–style density: fill Top Hits from the weighted pool.
     final pool = pack.poolSelector(notifier.catalog.cards);
     final ranked = [...pool]
       ..sort((a, b) => b.card.marketPrice.compareTo(a.card.marketPrice));
-    return ranked.take(8).map((e) => e.card).toList();
+    for (final e in ranked) {
+      if (!seen.add(e.card.id)) continue;
+      out.add(e.card);
+      if (out.length >= 24) break;
+    }
+    return out;
+  }
+
+  List<CardDef> _previewPoolCards(GameNotifier notifier) {
+    return _rankedPool(notifier).take(20).toList();
   }
 
   List<CardDef> _allPoolCards(GameNotifier notifier) {
+    return _rankedPool(notifier).take(120).toList();
+  }
+
+  List<CardDef> _rankedPool(GameNotifier notifier) {
     final pool = pack.poolSelector(notifier.catalog.cards);
     final ranked = [...pool]
       ..sort((a, b) => b.card.marketPrice.compareTo(a.card.marketPrice));
@@ -103,6 +127,8 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
     final state = ref.watch(gameProvider);
     final notifier = ref.read(gameProvider.notifier);
     final hits = _resolveHits(notifier);
+    final previewCards = _previewPoolCards(notifier);
+    final allCount = _rankedPool(notifier).length;
     final candy = pack.candyPrice;
     final bottom = MediaQuery.paddingOf(context).bottom;
     // Sticky Buy Now + Buy with Candy stack (~52+8+48) + bar padding.
@@ -142,12 +168,29 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _HeroStage(
-                        pack: pack,
-                        hits: hits,
-                        spin: _spin,
-                        franchiseId: ref.watch(
-                          gameProvider.select((s) => s.franchiseId),
+                      GestureDetector(
+                        onTap: () => setState(() => _showcase = !_showcase),
+                        child: _HeroStage(
+                          pack: pack,
+                          hits: hits,
+                          spin: _spin,
+                          bob: _bob,
+                          showcase: _showcase,
+                          franchiseId: ref.watch(
+                            gameProvider.select((s) => s.franchiseId),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _showcase
+                            ? 'Tap hero to return'
+                            : 'Tap pack art for chase showcase',
+                        textAlign: TextAlign.center,
+                        style: AppText.jakarta(
+                          color: CC.inkMuted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: 18),
@@ -190,7 +233,7 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Chase cards weighted into this pack — odds shown per hit.',
+                        'Chase cards weighted into this pack — odds shown when disclosed.',
                         style: AppText.jakarta(
                           color: CC.inkMuted,
                           fontSize: 12,
@@ -243,12 +286,31 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
                         },
                       ),
                       const SizedBox(height: 8),
+                      const SizedBox(height: 18),
+                      Text(
+                        'In this pack',
+                        style: AppText.jakarta(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 17,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Top ${previewCards.length} by street — open View all for the full pool.',
+                        style: AppText.jakarta(
+                          color: CC.inkMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _PoolGrid(cards: previewCards),
+                      const SizedBox(height: 8),
                       Align(
                         alignment: Alignment.centerLeft,
                         child: TextButton(
                           onPressed: () => _showAllCards(context, notifier),
                           child: Text(
-                            'View all cards →',
+                            'View all cards ($allCount) →',
                             style: AppText.jakarta(
                               fontWeight: FontWeight.w700,
                               color: CC.accentHot,
@@ -376,7 +438,7 @@ class _FeaturedPackDetailPageState extends ConsumerState<FeaturedPackDetailPage>
       Navigator.pop(context);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!navContext.mounted) return;
-        showPackTheater(
+        showPackTheaterV2(
           navContext,
           ref,
           alreadyOpened: true,
@@ -503,39 +565,46 @@ class _HeroStage extends StatelessWidget {
     required this.pack,
     required this.hits,
     required this.spin,
+    required this.bob,
+    required this.showcase,
     required this.franchiseId,
   });
 
   final FeaturedPackDef pack;
   final List<CardDef> hits;
   final AnimationController spin;
+  final AnimationController bob;
+  final bool showcase;
   final String franchiseId;
 
   @override
   Widget build(BuildContext context) {
     final bloom = pack.tier.bloomColors.first;
-    return SizedBox(
-      height: 248,
+    final hoverHits = hits.take(3).toList();
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+      height: showcase ? 268 : 248,
       child: Stack(
         alignment: Alignment.center,
         clipBehavior: Clip.none,
         children: [
-          // Soft dim glow (not a blinding sunburst).
           Container(
-            width: 220,
+            width: showcase ? 260 : 220,
             height: 160,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: RadialGradient(
                 colors: [
-                  bloom.withValues(alpha: 0.16),
+                  bloom.withValues(alpha: showcase ? 0.22 : 0.16),
                   bloom.withValues(alpha: 0.04),
                   Colors.transparent,
                 ],
               ),
             ),
           ),
-          if (hits.isNotEmpty)
+          if (!showcase && hits.isNotEmpty)
             AnimatedBuilder(
               animation: spin,
               builder: (context, _) {
@@ -565,21 +634,170 @@ class _HeroStage extends StatelessWidget {
                 );
               },
             ),
-          KnockoutProductImage(
-            url: pack.assetPath,
-            width: 168 * 0.825,
-            height: 236 * 0.825,
-            fit: BoxFit.contain,
-            error: PackVisual(
-              title: pack.tier.label,
-              colors: pack.tier.bloomColors,
-              width: 140 * 0.825,
-              height: 200 * 0.825,
-              franchiseId: franchiseId,
+          if (showcase)
+            Align(
+              alignment: const Alignment(0.92, 0.1),
+              child: SizedBox(
+                width: 168,
+                height: 240,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    for (var i = 0; i < hoverHits.length; i++)
+                      _HoverChaseCard(
+                        card: hoverHits[i],
+                        index: i,
+                        bob: bob,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          Align(
+            alignment: showcase ? const Alignment(-0.72, 0) : Alignment.center,
+            child: KnockoutProductImage(
+              url: pack.assetPath,
+              width: (showcase ? 148 : 168) * 0.825,
+              height: (showcase ? 210 : 236) * 0.825,
+              fit: BoxFit.contain,
+              error: PackVisual(
+                title: pack.tier.label,
+                colors: pack.tier.bloomColors,
+                width: (showcase ? 124 : 140) * 0.825,
+                height: (showcase ? 176 : 200) * 0.825,
+                franchiseId: franchiseId,
+              ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Desynced vertical bob — Rare Candy–style chase fan on the right.
+class _HoverChaseCard extends StatelessWidget {
+  const _HoverChaseCard({
+    required this.card,
+    required this.index,
+    required this.bob,
+  });
+
+  final CardDef card;
+  final int index;
+  final AnimationController bob;
+
+  @override
+  Widget build(BuildContext context) {
+    // Distinct periods / phases so the three cards never bob in sync.
+    final phase = index * 0.37;
+    final amp = 7.0 + index * 2.5;
+    final speed = 0.55 + index * 0.22;
+    final left = 8.0 + index * 28.0;
+    final topBase = 18.0 + index * 22.0;
+    final rot = -0.08 + index * 0.11;
+    final width = 92.0 - index * 4.0;
+    final height = width * (3.5 / 2.5);
+
+    return AnimatedBuilder(
+      animation: bob,
+      builder: (context, child) {
+        final t = (bob.value * speed + phase) * 2 * math.pi;
+        final dy = math.sin(t) * amp;
+        return Positioned(
+          left: left,
+          top: topBase + dy,
+          child: child!,
+        );
+      },
+      child: Transform.rotate(
+        angle: rot,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 12,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: CardArt(
+            url: card.displayArtUrl,
+            autoPlay: false,
+            width: width,
+            height: height,
+            radius: 10,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PoolGrid extends StatelessWidget {
+  const _PoolGrid({required this.cards});
+
+  final List<CardDef> cards;
+
+  @override
+  Widget build(BuildContext context) {
+    if (cards.isEmpty) {
+      return Text(
+        'Pool still loading…',
+        style: AppText.jakarta(color: CC.inkMuted, fontSize: 12),
+      );
+    }
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: cards.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        childAspectRatio: 0.62,
+      ),
+      itemBuilder: (context, i) {
+        final c = cards[i];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return CardArt(
+                    url: c.displayArtUrl,
+                    autoPlay: false,
+                    width: constraints.maxWidth,
+                    height: constraints.maxHeight,
+                    radius: 10,
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              c.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppText.jakarta(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            Text(
+              '\$${c.marketPrice.toStringAsFixed(2)}',
+              style: AppText.jakarta(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: CC.accentHot,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

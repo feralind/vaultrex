@@ -69,7 +69,7 @@ mixin _ShopActions on _GameNotifierBase {
   }
 
   /// Buy a Featured Pack and open immediately into [lastRip].
-  /// Returns true on success so UI can launch [showPackTheater] with
+  /// Returns true on success so UI can launch [showPackTheaterV2] with
   /// `alreadyOpened: true`.
   Future<bool> buyFeaturedPack(
     String featuredPackId, {

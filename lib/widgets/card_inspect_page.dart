@@ -331,8 +331,7 @@ class _InspectMeta extends StatelessWidget {
       if (def.artist != null && def.artist!.isNotEmpty) 'Illus. ${def.artist}',
     ];
 
-    final setLine = ScrydexArt.riftboundExpansion(def.setCode)?.subtitle ??
-        ScrydexArt.displaySetName(def);
+    final setLine = ScrydexArt.displaySetLine(def);
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -350,6 +349,10 @@ class _InspectMeta extends StatelessWidget {
               children: [
                 if (ScrydexArt.expansionLogoUrl(def) != null) ...[
                   ScrydexExpansionLogo(setCode: def.setCode, height: 20),
+                  const SizedBox(width: 8),
+                ],
+                if (ScrydexArt.expansionSymbolUrl(def) != null) ...[
+                  ScrydexExpansionSymbol(setCode: def.setCode, height: 18),
                   const SizedBox(width: 10),
                 ],
                 Expanded(

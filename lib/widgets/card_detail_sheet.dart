@@ -476,6 +476,14 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
                         height: 16,
                       ),
                     ),
+                  if (ScrydexArt.expansionSymbolUrl(def) != null)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 2),
+                      child: ScrydexExpansionSymbol(
+                        setCode: def.setCode,
+                        height: 14,
+                      ),
+                    ),
                   _TagChip(label: def.franchiseTag),
                   _TagChip(label: def.setCode),
                   const _TagChip(label: 'EN'),
@@ -536,11 +544,7 @@ class _CardDetailSheetState extends State<CardDetailSheet> {
               ],
               const SizedBox(height: 8),
               Text(
-                () {
-                  final exp = ScrydexArt.riftboundExpansion(def.setCode);
-                  if (exp != null) return exp.subtitle;
-                  return ScrydexArt.displaySetName(def);
-                }(),
+                ScrydexArt.displaySetLine(def),
                 style: AppText.jakarta(
                   color: CC.inkMuted,
                   fontSize: 12,

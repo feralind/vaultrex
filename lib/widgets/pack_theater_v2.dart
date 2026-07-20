@@ -58,7 +58,7 @@ Future<void> showPackTheaterV2(
 
   for (final o in pulls) {
     final def = notifier.cardById(o.cardId);
-    final url = def?.imageUrl ?? '';
+    final url = def?.displayArtUrl ?? '';
     if (url.isEmpty) continue;
     // ignore: unawaited_futures
     precacheImage(CachedNetworkImageProvider(url), context);
@@ -183,6 +183,22 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
     return false;
   }
 
+  Color _getGlowColor(OwnedCard owned, CardDef? def) {
+    if (def == null) return Colors.transparent;
+    
+    // Foil cards get gold glow
+    if (owned.foil) return const Color(0xFFFBBF24);
+    
+    // Rarity-based colors
+    return switch (def.rarity) {
+      Rarity.epic || Rarity.showcase || Rarity.ultimate || Rarity.signature =>
+        const Color(0xFFA78BFA), // Purple
+      Rarity.rare || Rarity.overnumbered => const Color(0xFF60A5FA), // Blue
+      Rarity.uncommon => const Color(0xFF34D399), // Green
+      _ => const Color(0xFF64748B), // Gray
+    };
+  }
+
   Future<void> _ripPack() async {
     if (_phase != _RipPhaseV2.sealed || _sessionBusy) return;
 
@@ -258,6 +274,8 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
       HapticFeedback.heavyImpact();
       SystemSound.play(SystemSoundType.click);
       _glowPulse.forward(from: 0);
+    } else {
+      HapticFeedback.selectionClick();
     }
 
     setState(() {
@@ -427,6 +445,10 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
                             _currentCard,
                             notifier.cardById(_currentCard.cardId),
                             notifier.fairFor(_currentCard),
+                          ),
+                          glowColor: _getGlowColor(
+                            _currentCard,
+                            notifier.cardById(_currentCard.cardId),
                           ),
                           onHorizontalDragUpdate: (d) {
                             if (!_deciding) return;
@@ -676,6 +698,7 @@ class _RevealLineupV2 extends StatelessWidget {
     required this.cardIndex,
     required this.totalCards,
     required this.isHit,
+    required this.glowColor,
     required this.onHorizontalDragUpdate,
     required this.onHorizontalDragEnd,
   });
@@ -690,12 +713,13 @@ class _RevealLineupV2 extends StatelessWidget {
   final int cardIndex;
   final int totalCards;
   final bool isHit;
+  final Color glowColor;
   final void Function(DragUpdateDetails) onHorizontalDragUpdate;
   final void Function(DragEndDetails) onHorizontalDragEnd;
 
   @override
   Widget build(BuildContext context) {
-    final artUrl = cardDef?.imageUrl ?? '';
+    final artUrl = cardDef?.displayArtUrl ?? '';
 
     return GestureDetector(
       onHorizontalDragUpdate: onHorizontalDragUpdate,
@@ -714,14 +738,17 @@ class _RevealLineupV2 extends StatelessWidget {
           return Stack(
             fit: StackFit.expand,
             children: [
-              // Background glow
+              // Background glow - shows for ALL cards
               IgnorePointer(
                 child: Container(
                   decoration: BoxDecoration(
                     gradient: RadialGradient(
                       colors: [
-                        (isHit ? CC.accentHot : CC.inkMuted)
-                            .withValues(alpha: showFront ? 0.25 + pulse * 0.15 : 0.08),
+                        glowColor.withValues(
+                          alpha: showFront
+                              ? (isHit ? 0.3 + pulse * 0.2 : 0.12)
+                              : 0.05,
+                        ),
                         CC.bg,
                       ],
                     ),
@@ -740,6 +767,7 @@ class _RevealLineupV2 extends StatelessWidget {
                     currentCard: currentCard,
                     isHit: isHit,
                     pulse: pulse,
+                    glowColor: glowColor,
                   ),
                 ),
               ),
@@ -772,6 +800,63 @@ class _RevealLineupV2 extends StatelessWidget {
                           ),
                         ),
                       const SizedBox(height: 12),
+                      // Rarity badge + value indicator
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (currentCard.foil)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFBBF24).withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: const Color(0xFFFBBF24),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Text(
+                                '✨ Foil',
+                                style: AppText.jakarta(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFFFBBF24),
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          if (isHit) ...[
+                            if (currentCard.foil) const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: glowColor.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: glowColor,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Text(
+                                '⭐ Hit',
+                                style: AppText.jakarta(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: glowColor,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 8),
                       Text(
                         'Card ${cardIndex + 1} of $totalCards',
                         style: AppText.jakarta(
@@ -800,6 +885,7 @@ class _FlipCard extends StatelessWidget {
     required this.currentCard,
     required this.isHit,
     required this.pulse,
+    required this.glowColor,
   });
 
   final double angle;
@@ -809,6 +895,7 @@ class _FlipCard extends StatelessWidget {
   final OwnedCard currentCard;
   final bool isHit;
   final double pulse;
+  final Color glowColor;
 
   @override
   Widget build(BuildContext context) {
@@ -827,7 +914,7 @@ class _FlipCard extends StatelessWidget {
           boxShadow: [
             BoxShadow(
               color: isHit
-                  ? CC.accentHot.withValues(alpha: 0.4 + pulse * 0.2)
+                  ? glowColor.withValues(alpha: 0.5 + pulse * 0.2)
                   : Colors.black.withValues(alpha: 0.5),
               blurRadius: 30 + pulse * 10,
               offset: const Offset(0, 10),
@@ -857,14 +944,17 @@ class _FlipCard extends StatelessWidget {
                   errorWidget: (_, __, ___) =>
                       const ColoredBox(color: Color(0xFF0C1428)),
                 ),
-              if (showFront && isHit)
+              // Glow overlay - shows for ALL cards but stronger for hits
+              if (showFront)
                 Positioned.fill(
                   child: IgnorePointer(
                     child: Container(
                       decoration: BoxDecoration(
                         gradient: RadialGradient(
                           colors: [
-                            CC.accentHot.withValues(alpha: pulse * 0.3),
+                            glowColor.withValues(
+                              alpha: isHit ? pulse * 0.4 : 0.08,
+                            ),
                             Colors.transparent,
                           ],
                         ),

@@ -9,7 +9,8 @@
 - **`price_history.json`**: daily closes for UI charts. TCGplayer does not
   publish a free historical series; paths are mean-reverting around the
   researched spot (±realistic secondary-market volatility), ending at spot.
-- **Pokémon + Riftbound card scan art (runtime)**: [Scrydex](https://scrydex.com)
-  image CDN (`images.scrydex.com/{pokemon|riftbound}/{id}/…`) and expansion
-  logos (`…/riftbound/{SET}-logo/logo`). Metadata/pricing API requires a
-  Scrydex key (not bundled).
+- **Pokémon + Riftbound + MTG card scan art (runtime)**: [Scrydex](https://scrydex.com)
+  image CDN (`images.scrydex.com/{pokemon|riftbound|magicthegathering}/{id}/…`),
+  expansion logos (`…/{game}/{id}-logo/logo`), and set symbols for Pokémon/MTG
+  (`…/{game}/{id}-symbol/symbol`). Metadata/pricing API requires a Scrydex key
+  (not bundled).

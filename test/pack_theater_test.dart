@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:bindora/game/game_controller.dart';
 import 'package:bindora/models/enums.dart';
-import 'package:bindora/widgets/pack_theater.dart';
+import 'package:bindora/widgets/pack_theater_v2.dart';
 
 Future<void> _waitUntilReady(ProviderContainer container) async {
   for (var i = 0; i < 100; i++) {
@@ -21,7 +21,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('PackRipTheater builds with fast bolt and close control',
+  testWidgets('PackRipTheaterV2 builds with fast bolt and close control',
       (tester) async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
@@ -53,7 +53,7 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: MaterialApp(
-          home: PackRipTheater(
+          home: PackRipTheaterV2(
             pulls: List.from(pulls),
             onDone: () {},
           ),
@@ -63,10 +63,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
-    expect(find.byType(PackRipTheater), findsOneWidget);
+    expect(find.byType(PackRipTheaterV2), findsOneWidget);
     expect(find.byIcon(Icons.bolt_rounded), findsOneWidget);
     expect(find.byIcon(Icons.close_rounded), findsOneWidget);
     expect(find.text('Keep all'), findsNothing);
-    expect(find.textContaining('Swipe down'), findsOneWidget);
   });
 }

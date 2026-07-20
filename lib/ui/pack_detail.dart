@@ -9,7 +9,7 @@ import '../theme/app_theme.dart';
 import '../widgets/brand.dart';
 import '../widgets/fake_google_pay_sheet.dart';
 import '../widgets/game_widgets.dart';
-import '../widgets/pack_theater.dart';
+import '../widgets/pack_theater_v2.dart';
 import 'sealed_inventory.dart';
 
 Future<void> showPackDetail(
@@ -311,7 +311,7 @@ class _PackDetailSheetState extends ConsumerState<_PackDetailSheet> {
       // Single pack: open rip theater after the sheet has dismissed.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!navContext.mounted) return;
-        showPackTheater(
+        showPackTheaterV2(
           navContext,
           ref,
           packId: newPackId,

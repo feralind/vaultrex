@@ -12,7 +12,7 @@ import 'ui/engagement/engagement_hub.dart';
 import 'ui/instapacks_screen.dart';
 import 'ui/market_screen.dart';
 import 'ui/onboarding_flow.dart';
-import 'widgets/pack_theater.dart';
+import 'widgets/pack_theater_v2.dart';
 import 'data/engagement_defs.dart';
 
 void main() async {
@@ -113,7 +113,8 @@ class _HomeShellState extends ConsumerState<HomeShell>
       };
 
   Widget _pageFor(int i) {
-    if (i == 1 || i == 3) {
+    // Keep Discover too so enter animation / cat state survive tab switches.
+    if (i == 0 || i == 1 || i == 3) {
       return _kept.putIfAbsent(i, () => _create(i));
     }
     return _create(i);
@@ -135,8 +136,12 @@ class _HomeShellState extends ConsumerState<HomeShell>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      ref.read(gameProvider.notifier).catchUpOnlineSales();
-      ref.read(gameProvider.notifier).catchUpGrading();
+      final notifier = ref.read(gameProvider.notifier);
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final last = ref.read(gameProvider).lastPlayedAtMs;
+      notifier.catchUpGameDays(nowMs: now, fromMs: last);
+      notifier.catchUpOnlineSales(nowMs: now, fromMs: last);
+      notifier.catchUpGrading();
     }
   }
 
@@ -180,7 +185,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
               Navigator.pop(ctx);
               _lastRipDialogOpen = false;
               // Keep prompted while theater is active; clear if rip ends empty.
-              showPackTheater(context, ref, alreadyOpened: true).whenComplete(() {
+              showPackTheaterV2(context, ref, alreadyOpened: true).whenComplete(() {
                 if (!mounted) return;
                 final still = ref.read(gameProvider).lastRip?.isNotEmpty == true;
                 _lastRipPrompted = still;
@@ -263,9 +268,9 @@ class _HomeShellState extends ConsumerState<HomeShell>
       WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptLastRip());
     }
 
-    // Active + any keep-alive tabs (1 Collection, 3 Instapacks).
+    // Active + keep-alive tabs (0 Discover, 1 Collection, 3 Instapacks).
     final toShow = <int>{_index, ..._kept.keys};
-    if (_index == 1 || _index == 3) {
+    if (_index == 0 || _index == 1 || _index == 3) {
       _pageFor(_index);
     }
     final ordered = toShow.toList()..sort();

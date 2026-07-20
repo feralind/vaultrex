@@ -12,7 +12,7 @@ import '../../models/models.dart';
 import '../../services/bindora_feel.dart';
 import '../../theme/app_text.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/pack_theater.dart';
+import '../../widgets/pack_theater_v2.dart';
 
 // ─── Shared tiles ───────────────────────────────────────────────────────────
 
@@ -904,7 +904,7 @@ class ModesHubScreen extends ConsumerWidget {
                 onPressed: () async {
                   final pulls = await notifier.runSealedDraft(setCode: code);
                   if (pulls != null && context.mounted) {
-                    await showPackTheater(context, ref, alreadyOpened: true);
+                    await showPackTheaterV2(context, ref, alreadyOpened: true);
                   }
                 },
               );
@@ -915,7 +915,7 @@ class ModesHubScreen extends ConsumerWidget {
             onPressed: () async {
               final pulls = await notifier.runWeeklyChallenge();
               if (pulls != null && context.mounted) {
-                await showPackTheater(context, ref, alreadyOpened: true);
+                await showPackTheaterV2(context, ref, alreadyOpened: true);
               }
             },
             child: const Text('Weekly seeded challenge (900 candy)'),
@@ -1178,7 +1178,7 @@ Future<void> showOpenAnotherSheet(
                   onPressed: () async {
                     Navigator.pop(ctx);
                     if (!context.mounted) return;
-                    await showPackTheater(context, ref);
+                    await showPackTheaterV2(context, ref);
                   },
                   child: Text('Open inventory pack (${state.unopened.length} left)'),
                 ),
@@ -1196,7 +1196,7 @@ Future<void> showOpenAnotherSheet(
                             payWith: pay,
                           );
                           if (ok && context.mounted) {
-                            await showPackTheater(
+                            await showPackTheaterV2(
                               context,
                               ref,
                               alreadyOpened: true,
