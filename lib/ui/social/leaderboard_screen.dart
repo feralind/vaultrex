@@ -52,7 +52,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
             child: Text(
               'Flavor rivals only — not real players. '
               'Board day ≈ 2h real time · ${GameClock.remainingLabel()} · '
-              'Unlock more as you level ($unlocked/16).',
+              'Unlock more as you level ($unlocked/${rivalPersonas.length}).',
               style: AppText.jakarta(
                 color: CC.inkMuted,
                 fontSize: 12,

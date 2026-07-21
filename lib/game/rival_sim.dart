@@ -190,32 +190,43 @@ class RivalSim {
     required math.Random local,
     required RivalPersona persona,
   }) {
-    var bias = 1.0;
+    var bias = persona.wealthMult;
     final tags = persona.personality;
+    final agr = persona.aggression;
     switch (metric) {
       case RivalBoardMetric.binder:
-        if (tags.contains('collector') || tags.contains('whale')) bias = 1.12;
-        if (tags.contains('bulk') || tags.contains('flipper')) bias = 0.88;
+        if (tags.contains('collector') || tags.contains('whale')) {
+          bias *= 1.18;
+        }
+        if (tags.contains('bulk') || tags.contains('flipper')) bias *= 0.92;
+        bias *= 1.0 + agr * 0.12;
       case RivalBoardMetric.flips:
-        if (tags.contains('flipper') || tags.contains('dealer')) bias = 1.15;
-        if (tags.contains('collector') || tags.contains('patient')) bias = 0.85;
+        if (tags.contains('flipper') || tags.contains('dealer')) {
+          bias *= 1.22;
+        }
+        if (tags.contains('collector') || tags.contains('patient')) {
+          bias *= 0.90;
+        }
+        bias *= 1.0 + agr * 0.18;
       case RivalBoardMetric.greens:
         if (tags.contains('foil-hunter') ||
             tags.contains('hype') ||
             tags.contains('impulsive')) {
-          bias = 1.18;
+          bias *= 1.28;
         }
-        if (tags.contains('practical') || tags.contains('bulk')) bias = 0.82;
+        if (tags.contains('practical') || tags.contains('bulk')) bias *= 0.85;
+        bias *= 1.0 + agr * 0.22;
     }
 
     final floor = switch (metric) {
-      RivalBoardMetric.binder => 40.0,
-      RivalBoardMetric.flips => 8.0,
-      RivalBoardMetric.greens => 0.0,
+      RivalBoardMetric.binder => 80.0,
+      RivalBoardMetric.flips => 18.0,
+      RivalBoardMetric.greens => 1.0,
     };
-    final spread = 0.45 + local.nextDouble() * 1.05;
+    // Richer + more competitive: rivals often sit above the player.
+    final spread = 0.75 + local.nextDouble() * 1.15 + agr * 0.35;
     final jitter =
-        (local.nextDouble() - 0.5) * math.max(1.0, playerScore) * 0.22;
+        (local.nextDouble() - 0.5) * math.max(1.0, playerScore) * 0.18;
     final raw = playerScore * spread * bias + jitter;
     if (metric == RivalBoardMetric.greens) {
       return math.max(floor, raw).roundToDouble();
@@ -225,10 +236,11 @@ class RivalSim {
 
   static RivalStatus _statusFor(math.Random rng, int i) {
     final roll = rng.nextDouble();
-    if (roll < 0.12) return RivalStatus.highBid;
-    if (roll < 0.28) return RivalStatus.sweating;
-    if (roll < 0.40) return RivalStatus.listing;
-    if (roll < 0.50) return RivalStatus.tappedOut;
+    // Louder pit: more high-bid / sweating.
+    if (roll < 0.22) return RivalStatus.highBid;
+    if (roll < 0.42) return RivalStatus.sweating;
+    if (roll < 0.55) return RivalStatus.listing;
+    if (roll < 0.62) return RivalStatus.tappedOut;
     return RivalStatus.idle;
   }
 

@@ -1394,15 +1394,22 @@ class GameNotifier extends _GameNotifierBase
     }
     lot.currentBid = next;
     lot.playerIsHighBidder = true;
-    // Rival pressure — sometimes counters immediately (Phase 7).
+    // Aggressive rivals — richer ones fire more, sometimes stack raises.
+    final rival = rivalByIndex(_rng.nextInt(9999));
+    final fireChance = (0.48 + rival.aggression * 0.42).clamp(0.35, 0.92);
     String? msg = 'You are high bidder.';
-    if (_rng.nextDouble() < 0.42) {
-      final rival = rivalByIndex(_rng.nextInt(9999)).handle;
-      lot.rivalName = rival;
-      final rivalBid = next + lot.minIncrement;
+    if (_rng.nextDouble() < fireChance) {
+      lot.rivalName = rival.handle;
+      final steps = 1 +
+          (_rng.nextDouble() < rival.aggression * 0.85
+              ? 1 + _rng.nextInt(2)
+              : 0);
+      final rivalBid = next + lot.minIncrement * steps;
       lot.currentBid = rivalBid;
       lot.playerIsHighBidder = false;
-      msg = '$rival outbid you to \$${rivalBid.toStringAsFixed(2)}.';
+      msg = steps > 1
+          ? '${rival.handle} steamrolls +$steps to \$${rivalBid.toStringAsFixed(2)}.'
+          : '${rival.handle} outbid you to \$${rivalBid.toStringAsFixed(2)}.';
     } else {
       lot.rivalName ??= rivalByIndex(lot.id.hashCode).handle;
     }
