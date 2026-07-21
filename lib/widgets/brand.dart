@@ -330,7 +330,8 @@ class PackVisual extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: colors.first.withValues(alpha: 0.22),
+                      color: (colors.isNotEmpty ? colors.first : const Color(0xFF64748B))
+                          .withValues(alpha: 0.22),
                       blurRadius: 22,
                       spreadRadius: 0,
                     ),
@@ -468,16 +469,22 @@ class _FoilPack extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final stops = colors.length == 1
-        ? [colors.first, colors.first]
-        : colors;
+    // LinearGradient / ui.Gradient need ≥2 colors; empty lists crash on paint.
+    final stops = colors.isEmpty
+        ? const [Color(0xFF64748B), Color(0xFF334155)]
+        : colors.length == 1
+            ? [colors.first, colors.first]
+            : colors;
     final isPokemon = franchiseId == 'pokemon';
     final isMtg = franchiseId == 'mtg';
+    final isOnePiece = franchiseId == 'onepiece';
     final brandLabel = isPokemon
         ? 'POKÉMON'
         : isMtg
             ? 'MAGIC'
-            : 'RIFTBOUND';
+            : isOnePiece
+                ? 'ONE PIECE'
+                : 'RIFTBOUND';
 
     return Container(
       width: width,
@@ -534,7 +541,9 @@ class _FoilPack extends StatelessWidget {
                   : Image.asset(
                       isMtg
                           ? 'assets/logos/mtg.png'
-                          : 'assets/logos/riftbound_wordmark.png',
+                          : isOnePiece
+                              ? 'assets/logos/onepiece.png'
+                              : 'assets/logos/riftbound.png',
                       width: width * 0.55,
                       fit: BoxFit.contain,
                       errorBuilder: (_, _, _) =>
@@ -606,6 +615,8 @@ class _SheenPainter extends CustomPainter {
           Colors.white.withValues(alpha: 0.18),
           Colors.white.withValues(alpha: 0.0),
         ],
+        // dart:ui requires colorStops whenever colors.length != 2.
+        const [0.0, 0.5, 1.0],
       );
     canvas.drawRect(Offset.zero & size, stripe);
   }
@@ -898,14 +909,14 @@ class CashBalance extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.payments_outlined, size: 14, color: Color(0xFF34D399)),
+          const Icon(Icons.payments_outlined, size: 14, color: CC.cash),
           const SizedBox(width: 5),
           Text(
             '\$${amount.toStringAsFixed(2)}',
             style: AppText.jakarta(
               fontWeight: FontWeight.w800,
               fontSize: 13,
-              color: const Color(0xFF34D399),
+              color: CC.cash,
             ),
           ),
           if (onTap != null) ...[

@@ -43,6 +43,26 @@ class RiftboundPackOpener {
       cards.addAll(_drawMany(setCode, Rarity.common, 3, foil: false));
       return cards;
     }
+    if (catalog.isOnePiece) {
+      // One Piece booster: 6 main cards; optional DON!! when catalog has them.
+      final cards = <OwnedCard>[];
+      cards.addAll(_drawMany(setCode, Rarity.common, 3, foil: false));
+      final uncommons = _drawMany(setCode, Rarity.uncommon, 2, foil: false);
+      cards.addAll(uncommons);
+      if (uncommons.length < 2) {
+        cards.addAll(
+          _drawMany(setCode, Rarity.common, 2 - uncommons.length, foil: false),
+        );
+      }
+      cards.addAll(_drawRarePlus(setCode, 1, forceFoil: false));
+      while (cards.length < 6) {
+        cards.addAll(_drawMany(setCode, Rarity.common, 1, foil: false));
+        if (cards.isEmpty) break;
+      }
+      final don = _drawDon(setCode);
+      if (don != null) cards.add(don);
+      return cards.take(7).toList();
+    }
     final cards = <OwnedCard>[];
     cards.addAll(_drawMany(setCode, Rarity.common, 7, foil: false));
     cards.addAll(_drawMany(setCode, Rarity.uncommon, 3, foil: false));
@@ -52,7 +72,7 @@ class RiftboundPackOpener {
     return cards;
   }
 
-  /// 36 packs for Pokémon boxes; 30 for MTG; 24 for Riftbound.
+  /// 36 packs for Pokémon boxes; 30 for MTG; 24 for Riftbound / One Piece.
   List<OwnedCard> openBox(String setCode) {
     final packs = catalog.isPokemon
         ? 36
@@ -134,11 +154,44 @@ class RiftboundPackOpener {
     return _instantiate(def, foil: false);
   }
 
+  /// Optional DON!! slot when the set catalog includes DON / token cards.
+  OwnedCard? _drawDon(String setCode) {
+    final tokens = catalog.pool(setCode, Rarity.token, tokens: true);
+    final dons = tokens
+        .where((c) {
+          final n = c.name.toLowerCase();
+          final t = (c.cardType ?? '').toLowerCase();
+          return n.contains('don') || t.contains('don');
+        })
+        .toList();
+    var pool = dons.isNotEmpty ? dons : tokens;
+    if (pool.isEmpty) {
+      // Fallback: older catalogs may tag DON!! as Common.
+      final all = catalog.bySet[setCode] ?? const <CardDef>[];
+      pool = all
+          .where((c) {
+            final n = c.name.toLowerCase();
+            final t = (c.cardType ?? '').toLowerCase();
+            return n.contains('don!!') || t.contains('don');
+          })
+          .toList();
+    }
+    if (pool.isEmpty) return null;
+    return _instantiate(pool[_rng.nextInt(pool.length)], foil: false);
+  }
+
   Rarity _rollRarePlus(String setCode) {
     final roll = _rng.nextDouble();
     if (catalog.isPokemon) {
       if (roll < 0.78) return Rarity.rare;
       if (roll < 0.96) return Rarity.epic;
+      return Rarity.promo;
+    }
+    if (catalog.isOnePiece) {
+      // C/UC/R/SR/SEC curve: mostly Rare, SR≈Epic, SEC≈Showcase, Leader≈Promo.
+      if (roll < 0.70) return Rarity.rare;
+      if (roll < 0.90) return Rarity.epic;
+      if (roll < 0.97) return Rarity.showcase;
       return Rarity.promo;
     }
     // Approximate community rates; Ultimate mainly Unleashed+.

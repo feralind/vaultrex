@@ -2,9 +2,11 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'data/engagement_defs.dart';
 import 'data/onboarding.dart';
 import 'game/game_controller.dart';
 import 'services/bindora_feel.dart';
+import 'services/startup_preload.dart';
 import 'theme/app_theme.dart';
 import 'ui/collection_screen.dart';
 import 'ui/discover_settings.dart';
@@ -12,8 +14,9 @@ import 'ui/engagement/engagement_hub.dart';
 import 'ui/instapacks_screen.dart';
 import 'ui/market_screen.dart';
 import 'ui/onboarding_flow.dart';
+import 'ui/startup_splash.dart';
+import 'widgets/home_bottom_nav.dart';
 import 'widgets/pack_theater_v2.dart';
-import 'data/engagement_defs.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -54,30 +57,59 @@ class _Root extends StatefulWidget {
 }
 
 class _RootState extends State<_Root> {
-  bool? _ready;
+  bool _bootDone = false;
   bool _onboarded = false;
+  double _preloadProgress = 0;
+  String _preloadStatus = 'Starting…';
 
   @override
   void initState() {
     super.initState();
-    _load();
+    // Precache needs a mounted [BuildContext] with an ImageConfiguration.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _boot());
   }
 
-  Future<void> _load() async {
-    final done = await OnboardingStore.isDone();
+  Future<void> _boot() async {
+    final onboardedFuture = OnboardingStore.isDone();
+    final gameIdFuture = OnboardingStore.selectedGame();
+    var listening = true;
+
+    try {
+      final gameId = await gameIdFuture;
+      if (!mounted) return;
+      await StartupPreload.run(
+        context: context,
+        gameId: gameId,
+        onProgress: (p) {
+          if (!mounted || !listening) return;
+          setState(() {
+            _preloadProgress = p.fraction;
+            _preloadStatus = p.status;
+          });
+        },
+      );
+    } catch (e) {
+      debugPrint('Startup preload failed: $e');
+    } finally {
+      listening = false;
+    }
+
+    final done = await onboardedFuture;
     if (!mounted) return;
     setState(() {
       _onboarded = done;
-      _ready = true;
+      _bootDone = true;
+      _preloadProgress = 1;
+      _preloadStatus = 'Ready';
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_ready != true) {
-      return const Scaffold(
-        backgroundColor: CC.bg,
-        body: Center(child: CircularProgressIndicator(color: CC.accent)),
+    if (!_bootDone) {
+      return StartupSplash(
+        progress: _preloadProgress,
+        status: _preloadStatus,
       );
     }
     if (!_onboarded) {
@@ -300,59 +332,9 @@ class _HomeShellState extends ConsumerState<HomeShell>
           children: stackChildren,
         ),
       ),
-      bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          color: CC.bgElevated,
-          border: Border(top: BorderSide(color: CC.line)),
-        ),
-        child: NavigationBar(
-          selectedIndex: _index,
-          onDestinationSelected: (i) => setState(() => _index = i),
-          destinations: [
-            const NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home),
-              label: 'Discover',
-            ),
-            const NavigationDestination(
-              icon: Icon(Icons.style_outlined),
-              selectedIcon: Icon(Icons.style),
-              label: 'Collection',
-            ),
-            NavigationDestination(
-              icon: Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: CC.scan, width: 2),
-                ),
-                child: const Icon(Icons.storefront_outlined, color: CC.scan),
-              ),
-              selectedIcon: Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: CC.scan, width: 2),
-                  color: CC.scan.withValues(alpha: 0.12),
-                ),
-                child: const Icon(Icons.storefront, color: CC.scan),
-              ),
-              label: 'Market',
-            ),
-            const NavigationDestination(
-              icon: Icon(Icons.inventory_2_outlined),
-              selectedIcon: Icon(Icons.inventory_2),
-              label: 'Instapacks',
-            ),
-            const NavigationDestination(
-              icon: Icon(Icons.settings_outlined),
-              selectedIcon: Icon(Icons.settings),
-              label: 'Settings',
-            ),
-          ],
-        ),
+      bottomNavigationBar: HomeBottomNav(
+        selectedIndex: _index,
+        onDestinationSelected: (i) => setState(() => _index = i),
       ),
     );
   }

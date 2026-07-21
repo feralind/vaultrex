@@ -110,6 +110,8 @@ class _PackDetailSheetState extends ConsumerState<_PackDetailSheet> {
                           'pokemon' =>
                             'Digital Instapack · real Pokémon pulls',
                           'mtg' => 'Digital Instapack · real Magic pulls',
+                          'onepiece' =>
+                            'Digital Instapack · real One Piece pulls',
                           _ => 'Digital Instapack · real Riftbound pulls',
                         },
                   textAlign: TextAlign.center,

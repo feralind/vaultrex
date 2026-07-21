@@ -2,6 +2,8 @@ import '../data/scrydex_art.dart';
 import 'enums.dart';
 
 export 'engagement.dart';
+export 'rentals.dart';
+export 'season.dart';
 
 class CardDef {
   const CardDef({
@@ -39,10 +41,22 @@ class CardDef {
   /// Illustrator when known (Scrydex / catalog enrichment).
   final String? artist;
 
-  /// Full-res art for grids, slabs, and detail. Prefer Scrydex HD when mapped.
+  /// Full-res art for grids, slabs, and detail.
+  ///
+  /// One Piece: prefer catalog URL first. Official digital renders (Scrydex /
+  /// Bandai / Limitless / TCGPlayer) all carry Bandai's SAMPLE watermark;
+  /// catalog may point at Limitless webp or locally desampled assets.
   String get displayArtUrl {
+    if (isOnePieceCard) {
+      if (imageUrl.isNotEmpty) return imageUrl;
+      final catalog = ScrydexArt.catalogArtUrl(this);
+      if (catalog != null) return catalog;
+      return imageUrlSmall;
+    }
     final scry = ScrydexArt.imageUrl(this, size: 'large');
     if (scry != null) return scry;
+    final catalog = ScrydexArt.catalogArtUrl(this);
+    if (catalog != null) return catalog;
     return imageUrl.isNotEmpty ? imageUrl : imageUrlSmall;
   }
 
@@ -51,8 +65,17 @@ class CardDef {
 
   /// Tiny thumbs only (list rows ~64px). Prefer Scrydex medium, else small.
   String get thumbArtUrl {
+    if (isOnePieceCard) {
+      if (imageUrlSmall.isNotEmpty) return imageUrlSmall;
+      if (imageUrl.isNotEmpty) return imageUrl;
+      final catalog = ScrydexArt.catalogArtUrl(this);
+      if (catalog != null) return catalog;
+      return '';
+    }
     final scry = ScrydexArt.imageUrl(this, size: 'medium');
     if (scry != null) return scry;
+    final catalog = ScrydexArt.catalogArtUrl(this);
+    if (catalog != null) return catalog;
     return imageUrlSmall.isNotEmpty ? imageUrlSmall : imageUrl;
   }
 
@@ -68,30 +91,38 @@ class CardDef {
   double get artAspectRatio =>
       isLandscapeCard ? 3.5 / 2.5 : 2.5 / 3.5;
 
-  /// Pokémon / MTG catalog prefixes; everything else is Riftbound.
+  /// Pokémon / MTG / One Piece catalog prefixes; everything else is Riftbound.
   bool get isPokemonCard =>
       id.startsWith('pkm_') || id.startsWith('pokemon_');
 
   bool get isMtgCard => id.startsWith('mtg_');
 
+  bool get isOnePieceCard => id.startsWith('op_');
+
   String get franchiseId => isPokemonCard
       ? 'pokemon'
       : isMtgCard
           ? 'mtg'
-          : 'riftbound';
+          : isOnePieceCard
+              ? 'onepiece'
+              : 'riftbound';
 
   /// Uppercase chip label for detail / collection tags.
   String get franchiseTag => isPokemonCard
       ? 'POKÉMON'
       : isMtgCard
           ? 'MAGIC'
-          : 'RIFTBOUND';
+          : isOnePieceCard
+              ? 'ONE PIECE'
+              : 'RIFTBOUND';
 
   String get franchiseDisplayName => isPokemonCard
       ? 'Pokémon'
       : isMtgCard
           ? 'Magic'
-          : 'Riftbound';
+          : isOnePieceCard
+              ? 'One Piece'
+              : 'Riftbound';
 
   /// Approximate print year for slab / detail chrome.
   String get setYear => switch (setCode) {
@@ -100,7 +131,10 @@ class CardDef {
         'TWM' || 'SSP' || 'PRE' => '2024',
         'FDN' || 'DFT' => '2024',
         'MH3' || 'DSK' || 'BLB' || 'OTJ' => '2024',
-        _ => isPokemonCard || isMtgCard ? '2024' : '2025',
+        'OP01' || 'OP02' => '2022',
+        'OP05' => '2023',
+        'OP09' || 'OP13' || 'PRB01' => '2024',
+        _ => isPokemonCard || isMtgCard || isOnePieceCard ? '2024' : '2025',
       };
 
   /// PSA slab set line, e.g. "2023 SV: SCARLET & VIOLET 151".

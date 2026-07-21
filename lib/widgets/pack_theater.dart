@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,6 +19,7 @@ import 'brand.dart';
 import 'foil_slab.dart';
 import 'game_widgets.dart';
 import 'pack_peel_scrub.dart';
+import 'pack_theater_v2.dart' show cardBackAssetForFranchise, resolvePackTheaterImageUrl;
 
 Future<void> showPackTheater(
   BuildContext context,
@@ -27,6 +29,11 @@ Future<void> showPackTheater(
   String? packId,
 }) async {
   final notifier = ref.read(gameProvider.notifier);
+  final resolvedArt = resolvePackTheaterImageUrl(
+    ref,
+    packImageUrl: packImageUrl,
+    packId: packId,
+  );
   if (!alreadyOpened) {
     try {
       final opened = await notifier.openPack(packId: packId);
@@ -58,12 +65,18 @@ Future<void> showPackTheater(
     return;
   }
 
-  for (final o in pulls) {
-    final def = notifier.cardById(o.cardId);
-    final url = def?.imageUrl ?? '';
-    if (url.isEmpty) continue;
-    // ignore: unawaited_futures
-    precacheImage(CachedNetworkImageProvider(url), context);
+  final art = resolvedArt ?? state.lastRipPackImageUrl;
+  final cardBack = cardBackAssetForFranchise(state.franchiseId);
+
+  // Skip network precache on Web — CanvasKit CORS decode spam (EncodingError).
+  if (!kIsWeb) {
+    for (final o in pulls) {
+      final def = notifier.cardById(o.cardId);
+      final url = def?.imageUrl ?? '';
+      if (url.isEmpty) continue;
+      // ignore: unawaited_futures
+      precacheImage(CachedNetworkImageProvider(url), context);
+    }
   }
 
   await showGeneralDialog<void>(
@@ -88,7 +101,8 @@ Future<void> showPackTheater(
     pageBuilder: (dialogContext, anim, secondary) {
       return PackRipTheater(
         pulls: List<OwnedCard>.from(pulls),
-        packImageUrl: packImageUrl,
+        packImageUrl: art,
+        cardBackAsset: cardBack,
         onDone: () {
           if (dialogContext.mounted) {
             Navigator.of(dialogContext, rootNavigator: true).pop();
@@ -109,11 +123,13 @@ class PackRipTheater extends ConsumerStatefulWidget {
     required this.pulls,
     required this.onDone,
     this.packImageUrl,
+    this.cardBackAsset,
   });
 
   final List<OwnedCard> pulls;
   final VoidCallback onDone;
   final String? packImageUrl;
+  final String? cardBackAsset;
 
   @override
   ConsumerState<PackRipTheater> createState() => _PackRipTheaterState();
@@ -123,7 +139,7 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
     with TickerProviderStateMixin {
   _RipPhase _phase = _RipPhase.sealed;
   double _tear = 0;
-  double _dragAccum = 0;
+  final PeelDragMapper _peelDrag = PeelDragMapper();
   int _cardIndex = 0;
   bool _flipped = false;
   bool _deciding = false;
@@ -205,29 +221,44 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
       unawaited(_openPack());
       return;
     }
-    // Vertical swipe drives tear; downward motion only.
-    final across = math.max(0.0, d.delta.dy) + d.delta.dx.abs() * 0.15;
-    _dragAccum = (_dragAccum + across).clamp(0.0, 220.0);
-    setState(() => _tear = (_dragAccum / 150).clamp(0.0, 1.0));
+    // Swipe top → bottom only (ignore upward / mostly-horizontal).
+    final dy = d.delta.dy;
+    if (dy <= 0) return;
+    setState(() => _tear = _peelDrag.applyDelta(dy));
     if (_tear >= 1) unawaited(_openPack());
+  }
+
+  void _onTearEnd(DragEndDetails details) {
+    if (_phase != _RipPhase.sealed || _sessionBusy) return;
+    if (_fastRip) {
+      unawaited(_openPack());
+      return;
+    }
+    // Velocity settle — short inertia so scrub doesn't hard-stop mid-frame.
+    final boosted =
+        (_tear + _peelDrag.inertiaBoost(details)).clamp(0.0, 1.0);
+    if (boosted > _tear) {
+      setState(() => _tear = boosted);
+    }
+    if (_tear >= 0.72) {
+      unawaited(_openPack());
+    }
   }
 
   Future<void> _openPack() async {
     if (_phase != _RipPhase.sealed || _sessionBusy) return;
     HapticFeedback.mediumImpact();
-    _peelStartTear = _fastRip ? 1.0 : _tear.clamp(0.0, 1.0);
     setState(() {
       _sessionBusy = true;
       _phase = _RipPhase.peeling;
-      if (_fastRip) _tear = 1.0;
+      _tear = 0;
+      _peelStartTear = 0;
     });
 
-    if (!_fastRip) {
-      // Ease remaining scrub to fully peeled (pre-render finish).
-      final start = _peelStartTear;
-      _peelOut.duration = Duration(
-        milliseconds: (380 * (1.0 - start)).round().clamp(120, 420),
-      );
+    if (_fastRip) {
+      setState(() => _tear = 1.0);
+    } else {
+      _peelOut.duration = const Duration(milliseconds: 720);
       _peelOut
         ..removeListener(_onPeelOutTick)
         ..addListener(_onPeelOutTick);
@@ -259,9 +290,8 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
 
   void _onPeelOutTick() {
     if (!mounted || _phase != _RipPhase.peeling) return;
-    final from = _peelStartTear;
-    final t = Curves.easeOutCubic.transform(_peelOut.value);
-    setState(() => _tear = from + (1.0 - from) * t);
+    final t = Curves.easeInOutCubic.transform(_peelOut.value);
+    setState(() => _tear = t);
   }
 
   Future<void> _presentCard() async {
@@ -495,20 +525,14 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
                     )
                   : ScrubPeelStage(
                       progress: _tear.clamp(0.0, 1.0),
-                      showHint: _phase == _RipPhase.sealed && !_fastRip,
-                      interactive: _phase == _RipPhase.sealed,
-                      onTearUpdate: _onTearUpdate,
-                      onTearEnd: () {
-                        if (_fastRip || _tear >= 0.72) {
-                          unawaited(_openPack());
-                        }
-                      },
-                      onTap: _fastRip
-                          ? () {
-                              setState(() => _tear = 1.0);
-                              unawaited(_openPack());
-                            }
-                          : null,
+                      showHint: _phase == _RipPhase.sealed && !_sessionBusy,
+                      interactive: _phase == _RipPhase.sealed && !_sessionBusy,
+                      packImageUrl: widget.packImageUrl,
+                      cardBackAsset: widget.cardBackAsset ??
+                          cardBackAssetForFranchise(
+                            ref.read(gameProvider).franchiseId,
+                          ),
+                      onSwipeCommit: () => unawaited(_openPack()),
                     ),
             ),
             if (inReveal && _deciding)
@@ -599,6 +623,7 @@ class _CardBack extends StatelessWidget {
   static const riftboundPath = 'assets/card_backs/riftbound_back.png';
   static const pokemonPath = 'assets/card_backs/pokemon_back.png';
   static const mtgPath = 'assets/card_backs/mtg_back.png';
+  static const onepiecePath = 'assets/card_backs/onepiece_back.png';
 
   final double width;
   final double height;
@@ -608,9 +633,11 @@ class _CardBack extends StatelessWidget {
     final franchise = refCatalogFranchise(context);
     final isPokemon = franchise == 'pokemon';
     final isMtg = franchise == 'mtg';
+    final isOnePiece = franchise == 'onepiece';
     final rawPath = switch (franchise) {
       'pokemon' => pokemonPath,
       'mtg' => mtgPath,
+      'onepiece' => onepiecePath,
       _ => riftboundPath,
     };
 
@@ -645,6 +672,7 @@ class _CardBack extends StatelessWidget {
                       errorBuilder: (_, _, _) => _backFallback(
                         isPokemon: isPokemon,
                         isMtg: isMtg,
+                        isOnePiece: isOnePiece,
                         width: width,
                       ),
                     )
@@ -656,6 +684,7 @@ class _CardBack extends StatelessWidget {
                       errorBuilder: (_, _, _) => _backFallback(
                         isPokemon: isPokemon,
                         isMtg: isMtg,
+                        isOnePiece: isOnePiece,
                         width: width,
                       ),
                     ),
@@ -669,6 +698,7 @@ class _CardBack extends StatelessWidget {
   Widget _backFallback({
     required bool isPokemon,
     required bool isMtg,
+    required bool isOnePiece,
     required double width,
   }) {
     return isPokemon
@@ -687,12 +717,18 @@ class _CardBack extends StatelessWidget {
             ),
           )
         : ColoredBox(
-            color: isMtg ? const Color(0xFF1A0A05) : const Color(0xFF0C1428),
+            color: isMtg
+                ? const Color(0xFF1A0A05)
+                : isOnePiece
+                    ? const Color(0xFF0A1628)
+                    : const Color(0xFF0C1428),
             child: Center(
               child: Image.asset(
                 isMtg
                     ? 'assets/logos/mtg.png'
-                    : 'assets/logos/riftbound_wordmark.png',
+                    : isOnePiece
+                        ? 'assets/logos/onepiece.png'
+                        : 'assets/logos/riftbound.png',
                 width: width * 0.55,
                 height: width * 0.28,
                 fit: BoxFit.contain,
@@ -786,14 +822,15 @@ class _RevealStage extends StatelessWidget {
 
           return LayoutBuilder(
             builder: (context, constraints) {
-              // Face-on framing; Battlefields use landscape aspect so full art shows.
+              // Rare Candy–style face-on framing (not edge-to-edge zoomed).
               final aspect = def?.artAspectRatio ?? (2.5 / 3.5);
               final maxH = math.min(
-                constraints.maxHeight * 0.66,
-                constraints.maxWidth * (def?.isLandscapeCard == true ? 0.95 : 1.4),
+                constraints.maxHeight * 0.58,
+                constraints.maxWidth *
+                    (def?.isLandscapeCard == true ? 0.78 : 1.05),
               );
               final maxW = constraints.maxWidth *
-                  (def?.isLandscapeCard == true ? 0.92 : 0.78);
+                  (def?.isLandscapeCard == true ? 0.82 : 0.58);
               var cardW = maxW;
               var cardH = cardW / aspect;
               if (cardH > maxH) {

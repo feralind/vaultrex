@@ -15,6 +15,7 @@ class TcgcsvPriceRefresh {
   static const riftboundCategory = 89;
   static const pokemonCategory = 3;
   static const mtgCategory = 1;
+  static const onepieceCategory = 68;
 
   static const riftboundGroups = <String, int>{
     'OGS': 24439,
@@ -41,17 +42,28 @@ class TcgcsvPriceRefresh {
     'DFT': 23874,
   };
 
+  static const onepieceGroups = <String, int>{
+    'OP01': 3188,
+    'OP02': 17698,
+    'OP05': 23213,
+    'OP09': 23589,
+    'OP13': 24303,
+    'PRB01': 23496,
+  };
+
   static DateTime? lastRefreshAt;
 
   static Map<String, int> groupsFor(String gameId) => switch (gameId) {
         'pokemon' => pokemonGroups,
         'mtg' => mtgGroups,
+        'onepiece' => onepieceGroups,
         _ => riftboundGroups,
       };
 
   static int categoryFor(String gameId) => switch (gameId) {
         'pokemon' => pokemonCategory,
         'mtg' => mtgCategory,
+        'onepiece' => onepieceCategory,
         _ => riftboundCategory,
       };
 

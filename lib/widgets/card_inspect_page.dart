@@ -8,6 +8,7 @@ import '../models/models.dart';
 import '../theme/app_text.dart';
 import 'foil_slab.dart';
 import 'game_widgets.dart';
+import 'inspect_depth.dart';
 
 /// Fullscreen card inspect — centered, finger-tilt, pinch zoom, dark stage.
 Future<void> openCardInspect(
@@ -74,7 +75,7 @@ class _CardInspectPageState extends State<CardInspectPage>
   Animation<double>? _sx;
   Animation<double>? _sy;
 
-  static const _maxTilt = 0.42; // ~24°
+  static const _maxTilt = 0.52; // ~30° — enough to show real edge
   static const _maxScale = 2.8;
   static const _minScale = 0.92;
 
@@ -198,16 +199,27 @@ class _CardInspectPageState extends State<CardInspectPage>
       child: card,
     );
 
-    // Perspective tilt + scale, kept centered.
+    // Physical depth under the face, then perspective tilt.
+    final depth = InspectDepthShell(
+      tiltX: _tiltX,
+      tiltY: _tiltY,
+      slab: graded,
+      borderRadius: graded ? 6 : 14,
+      child: card,
+    );
+
     final tilted = Transform(
       alignment: Alignment.center,
-      transform: Matrix4.identity()
-        ..setEntry(3, 2, 0.00135)
-        ..rotateX(_tiltX)
-        ..rotateY(_tiltY),
+      filterQuality: FilterQuality.medium,
+      transform: inspectPerspective(
+        tiltX: _tiltX,
+        tiltY: _tiltY,
+        perspective: graded ? 0.00185 : 0.00155,
+      ),
       child: Transform.scale(
         scale: _scale,
-        child: card,
+        filterQuality: FilterQuality.medium,
+        child: depth,
       ),
     );
 
@@ -389,7 +401,9 @@ class _InspectMeta extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Drag to tilt · pinch zoom · double-tap reset',
+              grade != null
+                  ? 'Drag to tilt the slab · pinch zoom · double-tap reset'
+                  : 'Drag to tilt · watch the edge · pinch zoom · double-tap reset',
               style: AppText.jakarta(
                 color: Colors.white38,
                 fontSize: 11,

@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../widgets/card_detail_sheet.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/portfolio_value_chart.dart';
+import '../widgets/ui_kit.dart';
 import 'binder_room_screen.dart';
 import 'create_binder_sheet.dart';
 import 'engagement/engagement_hub.dart';
@@ -266,21 +267,11 @@ class _FranchiseChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: selected,
-        onSelected: (_) => onTap(),
-        selectedColor: CC.accent.withValues(alpha: 0.25),
-        backgroundColor: CC.card,
-        labelStyle: AppText.jakarta(
-          fontWeight: FontWeight.w600,
-          color: CC.ink,
-          fontSize: 12,
-        ),
-        side: BorderSide(color: selected ? CC.accent : CC.line),
-      ),
+    return AppChip(
+      label: label,
+      selected: selected,
+      onTap: onTap,
+      compact: true,
     );
   }
 }
@@ -303,11 +294,7 @@ class _InsightsTab extends ConsumerWidget {
       children: [
         Text(
           'Your collection',
-          style: AppText.jakarta(
-            fontSize: 28,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.5,
-          ),
+          style: AppText.display(),
         ),
         const SizedBox(height: 8),
         TweenAnimationBuilder<double>(
@@ -317,17 +304,13 @@ class _InsightsTab extends ConsumerWidget {
           builder: (context, v, _) {
             return Text(
               '\$${v.toStringAsFixed(2)}',
-              style: AppText.jakarta(
-                fontSize: 36,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -1,
-              ),
+              style: AppText.display().copyWith(fontSize: 36, letterSpacing: -1),
             );
           },
         ),
         Text(
           '$count unique cards across selected franchises',
-          style: AppText.jakarta(color: CC.inkMuted, fontSize: 13),
+          style: AppText.bodySm(),
         ),
         const SizedBox(height: 18),
         PortfolioValueChart(points: series, height: 172),
@@ -412,6 +395,7 @@ class _CardsTab extends ConsumerWidget {
             ? '${s.setCode} · ${switch (s.franchiseId) {
                 'pokemon' => 'PK',
                 'mtg' => 'MTG',
+                'onepiece' => 'OP',
                 _ => 'RB',
               }}'
             : s.setCode;
@@ -426,11 +410,7 @@ class _CardsTab extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
           child: Text(
             'All cards',
-            style: AppText.jakarta(
-              fontSize: 28,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
-            ),
+            style: AppText.display(),
           ),
         ),
         Padding(
@@ -480,23 +460,11 @@ class _CardsTab extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             children: chipSets
                 .map(
-                  (s) => Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: ChoiceChip(
-                      label: Text(s.label),
-                      selected: set == s.value,
-                      onSelected: (_) => onSet(s.value),
-                      selectedColor: CC.accent.withValues(alpha: 0.25),
-                      backgroundColor: CC.card,
-                      labelStyle: AppText.jakarta(
-                        fontWeight: FontWeight.w600,
-                        color: CC.ink,
-                        fontSize: 12,
-                      ),
-                      side: BorderSide(
-                        color: set == s.value ? CC.accent : CC.line,
-                      ),
-                    ),
+                  (s) => AppChip(
+                    label: s.label,
+                    selected: set == s.value,
+                    onTap: () => onSet(s.value),
+                    compact: true,
                   ),
                 )
                 .toList(),
@@ -570,7 +538,10 @@ class _CardsTab extends ConsumerWidget {
                                     : franchiseLabel(entry.franchiseId) ==
                                             'Magic'
                                         ? 'MT'
-                                        : 'RB',
+                                        : franchiseLabel(entry.franchiseId) ==
+                                                'One Piece'
+                                            ? 'OP'
+                                            : 'RB',
                                 style: AppText.jakarta(
                                   fontSize: 9,
                                   fontWeight: FontWeight.w800,

@@ -12,6 +12,7 @@ import 'foil_slab.dart';
 import 'game_widgets.dart';
 import 'card_inspect_page.dart';
 import 'psa_grading_progress.dart';
+import 'ui_kit.dart';
 
 enum CardDetailMode { buy, owned }
 
@@ -1190,23 +1191,7 @@ class _TagChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: CC.card,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: CC.line),
-      ),
-      child: Text(
-        label,
-        style: AppText.jakarta(
-          fontWeight: FontWeight.w800,
-          fontSize: 10,
-          letterSpacing: 0.6,
-          color: CC.inkMuted,
-        ),
-      ),
-    );
+    return AppChip(label: label, compact: true);
   }
 }
 

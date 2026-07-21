@@ -142,6 +142,7 @@ mixin _ShopActions on _GameNotifierBase {
         player: player,
         lastRip: pulls,
         lastRipPaid: total,
+        lastRipPackImageUrl: pack.assetPath,
         engagement: _afterFeaturedRipHook(
           packId: pack.id,
           hitChase: hitChase,

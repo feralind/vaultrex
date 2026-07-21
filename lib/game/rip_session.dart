@@ -30,6 +30,7 @@ mixin _RipSession on _GameNotifierBase {
       final pack = state.unopened[idx];
       final remain = [...state.unopened]..removeAt(idx);
       final pulls = _opener.openPack(pack.setCode);
+      final packArt = resolveUnopenedPackImageUrl(pack);
       final player = state.player.copyWith(
         packsOpened: state.player.packsOpened + 1,
         xp: state.player.xp + 2,
@@ -39,6 +40,7 @@ mixin _RipSession on _GameNotifierBase {
         player: player,
         unopened: remain,
         lastRip: pulls,
+        lastRipPackImageUrl: packArt,
         message: 'Ripping ${pack.setCode}…',
       );
       _recordPullHistory(pulls, packLabel: pack.setCode);
@@ -230,10 +232,14 @@ mixin _RipSession on _GameNotifierBase {
       packsOpened: state.player.packsOpened + 24,
       xp: state.player.xp + 40,
     );
+    final packArt = matching.isNotEmpty
+        ? resolveUnopenedPackImageUrl(matching.first)
+        : null;
     state = state.copyWith(
       player: player,
       unopened: remain,
       lastRip: pulls,
+      lastRipPackImageUrl: packArt,
       message: 'Box break: ${pulls.length} cards from $setCode.',
     );
     _checkAchievements();

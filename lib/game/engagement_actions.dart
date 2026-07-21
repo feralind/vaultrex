@@ -4,13 +4,22 @@ mixin _EngagementActions on _GameNotifierBase {
   EngagementState get _eng => state.engagement;
 
   @override
-  void _onEngagementPackOpened() => _bumpDailyGoal('rip_2');
+  void _onEngagementPackOpened() {
+    _bumpDailyGoal('rip_2');
+    _bumpSeasonQuest('rip');
+  }
 
   @override
-  void _onEngagementCardListed() => _bumpDailyGoal('list_1');
+  void _onEngagementCardListed() {
+    _bumpDailyGoal('list_1');
+    _bumpSeasonQuest('list');
+  }
 
   @override
-  void _onEngagementGradeSent() => _bumpDailyGoal('grade_1');
+  void _onEngagementGradeSent() {
+    _bumpDailyGoal('grade_1');
+    _bumpSeasonQuest('grade');
+  }
 
   @override
   void _onEngagementGradeRevealed() {
@@ -329,14 +338,23 @@ mixin _EngagementActions on _GameNotifierBase {
       packsOpened: state.player.packsOpened + packCount,
       xp: state.player.xp + packCount * 2,
     );
+    String? draftArt;
+    try {
+      final match = _catalog.sealed.firstWhere(
+        (s) => s.setCode == setCode && s.kind == SealedKind.pack,
+      );
+      if (match.displayArtUrl.isNotEmpty) draftArt = match.displayArtUrl;
+    } catch (_) {}
     state = state.copyWith(
       player: _syncBusinessLevel(player),
       lastRip: pulls,
       lastRipPaid: 0,
+      lastRipPackImageUrl: draftArt,
       message: 'Sealed draft — decide keep/exchange.',
     );
     _recordPulls(pulls, packLabel: 'Draft $setCode');
     _bumpDailyGoal('rip_2', packCount);
+    _bumpSeasonQuest('rip', packCount);
     _checkAchievements();
     await _persist();
     return pulls;
@@ -378,10 +396,12 @@ mixin _EngagementActions on _GameNotifierBase {
       player: _syncBusinessLevel(player),
       lastRip: pulls,
       lastRipPaid: 0,
+      lastRipPackImageUrl: null,
       message: 'Weekly seed #$week — same odds for everyone this week.',
     );
     _recordPulls(pulls, packLabel: 'Weekly #$week');
     _bumpDailyGoal('rip_2');
+    _bumpSeasonQuest('rip');
     await _persist();
     return pulls;
   }

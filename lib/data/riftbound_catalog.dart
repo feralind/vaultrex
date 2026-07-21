@@ -25,12 +25,14 @@ class GameCatalog {
   bool get isPokemon => gameId == 'pokemon';
   bool get isRiftbound => gameId == 'riftbound';
   bool get isMtg => gameId == 'mtg';
+  bool get isOnePiece => gameId == 'onepiece';
 
   static final Map<String, GameCatalog> _cache = {};
 
   static String normalizeId(String gameId) {
     if (gameId == 'pokemon') return 'pokemon';
     if (gameId == 'mtg') return 'mtg';
+    if (gameId == 'onepiece') return 'onepiece';
     return 'riftbound';
   }
 
@@ -41,11 +43,13 @@ class GameCatalog {
     final cardAsset = switch (id) {
       'pokemon' => 'assets/data/pokemon_catalog.json',
       'mtg' => 'assets/data/mtg_catalog.json',
+      'onepiece' => 'assets/data/onepiece_catalog.json',
       _ => 'assets/data/riftbound_catalog.json',
     };
     final sealedAsset = switch (id) {
       'pokemon' => 'assets/data/pokemon_sealed.json',
       'mtg' => 'assets/data/mtg_sealed.json',
+      'onepiece' => 'assets/data/onepiece_sealed.json',
       _ => 'assets/data/sealed_products.json',
     };
     final cardRaw =
@@ -72,7 +76,7 @@ class GameCatalog {
         .where((p) =>
             p.kind == SealedKind.pack ||
             p.kind == SealedKind.box ||
-            ((id == 'pokemon' || id == 'mtg') &&
+            ((id == 'pokemon' || id == 'mtg' || id == 'onepiece') &&
                 p.kind == SealedKind.other &&
                 p.marketPrice > 0))
         .where((p) => p.kind == SealedKind.pack || p.kind == SealedKind.box)
@@ -166,6 +170,7 @@ Rarity parseRarity(String? raw) {
       return Rarity.common;
     case 'uncommon':
     case 'u':
+    case 'uc':
       return Rarity.uncommon;
     case 'rare':
     case 'r':
@@ -174,8 +179,17 @@ Rarity parseRarity(String? raw) {
     case 'm':
     case 'mythic':
     case 'mythic rare':
+    case 'sr':
+    case 'super rare':
       return Rarity.epic;
     case 'showcase':
+    case 'sec':
+    case 'secret rare':
+    case 'sp':
+    case 'special':
+    case 'manga':
+    case 'tr':
+    case 'treasure rare':
       return Rarity.showcase;
     case 'overnumbered':
       return Rarity.overnumbered;
@@ -185,15 +199,32 @@ Rarity parseRarity(String? raw) {
       return Rarity.ultimate;
     case 'promo':
     case 'p':
+    case 'pr':
       return Rarity.promo;
+    case 'leader':
+      // OPTCG Leaders are chase — map to epic (builder writes "Epic"/"Leader").
+      return Rarity.epic;
     case 'token':
     case 't':
       return Rarity.token;
+    case 'don!!':
+    case 'don':
+      // OPTCG DON!! cards stay in catalog as commons (not dropped).
+      return Rarity.common;
     default:
       final low = raw.toLowerCase();
+      if (low.contains('secret') ||
+          low.contains('manga') ||
+          low.contains('treasure') ||
+          low == 'sp') {
+        return Rarity.showcase;
+      }
+      if (low.contains('super rare') || low == 'sr') return Rarity.epic;
       if (low.contains('mythic')) return Rarity.epic;
       if (low.contains('showcase')) return Rarity.showcase;
       if (low.contains('signature')) return Rarity.signature;
+      if (low.contains('leader')) return Rarity.epic;
+      if (low.contains('don')) return Rarity.common;
       if (low.contains('token')) return Rarity.token;
       return Rarity.none;
   }

@@ -9,8 +9,12 @@ import '../theme/app_theme.dart';
 import '../widgets/cash_top_up_sheet.dart';
 import '../widgets/pixel_cat_buddy.dart';
 import 'dev_hub_screen.dart';
+import 'discover_feed.dart';
 import 'engagement/engagement_hub.dart';
+import 'pack_theater_soft_lift_preview.dart';
+import 'rentals_screen.dart';
 import 'sealed_inventory.dart';
+import 'season_quests_screen.dart';
 import 'social/account_screen.dart';
 import 'social/auction_pit_screen.dart';
 import 'social/leaderboard_screen.dart';
@@ -74,6 +78,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
     final franchise = switch (fid) {
       'pokemon' => 'Pokémon',
       'mtg' => 'Magic',
+      'onepiece' => 'One Piece',
       _ => 'Riftbound',
     };
 
@@ -107,6 +112,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
                   const MarketEventBanner(),
                   const OneAwayBanner(),
                   const SizedBox(height: 6),
+                  const DiscoverFeedSections(),
                   Text(
                     'Destinations',
                     style: AppText.jakarta(
@@ -165,6 +171,28 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
                         color: CC.candy,
                         icon: Icons.dashboard_customize_outlined,
                         onTap: () => openEngagementHub(context),
+                      ),
+                      _DestTile(
+                        title: 'Rentals',
+                        body: 'Loan graded slabs for candy',
+                        color: const Color(0xFF34D399),
+                        icon: Icons.handshake_outlined,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const RentalsScreen(),
+                          ),
+                        ),
+                      ),
+                      _DestTile(
+                        title: 'Season Quests',
+                        body: 'Timed challenges & rewards',
+                        color: const Color(0xFFFB923C),
+                        icon: Icons.flag_outlined,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const SeasonQuestsScreen(),
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -403,6 +431,19 @@ class SettingsScreen extends ConsumerWidget {
               const SnackBar(content: Text('Restart the app to replay onboarding.')),
             );
           },
+        ),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(
+            'Pack theater preview',
+            style: AppText.jakarta(fontWeight: FontWeight.w700),
+          ),
+          subtitle: Text(
+            'Live pack peel demo — no pack purchase needed',
+            style: AppText.jakarta(color: CC.inkMuted, fontSize: 12),
+          ),
+          trailing: const Icon(Icons.play_circle_outline_rounded),
+          onTap: () => openPackTheaterSoftLiftPreview(context),
         ),
         if (kDebugMode)
           ListTile(

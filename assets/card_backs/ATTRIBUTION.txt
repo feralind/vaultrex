@@ -4,5 +4,7 @@
   (user-supplied; used in pack theater face-down reveal)
 - pokemon_back.png — Pokémon TCG card back (user-supplied; corner fringe cleaned)
 - mtg_back.png — Magic: The Gathering card back
+- onepiece_back.png — One Piece Card Game style back (navy/gold Bindora placeholder;
+  swap for user-supplied OPTCG back art when available)
 
 All trademarks belong to their respective owners.

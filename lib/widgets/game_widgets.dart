@@ -170,17 +170,17 @@ class RarityChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = switch (rarity) {
-      Rarity.common => const Color(0xFF9CA3AF),
-      Rarity.uncommon => const Color(0xFF34D399),
-      Rarity.rare => const Color(0xFF60A5FA),
-      Rarity.epic => const Color(0xFFC084FC),
-      Rarity.showcase => const Color(0xFFFBBF24),
-      Rarity.overnumbered => const Color(0xFFFB923C),
-      Rarity.signature => const Color(0xFFF472B6),
-      Rarity.ultimate => const Color(0xFFF87171),
-      Rarity.promo => const Color(0xFF2DD4BF),
-      Rarity.token => const Color(0xFF6B7280),
-      Rarity.none => const Color(0xFF6B7280),
+      Rarity.common => CC.rarityColor(Rarity.common),
+      Rarity.uncommon => CC.rarityColor(Rarity.uncommon),
+      Rarity.rare => CC.rarityColor(Rarity.rare),
+      Rarity.epic => CC.rarityColor(Rarity.epic),
+      Rarity.showcase => CC.rarityColor(Rarity.showcase),
+      Rarity.overnumbered => CC.rarityColor(Rarity.overnumbered),
+      Rarity.signature => CC.rarityColor(Rarity.signature),
+      Rarity.ultimate => CC.rarityColor(Rarity.ultimate),
+      Rarity.promo => CC.rarityColor(Rarity.promo),
+      Rarity.token => CC.rarityColor(Rarity.token),
+      Rarity.none => CC.rarityColor(Rarity.none),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

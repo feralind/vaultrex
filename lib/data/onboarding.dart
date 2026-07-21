@@ -87,7 +87,7 @@ const kGames = [
   GameOption(
     id: 'onepiece',
     name: 'One Piece',
-    enabled: false,
+    enabled: true,
     color: Color(0xFFEF4444),
     logoAsset: 'assets/logos/onepiece.png',
   ),

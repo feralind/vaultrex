@@ -10,9 +10,13 @@ import '../../game/game_controller.dart';
 import '../../models/enums.dart';
 import '../../models/models.dart';
 import '../../services/bindora_feel.dart';
+import '../../theme/app_spacing.dart';
 import '../../theme/app_text.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/pack_theater_v2.dart';
+import '../../widgets/ui_kit.dart';
+import '../rentals_screen.dart';
+import '../season_quests_screen.dart';
 
 // ─── Shared tiles ───────────────────────────────────────────────────────────
 
@@ -184,19 +188,43 @@ class EngagementHubScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final player = ref.watch(gameProvider.select((s) => s.player));
     final eng = ref.watch(gameProvider.select((s) => s.engagement));
+    final season = ref.watch(gameProvider.select((s) => s.activeSeason));
+    final rentalCount =
+        ref.watch(gameProvider.select((s) => s.activeRentals.length));
     final title = businessTitleForLevel(player.businessLevel);
     final upgradesOwned = player.ownedUpgrades.length;
     final claimedToday = eng.dailyClaimDate == engagementDayKey();
+    final seasonDone =
+        season?.quests.where((q) => q.complete).length ?? 0;
+    final seasonTotal = season?.quests.length ?? 0;
 
     return Scaffold(
       backgroundColor: CC.bg,
       appBar: AppBar(
-        title: Text('Collector Hub', style: AppText.jakarta(fontWeight: FontWeight.w800)),
+        title: const Text('Collector Hub'),
         backgroundColor: CC.bg,
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpace.s16,
+          AppSpace.s8,
+          AppSpace.s16,
+          32,
+        ),
         children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Expanded(
+                child: ScreenTitle(
+                  'Collector Hub',
+                  subtitle: 'Daily, upgrades, vault, and modes',
+                ),
+              ),
+              BalanceBar(candy: player.candy, cash: player.cash),
+            ],
+          ),
+          const SizedBox(height: AppSpace.s16),
           _sectionLabel('Progress'),
           _hubCard(
             context,
@@ -212,7 +240,7 @@ class EngagementHubScreen extends ConsumerWidget {
             title: 'Achievements',
             body:
                 '${player.unlockedAchievements.length}/${achievementDefs.length} unlocked',
-            color: const Color(0xFFF59E0B),
+            color: CC.scan,
             chip: '${player.unlockedAchievements.length}',
             onTap: () => _push(context, const AchievementsGalleryScreen()),
           ),
@@ -225,14 +253,25 @@ class EngagementHubScreen extends ConsumerWidget {
                 : 'Claim free candy · streak day ${eng.dailyStreak}',
             color: CC.candy,
             chip: claimedToday ? 'claimed' : 'ready',
+            chipSelected: !claimedToday,
             onTap: () => _push(context, const DailyHubScreen()),
+          ),
+          _hubCard(
+            context,
+            title: 'Season Quests',
+            body: season == null
+                ? 'Timed challenges & rewards'
+                : '${season.name} · $seasonDone/$seasonTotal done',
+            color: CC.cash,
+            chip: season == null ? null : '${season.daysRemaining()}d',
+            onTap: () => _push(context, const SeasonQuestsScreen()),
           ),
           _sectionLabel('Collection tools'),
           _hubCard(
             context,
             title: 'Shop upgrades',
             body: '$upgradesOwned owned · fee cut, Quick Flip, Auto-Snipe…',
-            color: const Color(0xFF22D3EE),
+            color: CC.accentHot,
             chip: '$upgradesOwned',
             onTap: () => _push(context, const UpgradesShopScreen()),
           ),
@@ -240,23 +279,32 @@ class EngagementHubScreen extends ConsumerWidget {
             context,
             title: 'Pull history',
             body: '${eng.pullHistory.length} pulls logged',
-            color: const Color(0xFF34D399),
+            color: CC.cash,
             onTap: () => _push(context, const PullHistoryScreen()),
           ),
           _hubCard(
             context,
             title: 'Vault',
             body: '${eng.vaultInstanceIds.length}/12 display slots',
-            color: const Color(0xFFF472B6),
+            color: CC.candy,
             chip: '${eng.vaultInstanceIds.length}/12',
             onTap: () => _push(context, const VaultRoomScreen()),
+          ),
+          _hubCard(
+            context,
+            title: 'Rentals',
+            body: rentalCount > 0
+                ? '$rentalCount cards on loan · passive candy'
+                : 'Loan graded slabs for candy',
+            color: CC.cash,
+            onTap: () => _push(context, const RentalsScreen()),
           ),
           _sectionLabel('Modes'),
           _hubCard(
             context,
             title: 'Modes',
             body: 'Sealed draft · Weekly seed · Survival',
-            color: const Color(0xFFFB923C),
+            color: CC.accent,
             onTap: () => _push(context, const ModesHubScreen()),
           ),
         ],
@@ -270,16 +318,8 @@ class EngagementHubScreen extends ConsumerWidget {
 
   Widget _sectionLabel(String text) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(2, 10, 2, 8),
-      child: Text(
-        text,
-        style: AppText.jakarta(
-          fontWeight: FontWeight.w800,
-          fontSize: 13,
-          color: CC.inkMuted,
-          letterSpacing: 0.4,
-        ),
-      ),
+      padding: const EdgeInsets.fromLTRB(2, AppSpace.s12, 2, AppSpace.s8),
+      child: Text(text.toUpperCase(), style: AppText.label()),
     );
   }
 
@@ -290,19 +330,20 @@ class EngagementHubScreen extends ConsumerWidget {
     required Color color,
     required VoidCallback onTap,
     String? chip,
+    bool chipSelected = false,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: AppSpace.s12),
       child: Material(
         color: CC.card,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppSpace.rCard),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(AppSpace.rCard),
           child: Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(AppSpace.s16),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(AppSpace.rCard),
               border: Border.all(color: CC.line),
               gradient: RadialGradient(
                 center: Alignment.topRight,
@@ -317,45 +358,18 @@ class EngagementHubScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        title,
-                        style: AppText.jakarta(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 15,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        body,
-                        style: AppText.jakarta(
-                          color: CC.inkMuted,
-                          fontSize: 12,
-                          height: 1.35,
-                        ),
-                      ),
+                      Text(title, style: AppText.titleSm()),
+                      const SizedBox(height: AppSpace.s4),
+                      Text(body, style: AppText.bodySm()),
                     ],
                   ),
                 ),
                 if (chip != null) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: color.withValues(alpha: 0.35)),
-                    ),
-                    child: Text(
-                      chip,
-                      style: AppText.jakarta(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 11,
-                        color: color,
-                      ),
-                    ),
+                  const SizedBox(width: AppSpace.s8),
+                  AppChip(
+                    label: chip,
+                    compact: true,
+                    selected: chipSelected,
                   ),
                 ],
               ],
@@ -375,53 +389,209 @@ class DailyHubScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final eng = ref.watch(gameProvider.select((s) => s.engagement));
+    final player = ref.watch(gameProvider.select((s) => s.player));
     final notifier = ref.read(gameProvider.notifier);
     final claimed = eng.dailyClaimDate == engagementDayKey();
     final progress = eng.dailyGoalsDate == engagementDayKey()
         ? eng.dailyGoalProgress
         : {for (final g in dailyGoalDefs) g.id: 0};
+    final yesterday = engagementDayKey(
+      DateTime.now().subtract(const Duration(days: 1)),
+    );
+    final previewStreak = claimed
+        ? eng.dailyStreak
+        : (eng.dailyClaimDate == yesterday ? eng.dailyStreak + 1 : 1);
+    final candyPreview = dailyClaimCandyForStreak(previewStreak);
+    final goalsDone = dailyGoalDefs.where((g) {
+      final p = progress[g.id] ?? 0;
+      return p >= g.target;
+    }).length;
 
     return Scaffold(
       backgroundColor: CC.bg,
       appBar: AppBar(
-        title: Text('Daily', style: AppText.jakarta(fontWeight: FontWeight.w800)),
+        title: const Text('Daily'),
         backgroundColor: CC.bg,
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpace.s16,
+          AppSpace.s8,
+          AppSpace.s16,
+          32,
+        ),
         children: [
-          FilledButton(
-            onPressed: claimed
-                ? null
-                : () async {
-                    await BindoraHaptics.claim();
-                    await notifier.claimDailyLogin();
-                  },
-            child: Text(
-              claimed
-                  ? 'Claimed · streak ${eng.dailyStreak}'
-                  : 'Claim daily candy (streak ${eng.dailyStreak})',
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: ScreenTitle(
+                  'Daily',
+                  subtitle: claimed
+                      ? 'Streak day ${eng.dailyStreak} · come back tomorrow'
+                      : 'Claim free candy · keep the streak alive',
+                ),
+              ),
+              BalanceBar(candy: player.candy, cash: player.cash),
+            ],
+          ),
+          const SizedBox(height: AppSpace.s16),
+          Container(
+            padding: const EdgeInsets.all(AppSpace.s16),
+            decoration: BoxDecoration(
+              color: CC.card,
+              borderRadius: BorderRadius.circular(AppSpace.rCard),
+              border: Border.all(
+                color: claimed
+                    ? CC.line
+                    : CC.candy.withValues(alpha: 0.45),
+              ),
+              gradient: RadialGradient(
+                center: Alignment.topRight,
+                radius: 1.2,
+                colors: [
+                  CC.candy.withValues(alpha: claimed ? 0.06 : 0.18),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text('Daily login', style: AppText.titleSm()),
+                    ),
+                    AppChip(
+                      label: 'Day ${claimed ? eng.dailyStreak : previewStreak}',
+                      selected: !claimed,
+                      compact: true,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpace.s8),
+                Text(
+                  claimed
+                      ? 'Already claimed today. Streak holds at ${eng.dailyStreak}.'
+                      : '+$candyPreview candy waiting · claim today to continue your streak.',
+                  style: AppText.bodySm(),
+                ),
+                const SizedBox(height: AppSpace.s16),
+                FilledButton(
+                  onPressed: claimed
+                      ? null
+                      : () async {
+                          await BindoraHaptics.claim();
+                          await notifier.claimDailyLogin();
+                        },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: CC.accent,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppSpace.s16,
+                      horizontal: AppSpace.s24,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppSpace.rCard),
+                    ),
+                  ),
+                  child: Text(
+                    claimed
+                        ? 'Claimed · streak ${eng.dailyStreak}'
+                        : 'Claim +$candyPreview candy',
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 18),
-          Text('Goals', style: AppText.jakarta(fontWeight: FontWeight.w800, fontSize: 16)),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpace.s24),
+          Text('Goals', style: AppText.titleSm()),
+          const SizedBox(height: AppSpace.s4),
+          Text(
+            '$goalsDone / ${dailyGoalDefs.length} complete',
+            style: AppText.bodySm(),
+          ),
+          const SizedBox(height: AppSpace.s12),
           ...dailyGoalDefs.map((g) {
             final p = progress[g.id] ?? 0;
             final done = p >= g.target;
             final taken = eng.claimedDailyGoals.contains(g.id);
-            return ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(g.title, style: AppText.jakarta(fontWeight: FontWeight.w700)),
-              subtitle: Text('$p / ${g.target} · +${g.candyReward} candy'),
-              trailing: taken
-                  ? const Icon(Icons.check_circle, color: CC.accent)
-                  : TextButton(
-                      onPressed: done
-                          ? () => notifier.claimDailyGoal(g.id)
-                          : null,
-                      child: const Text('Claim'),
+            final frac =
+                g.target == 0 ? 0.0 : (p / g.target).clamp(0.0, 1.0);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: AppSpace.s12),
+              child: Container(
+                padding: const EdgeInsets.all(AppSpace.s16),
+                decoration: BoxDecoration(
+                  color: CC.card,
+                  borderRadius: BorderRadius.circular(AppSpace.rCard),
+                  border: Border.all(
+                    color: done && !taken
+                        ? CC.scan.withValues(alpha: 0.45)
+                        : CC.line,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(g.title, style: AppText.titleSm()),
+                        ),
+                        AppChip(
+                          label: '$p / ${g.target}',
+                          compact: true,
+                          selected: done && !taken,
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: AppSpace.s8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: LinearProgressIndicator(
+                        value: frac,
+                        minHeight: 6,
+                        backgroundColor: CC.cardSoft,
+                        color: taken
+                            ? CC.inkMuted
+                            : done
+                                ? CC.scan
+                                : CC.accent,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpace.s12),
+                    Row(
+                      children: [
+                        Text(
+                          '+${g.candyReward} candy',
+                          style: AppText.label(color: CC.candy),
+                        ),
+                        const SizedBox(width: AppSpace.s8),
+                        Text(
+                          '+${g.xpReward} XP',
+                          style: AppText.label(),
+                        ),
+                        const Spacer(),
+                        if (taken)
+                          const AppChip(
+                            label: 'Claimed',
+                            compact: true,
+                          )
+                        else if (done)
+                          AppChip(
+                            label: 'Claim',
+                            selected: true,
+                            compact: true,
+                            onTap: () => notifier.claimDailyGoal(g.id),
+                          )
+                        else
+                          Text('In progress', style: AppText.label()),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             );
           }),
         ],
@@ -437,53 +607,86 @@ class AchievementsGalleryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final unlocked =
         ref.watch(gameProvider.select((s) => s.player.unlockedAchievements));
+    final unlockedCount = unlocked.length;
     return Scaffold(
       backgroundColor: CC.bg,
       appBar: AppBar(
-        title: Text('Achievements', style: AppText.jakarta(fontWeight: FontWeight.w800)),
+        title: const Text('Achievements'),
         backgroundColor: CC.bg,
       ),
       body: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: achievementDefs.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 8),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpace.s16,
+          AppSpace.s8,
+          AppSpace.s16,
+          32,
+        ),
+        itemCount: achievementDefs.length + 1,
+        separatorBuilder: (_, i) =>
+            SizedBox(height: i == 0 ? AppSpace.s16 : AppSpace.s12),
         itemBuilder: (context, i) {
-          final a = achievementDefs[i];
+          if (i == 0) {
+            return ScreenTitle(
+              'Achievements',
+              subtitle:
+                  '$unlockedCount / ${achievementDefs.length} unlocked',
+            );
+          }
+          final a = achievementDefs[i - 1];
           final on = unlocked.contains(a.id);
           return Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(AppSpace.s16),
             decoration: BoxDecoration(
               color: CC.card,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppSpace.rCard),
               border: Border.all(
                 color: on ? CC.accent.withValues(alpha: 0.5) : CC.line,
               ),
+              gradient: on
+                  ? RadialGradient(
+                      center: Alignment.topRight,
+                      radius: 1.2,
+                      colors: [
+                        CC.accent.withValues(alpha: 0.12),
+                        Colors.transparent,
+                      ],
+                    )
+                  : null,
             ),
             child: Row(
               children: [
-                Icon(
-                  on ? Icons.emoji_events : Icons.lock_outline,
-                  color: on ? CC.accent : CC.inkMuted,
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: CC.cardSoft,
+                    borderRadius: BorderRadius.circular(AppSpace.rChip),
+                    border: Border.all(color: CC.line),
+                  ),
+                  child: Icon(
+                    on ? Icons.emoji_events : Icons.lock_outline,
+                    color: on ? CC.accent : CC.inkMuted,
+                    size: 20,
+                  ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: AppSpace.s12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         a.title,
-                        style: AppText.jakarta(
-                          fontWeight: FontWeight.w800,
+                        style: AppText.titleSm(
                           color: on ? CC.ink : CC.inkMuted,
                         ),
                       ),
-                      Text(
-                        a.description,
-                        style: AppText.jakarta(fontSize: 12, color: CC.inkMuted),
-                      ),
+                      const SizedBox(height: AppSpace.s4),
+                      Text(a.description, style: AppText.bodySm()),
                     ],
                   ),
                 ),
+                if (on)
+                  const AppChip(label: 'Done', compact: true, selected: true),
               ],
             ),
           );
@@ -500,48 +703,102 @@ class UpgradesShopScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final player = ref.watch(gameProvider.select((s) => s.player));
     final notifier = ref.read(gameProvider.notifier);
+    final ownedCount = player.ownedUpgrades.length;
     return Scaffold(
       backgroundColor: CC.bg,
       appBar: AppBar(
-        title: Text('Upgrades', style: AppText.jakarta(fontWeight: FontWeight.w800)),
+        title: const Text('Upgrades'),
         backgroundColor: CC.bg,
       ),
       body: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: upgrades.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 10),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpace.s16,
+          AppSpace.s8,
+          AppSpace.s16,
+          32,
+        ),
+        itemCount: upgrades.length + 1,
+        separatorBuilder: (_, i) =>
+            SizedBox(height: i == 0 ? AppSpace.s16 : AppSpace.s12),
         itemBuilder: (context, i) {
-          final u = upgrades[i];
+          if (i == 0) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: ScreenTitle(
+                    'Upgrades',
+                    subtitle:
+                        '$ownedCount owned · fee cut, Quick Flip, Auto-Snipe…',
+                  ),
+                ),
+                BalanceBar(candy: player.candy, cash: player.cash),
+              ],
+            );
+          }
+          final u = upgrades[i - 1];
           final owned = player.ownedUpgrades.contains(u.id);
           final can = !owned &&
               player.xp >= u.requiredXp &&
               player.cash >= u.cost;
           return Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(AppSpace.s16),
             decoration: BoxDecoration(
               color: CC.card,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: CC.line),
+              borderRadius: BorderRadius.circular(AppSpace.rCard),
+              border: Border.all(
+                color: owned
+                    ? CC.accent.withValues(alpha: 0.4)
+                    : CC.line,
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(u.name, style: AppText.jakarta(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 4),
-                Text(u.description, style: AppText.jakarta(color: CC.inkMuted, fontSize: 12)),
-                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(u.name, style: AppText.titleSm()),
+                    ),
+                    if (owned)
+                      const AppChip(
+                        label: 'Owned',
+                        compact: true,
+                        selected: true,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: AppSpace.s4),
+                Text(u.description, style: AppText.bodySm()),
+                const SizedBox(height: AppSpace.s12),
                 Row(
                   children: [
                     Text(
-                      '\$${u.cost} · ${u.requiredXp} XP',
-                      style: AppText.jakarta(fontSize: 12, color: CC.inkMuted),
+                      '\$${u.cost}',
+                      style: AppText.tabular(color: CC.cash, fontSize: 13),
+                    ),
+                    const SizedBox(width: AppSpace.s8),
+                    Text(
+                      '${u.requiredXp} XP',
+                      style: AppText.label(),
                     ),
                     const Spacer(),
-                    if (owned)
-                      Text('Owned', style: AppText.jakarta(color: CC.accent, fontWeight: FontWeight.w700))
-                    else
+                    if (!owned)
                       FilledButton(
-                        onPressed: can ? () => notifier.buyUpgrade(u.id) : null,
+                        onPressed:
+                            can ? () => notifier.buyUpgrade(u.id) : null,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: CC.accent,
+                          minimumSize: const Size(0, 40),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpace.s16,
+                            vertical: AppSpace.s8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppSpace.rCard),
+                          ),
+                        ),
                         child: const Text('Buy'),
                       ),
                   ],

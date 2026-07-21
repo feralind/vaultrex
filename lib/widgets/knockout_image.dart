@@ -61,8 +61,8 @@ class _KnockoutProductImageState extends State<KnockoutProductImage> {
   }
 
   Future<void> _load() async {
-    // v2: fringe choke also runs on assets that already have alpha.
-    final key = 'v2:${widget.url}@${widget.threshold}';
+    // v3: assets + alpha PNGs display as-is (no fringe choke).
+    final key = 'v3:${widget.url}@${widget.threshold}';
     final cached = _cache[key];
     if (cached != null) {
       setState(() {
@@ -86,8 +86,30 @@ class _KnockoutProductImageState extends State<KnockoutProductImage> {
       } else {
         provider = CachedNetworkImageProvider(widget.url);
       }
-      final src = await _resolveImage(provider);
-      final bd = await src.toByteData(format: ui.ImageByteFormat.rawRgba);
+      final src = await _resolveImage(provider).timeout(
+        const Duration(seconds: 8),
+        onTimeout: () => throw TimeoutException('Image resolve timed out'),
+      );
+
+      // Local cutouts / featured pack arts already have transparency. Fringe
+      // choke was eating cream/foil highlights and left tiny scraps on tiles.
+      if (isAssetImageUrl(widget.url)) {
+        final owned = src.clone();
+        _cache[key] = owned;
+        if (!mounted) return;
+        setState(() {
+          _image = owned;
+          _loading = false;
+        });
+        return;
+      }
+
+      final bd = await src
+          .toByteData(format: ui.ImageByteFormat.rawRgba)
+          .timeout(
+            const Duration(seconds: 6),
+            onTimeout: () => throw TimeoutException('toByteData timed out'),
+          );
       if (bd == null) throw StateError('No pixel data');
 
       final pixels = Uint8List.fromList(bd.buffer.asUint8List());
@@ -95,14 +117,24 @@ class _KnockoutProductImageState extends State<KnockoutProductImage> {
       final h = src.height;
 
       final hasAlpha = _hasMeaningfulAlpha(pixels);
+      // Network PNGs that already have alpha: show as-is (no fringe choke).
+      if (hasAlpha) {
+        final owned = src.clone();
+        _cache[key] = owned;
+        if (!mounted) return;
+        setState(() {
+          _image = owned;
+          _loading = false;
+        });
+        return;
+      }
+
       late final Uint8List processed;
       if (kIsWeb) {
-        processed = hasAlpha
-            ? _fringeChokePixels(_PixelJob(pixels, w, h, widget.threshold))
-            : _knockoutPixels(_PixelJob(pixels, w, h, widget.threshold));
+        processed = _knockoutPixels(_PixelJob(pixels, w, h, widget.threshold));
       } else {
         processed = await compute(
-          hasAlpha ? _fringeChokePixels : _knockoutPixels,
+          _knockoutPixels,
           _PixelJob(pixels, w, h, widget.threshold),
         );
       }
@@ -321,126 +353,6 @@ Uint8List _knockoutPixels(_PixelJob job) {
       if (touchesClear) {
         bytes[i + 3] = (a * 0.35).round().clamp(0, 255);
       }
-    }
-  }
-
-  return bytes;
-}
-
-/// Cheap fringe cleanup for assets that already have transparency: clear
-/// near-white / light-gray pixels on the border or touching transparency.
-Uint8List _fringeChokePixels(_PixelJob job) {
-  final bytes = job.pixels;
-  final w = job.width;
-  final h = job.height;
-  const chromaMax = 30;
-  const whiteFloor = 205;
-  const borderPx = 14;
-
-  bool isNearWhite(int i) {
-    final a = bytes[i + 3];
-    if (a < 12) return true;
-    final r = bytes[i];
-    final g = bytes[i + 1];
-    final b = bytes[i + 2];
-    final minC = math.min(r, math.min(g, b));
-    final maxC = math.max(r, math.max(g, b));
-    if (maxC - minC > chromaMax) return false;
-    return minC >= whiteFloor;
-  }
-
-  int borderDist(int x, int y) {
-    final left = x;
-    final top = y;
-    final right = w - 1 - x;
-    final bottom = h - 1 - y;
-    return math.min(math.min(left, top), math.min(right, bottom));
-  }
-
-  // Pass 1: clear near-white within border band.
-  for (var y = 0; y < h; y++) {
-    for (var x = 0; x < w; x++) {
-      final i = (y * w + x) * 4;
-      if (bytes[i + 3] < 12) continue;
-      if (borderDist(x, y) > borderPx) continue;
-      if (isNearWhite(i)) bytes[i + 3] = 0;
-    }
-  }
-
-  // Pass 2: edge flood of near-white / clear from borders.
-  final visited = Uint8List(w * h);
-  final queue = <int>[];
-
-  void tryPush(int x, int y) {
-    if (x < 0 || y < 0 || x >= w || y >= h) return;
-    final idx = y * w + x;
-    if (visited[idx] != 0) return;
-    final i = idx * 4;
-    if (!isNearWhite(i)) return;
-    visited[idx] = 1;
-    queue.add(idx);
-  }
-
-  for (var x = 0; x < w; x++) {
-    tryPush(x, 0);
-    tryPush(x, h - 1);
-  }
-  for (var y = 0; y < h; y++) {
-    tryPush(0, y);
-    tryPush(w - 1, y);
-  }
-
-  var q = 0;
-  while (q < queue.length) {
-    final idx = queue[q++];
-    final i = idx * 4;
-    bytes[i + 3] = 0;
-    final x = idx % w;
-    final y = idx ~/ w;
-    tryPush(x - 1, y);
-    tryPush(x + 1, y);
-    tryPush(x, y - 1);
-    tryPush(x, y + 1);
-  }
-
-  // Pass 3: peel near-white touching transparency (2px).
-  for (var pass = 0; pass < 2; pass++) {
-    final kill = <int>[];
-    for (var y = 0; y < h; y++) {
-      for (var x = 0; x < w; x++) {
-        final idx = y * w + x;
-        final i = idx * 4;
-        final a = bytes[i + 3];
-        if (a < 20) continue;
-        final r = bytes[i];
-        final g = bytes[i + 1];
-        final b = bytes[i + 2];
-        final minC = math.min(r, math.min(g, b));
-        final maxC = math.max(r, math.max(g, b));
-        if (maxC - minC > chromaMax || minC < 200) continue;
-        var touch = false;
-        for (final n in [idx - 1, idx + 1, idx - w, idx + w]) {
-          if (n < 0 || n >= w * h) continue;
-          if (bytes[n * 4 + 3] < 20) {
-            touch = true;
-            break;
-          }
-        }
-        if (touch) kill.add(i);
-      }
-    }
-    for (final i in kill) {
-      bytes[i + 3] = 0;
-    }
-  }
-
-  // Harden soft alpha haze.
-  for (var i = 3; i < bytes.length; i += 4) {
-    final a = bytes[i];
-    if (a < 40) {
-      bytes[i] = 0;
-    } else if (a > 220) {
-      bytes[i] = 255;
     }
   }
 

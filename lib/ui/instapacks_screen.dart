@@ -11,8 +11,8 @@ import '../theme/app_theme.dart';
 import '../widgets/brand.dart';
 import '../widgets/cash_top_up_sheet.dart';
 import '../widgets/game_widgets.dart';
-import '../widgets/knockout_image.dart';
 import '../widgets/live_ambient.dart';
+import '../widgets/ui_kit.dart';
 import 'engagement/engagement_hub.dart';
 import 'featured_pack_detail.dart';
 import 'pack_detail.dart';
@@ -61,12 +61,14 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen>
 
     final candy = state.player.candy;
     final cash = state.player.cash;
-    final isPokemon = active == 'pokemon';
-    final isRiftbound = active == 'riftbound';
-    final isMtg = active == 'mtg';
-    final featuredPacks = (isRiftbound || isPokemon || isMtg)
-        ? featuredPacksFor(active)
-        : const <FeaturedPackDef>[];
+    final featuredPacks = featuredPacksFor(active);
+    final hasMarket = featuredPacks.isNotEmpty || listings.isNotEmpty;
+    final sealedTitle = switch (active) {
+      'pokemon' => 'Pokémon Sealed',
+      'mtg' => 'Magic Sealed',
+      'onepiece' => 'One Piece Sealed',
+      _ => 'Riftbound Sealed',
+    };
 
     return LiveAmbientBackdrop(
       child: CustomScrollView(
@@ -82,19 +84,16 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen>
           child: Column(
             children: [
               const Padding(
-                padding: EdgeInsets.fromLTRB(16, 4, 16, 4),
+                padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
                 child: SealedInventoryBanner(),
               ),
               const Padding(
-                padding: EdgeInsets.fromLTRB(16, 0, 16, 4),
-                child: MarketEventBanner(),
-              ),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 0, 16, 4),
+                padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: FeaturedDropTimer(),
               ),
               SizedBox(
-                height: 64,
+                // logoScale 1.22 (Riftbound) needs >64 or Column overflows ~1.8px.
+                height: 72,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -127,7 +126,7 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen>
             ],
           ),
         ),
-        if (!isRiftbound && !isPokemon && !isMtg)
+        if (!hasMarket)
           const SliverFillRemaining(
             hasScrollBody: false,
             child: Center(
@@ -139,14 +138,7 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen>
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                child: Text(
-                  'Featured Packs',
-                  style: AppText.jakarta(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.3,
-                  ),
-                ),
+                child: Text('Featured Packs', style: AppText.titleSm()),
               ),
             ),
             SliverPadding(
@@ -187,18 +179,7 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen>
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Text(
-                isPokemon
-                    ? 'Pokémon Sealed'
-                    : isMtg
-                        ? 'Magic Sealed'
-                        : 'Riftbound Sealed',
-                style: AppText.jakarta(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.3,
-                ),
-              ),
+              child: Text(sealedTitle, style: AppText.titleSm()),
             ),
           ),
           SliverPadding(
@@ -304,30 +285,13 @@ class _InstapacksHeroState extends State<_InstapacksHero>
                     Text(
                       'Instapacks',
                       textAlign: TextAlign.center,
-                      style: AppText.jakarta(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.8,
-                      ),
+                      style: AppText.display(),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Rip packs whenever you want. A digital pack ripping experience where you pull REAL cards.',
+                      'Rip packs whenever you want — real cards, real pulls.',
                       textAlign: TextAlign.center,
-                      style: AppText.jakarta(
-                        color: CC.inkMuted,
-                        height: 1.4,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'Learn more →',
-                      style: AppText.jakarta(
-                        color: CC.accentHot,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                      ),
+                      style: AppText.bodySm(),
                     ),
                   ],
                 ),
@@ -335,9 +299,12 @@ class _InstapacksHeroState extends State<_InstapacksHero>
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  CandyBalance(widget.candy),
-                  const SizedBox(height: 6),
-                  CashBalance(widget.cash, onTap: widget.onTopUp),
+                  BalanceBar(
+                    candy: widget.candy,
+                    cash: widget.cash,
+                    onTopUp: widget.onTopUp,
+                    axis: Axis.vertical,
+                  ),
                 ],
               ),
             ],
@@ -461,12 +428,13 @@ class _HeroFanPack extends StatelessWidget {
     return SizedBox(
       width: width,
       height: height,
-      child: KnockoutProductImage(
-        url: asset,
+      child: Image.asset(
+        asset,
         width: width,
         height: height,
         fit: BoxFit.contain,
-        error: const SizedBox.shrink(),
+        filterQuality: FilterQuality.high,
+        errorBuilder: (_, _, _) => const SizedBox.shrink(),
       ),
     );
   }
@@ -644,10 +612,11 @@ class _FeaturedTileState extends State<_FeaturedTile>
                           ),
                           child: Transform.scale(
                             scale: 0.825,
-                            child: KnockoutProductImage(
-                              url: pack.assetPath,
+                            child: Image.asset(
+                              pack.assetPath,
                               fit: BoxFit.contain,
-                              error: PackVisual(
+                              filterQuality: FilterQuality.high,
+                              errorBuilder: (_, _, _) => PackVisual(
                                 title: pack.tier.label,
                                 colors: pack.tier.bloomColors,
                                 width: 110,

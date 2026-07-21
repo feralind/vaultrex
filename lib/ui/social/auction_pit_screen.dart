@@ -7,8 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/rival_personas.dart';
 import '../../game/game_controller.dart';
 import '../../game/rival_sim.dart';
+import '../../theme/app_spacing.dart';
 import '../../theme/app_text.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/ui_kit.dart';
 import 'rival_profile_screen.dart';
 
 class AuctionPitScreen extends ConsumerStatefulWidget {
@@ -112,13 +114,24 @@ class _AuctionPitScreenState extends ConsumerState<AuctionPitScreen> {
       return Scaffold(
         backgroundColor: CC.bg,
         appBar: AppBar(
-          title: Text('Auction Pit', style: AppText.jakarta(fontWeight: FontWeight.w800)),
+          title: const Text('Auction Pit'),
           backgroundColor: CC.bg,
         ),
         body: Center(
-          child: Text(
-            'No live lots — Advance Day to restock.',
-            style: AppText.jakarta(color: CC.inkMuted),
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpace.s24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Auction Pit', style: AppText.display()),
+                const SizedBox(height: AppSpace.s8),
+                Text(
+                  'No live lots right now.\nAdvance Day to restock the floor.',
+                  textAlign: TextAlign.center,
+                  style: AppText.bodySm(),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -171,18 +184,42 @@ class _AuctionPitScreenState extends ConsumerState<AuctionPitScreen> {
     return Scaffold(
       backgroundColor: CC.bg,
       appBar: AppBar(
-        title: Text('Auction Pit', style: AppText.jakarta(fontWeight: FontWeight.w800)),
+        title: const Text('Auction Pit'),
         backgroundColor: CC.bg,
       ),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpace.s16,
+              AppSpace.s4,
+              AppSpace.s16,
+              AppSpace.s8,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: ScreenTitle(
+                    'Auction Pit',
+                    subtitle:
+                        '${auctions.length} live lot${auctions.length == 1 ? '' : 's'} · hammer clock running',
+                  ),
+                ),
+                BalanceBar(
+                  candy: state.player.candy,
+                  cash: state.player.cash,
+                ),
+              ],
+            ),
+          ),
           SizedBox(
             height: 92,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpace.s12),
               itemCount: auctions.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              separatorBuilder: (_, _) => const SizedBox(width: AppSpace.s8),
               itemBuilder: (context, i) {
                 final a = auctions[i];
                 final d = notifier.cardById(a.cardId);
@@ -190,15 +227,15 @@ class _AuctionPitScreenState extends ConsumerState<AuctionPitScreen> {
                 final lotSecs = _secsLeft(a.endsAtMs);
                 return InkWell(
                   onTap: () => setState(() => _focusId = a.id),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(AppSpace.rCard),
                   child: Container(
                     width: 150,
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(AppSpace.s12),
                     decoration: BoxDecoration(
                       color: selected
                           ? CC.accent.withValues(alpha: 0.15)
                           : CC.card,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(AppSpace.rCard),
                       border: Border.all(
                         color: selected ? CC.accent : CC.line,
                       ),
@@ -210,20 +247,15 @@ class _AuctionPitScreenState extends ConsumerState<AuctionPitScreen> {
                           d?.name ?? a.cardId,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: AppText.jakarta(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
-                          ),
+                          style: AppText.titleSm().copyWith(fontSize: 13),
                         ),
                         const Spacer(),
                         Text(
                           '\$${a.currentBid.toStringAsFixed(2)} · ${lotSecs}s',
-                          style: AppText.jakarta(
+                          style: AppText.label(
                             color: lotSecs <= 5
                                 ? const Color(0xFFFCA5A5)
                                 : CC.inkMuted,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ],
@@ -235,139 +267,161 @@ class _AuctionPitScreenState extends ConsumerState<AuctionPitScreen> {
           ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpace.s16,
+                AppSpace.s12,
+                AppSpace.s16,
+                24,
+              ),
               children: [
                 if (def != null)
                   AspectRatio(
                     aspectRatio: 0.72,
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(AppSpace.rCard),
                       child: CachedNetworkImage(
                         imageUrl: def.imageUrl,
                         fit: BoxFit.cover,
                       ),
                     ),
                   ),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpace.s12),
                 Text(
                   def?.name ?? 'Lot',
-                  style: AppText.jakarta(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: AppText.display().copyWith(fontSize: 24),
                 ),
+                const SizedBox(height: AppSpace.s4),
                 Text(
                   [
                     if (focus.foil) 'Foil',
                     focus.condition.name,
                     if (def != null) def.rarity.name,
                   ].join(' · '),
-                  style: AppText.jakarta(color: CC.inkMuted, fontSize: 13),
+                  style: AppText.bodySm(),
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        focus.playerIsHighBidder
-                            ? 'You lead \$${focus.currentBid.toStringAsFixed(2)}'
-                            : '${high.handle} · \$${focus.currentBid.toStringAsFixed(2)}',
-                        style: AppText.jakarta(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 18,
+                const SizedBox(height: AppSpace.s12),
+                Container(
+                  padding: const EdgeInsets.all(AppSpace.s16),
+                  decoration: BoxDecoration(
+                    color: CC.card,
+                    borderRadius: BorderRadius.circular(AppSpace.rCard),
+                    border: Border.all(color: CC.line),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('High bid', style: AppText.label()),
+                            const SizedBox(height: AppSpace.s4),
+                            Text(
+                              focus.playerIsHighBidder
+                                  ? 'You lead'
+                                  : high.handle,
+                              style: AppText.titleSm(),
+                            ),
+                            Text(
+                              '\$${focus.currentBid.toStringAsFixed(2)}',
+                              style: AppText.tabular(
+                                color: CC.cash,
+                                fontSize: 20,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: urgent
-                            ? const Color(0xFF7F1D1D).withValues(alpha: 0.55)
-                            : const Color(0xFF7F1D1D).withValues(alpha: 0.35),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: const Color(0xFFF87171)
-                              .withValues(alpha: urgent ? 0.85 : 0.5),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpace.s12,
+                          vertical: AppSpace.s12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: urgent
+                              ? const Color(0xFF7F1D1D).withValues(alpha: 0.55)
+                              : const Color(0xFF7F1D1D).withValues(alpha: 0.35),
+                          borderRadius:
+                              BorderRadius.circular(AppSpace.rChip),
+                          border: Border.all(
+                            color: const Color(0xFFF87171)
+                                .withValues(alpha: urgent ? 0.85 : 0.5),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              urgent ? 'HAMMER' : '15s HAMMER',
+                              style: AppText.label(
+                                color: const Color(0xFFFCA5A5),
+                              ),
+                            ),
+                            Text(
+                              '0:${secsLeft.toString().padLeft(2, '0')}',
+                              style: AppText.tabular(
+                                color: const Color(0xFFFCA5A5),
+                                fontSize: urgent ? 22 : 18,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            urgent ? 'HAMMER' : '15s HAMMER',
-                            style: AppText.jakarta(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 9,
-                              letterSpacing: 0.6,
-                              color: const Color(0xFFFCA5A5),
-                            ),
-                          ),
-                          Text(
-                            '0:${secsLeft.toString().padLeft(2, '0')}',
-                            style: AppText.jakarta(
-                              fontWeight: FontWeight.w900,
-                              fontSize: urgent ? 22 : 18,
-                              color: const Color(0xFFFCA5A5),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 14),
-                Text(
-                  'In the Pit',
-                  style: AppText.jakarta(fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpace.s16),
+                Text('In the Pit', style: AppText.titleSm()),
+                const SizedBox(height: AppSpace.s8),
                 Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                  spacing: AppSpace.s8,
+                  runSpacing: AppSpace.s8,
                   children: [
                     for (final p in inPit)
-                      GestureDetector(
+                      AppChip(
+                        label: p.handle,
+                        compact: true,
+                        leading: CircleAvatar(
+                          radius: 10,
+                          backgroundImage: AssetImage(p.avatarAsset),
+                        ),
                         onTap: () => Navigator.of(context).push(
                           MaterialPageRoute<void>(
                             builder: (_) =>
                                 RivalProfileScreen(personaId: p.id),
                           ),
                         ),
-                        child: Chip(
-                          avatar: CircleAvatar(
-                            backgroundImage: AssetImage(p.avatarAsset),
-                          ),
-                          label: Text(p.handle),
-                          backgroundColor: CC.card,
-                          side: BorderSide(color: CC.line),
-                        ),
                       ),
                   ],
                 ),
-                const SizedBox(height: 14),
-                Text(
-                  'Floor chatter',
-                  style: AppText.jakarta(fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 8),
-                ...(_liveFeed.isEmpty ? feed : _liveFeed).take(8).map(
-                      (line) => Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Text(
-                          '· $line',
-                          style: AppText.jakarta(
-                            color: CC.inkMuted,
-                            fontSize: 12,
-                            height: 1.35,
+                const SizedBox(height: AppSpace.s16),
+                Text('Floor chatter', style: AppText.titleSm()),
+                const SizedBox(height: AppSpace.s8),
+                Container(
+                  padding: const EdgeInsets.all(AppSpace.s12),
+                  decoration: BoxDecoration(
+                    color: CC.card,
+                    borderRadius: BorderRadius.circular(AppSpace.rCard),
+                    border: Border.all(color: CC.line),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ...(_liveFeed.isEmpty ? feed : _liveFeed).take(8).map(
+                            (line) => Padding(
+                              padding:
+                                  const EdgeInsets.only(bottom: AppSpace.s8),
+                              child: Text(
+                                '· $line',
+                                style: AppText.bodySm(),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
-                const SizedBox(height: 16),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpace.s16),
                 FilledButton(
                   onPressed: () async {
                     final messenger = ScaffoldMessenger.of(context);
@@ -379,6 +433,16 @@ class _AuctionPitScreenState extends ConsumerState<AuctionPitScreen> {
                     }
                     setState(() {});
                   },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: CC.accent,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppSpace.s16,
+                      horizontal: AppSpace.s24,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppSpace.rCard),
+                    ),
+                  ),
                   child: Text(
                     'Place bid · \$${(focus.currentBid + focus.minIncrement).toStringAsFixed(2)}',
                   ),

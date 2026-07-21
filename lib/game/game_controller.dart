@@ -23,6 +23,8 @@ part 'rip_session.dart';
 part 'shop_actions.dart';
 part 'grading_actions.dart';
 part 'engagement_actions.dart';
+part 'rental_actions.dart';
+part 'season_actions.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase();
@@ -202,12 +204,15 @@ class GameState {
     required this.message,
     required this.migrationNotice,
     this.franchiseId = 'riftbound',
+    this.lastRipPackImageUrl,
     this.valueHistory = const [],
     this.binders = const [],
     this.recentlyKeptIds = const {},
     this.marketOffers = const [],
     this.lastPlayedAtMs,
     this.engagement = const EngagementState(),
+    this.activeRentals = const {},
+    this.activeSeason,
   });
 
   final bool ready;
@@ -226,6 +231,8 @@ class GameState {
   final int day;
   final List<OwnedCard>? lastRip;
   final double? lastRipPaid;
+  /// Sealed pack art used by pack theater for the active [lastRip].
+  final String? lastRipPackImageUrl;
   final String? message;
   final String? migrationNotice;
   final List<CollectionValuePoint> valueHistory;
@@ -236,6 +243,10 @@ class GameState {
   /// Wall-clock ms of last session tick (listing catch-up).
   final int? lastPlayedAtMs;
   final EngagementState engagement;
+  /// Graded cards currently on loan for passive candy.
+  final Map<String, CardRental> activeRentals;
+  /// Timed season quests (seeded on load when null).
+  final Season? activeSeason;
 
   factory GameState.loading() => GameState(
         ready: false,
@@ -253,6 +264,7 @@ class GameState {
         day: 1,
         lastRip: null,
         lastRipPaid: null,
+        lastRipPackImageUrl: null,
         message: null,
         migrationNotice: null,
         valueHistory: const [],
@@ -261,6 +273,8 @@ class GameState {
         marketOffers: const [],
         lastPlayedAtMs: null,
         engagement: const EngagementState(),
+        activeRentals: const {},
+        activeSeason: null,
       );
 
   GameState copyWith({
@@ -279,6 +293,7 @@ class GameState {
     int? day,
     List<OwnedCard>? lastRip,
     double? lastRipPaid,
+    String? lastRipPackImageUrl,
     bool clearLastRip = false,
     String? message,
     bool clearMessage = false,
@@ -290,6 +305,9 @@ class GameState {
     List<MarketOffer>? marketOffers,
     int? lastPlayedAtMs,
     EngagementState? engagement,
+    Map<String, CardRental>? activeRentals,
+    Season? activeSeason,
+    bool clearActiveSeason = false,
   }) {
     return GameState(
       ready: ready ?? this.ready,
@@ -307,6 +325,9 @@ class GameState {
       day: day ?? this.day,
       lastRip: clearLastRip ? null : (lastRip ?? this.lastRip),
       lastRipPaid: clearLastRip ? null : (lastRipPaid ?? this.lastRipPaid),
+      lastRipPackImageUrl: clearLastRip
+          ? null
+          : (lastRipPackImageUrl ?? this.lastRipPackImageUrl),
       message: clearMessage ? null : (message ?? this.message),
       migrationNotice:
           clearMigration ? null : (migrationNotice ?? this.migrationNotice),
@@ -316,6 +337,9 @@ class GameState {
       marketOffers: marketOffers ?? this.marketOffers,
       lastPlayedAtMs: lastPlayedAtMs ?? this.lastPlayedAtMs,
       engagement: engagement ?? this.engagement,
+      activeRentals: activeRentals ?? this.activeRentals,
+      activeSeason:
+          clearActiveSeason ? null : (activeSeason ?? this.activeSeason),
     );
   }
 
@@ -334,11 +358,16 @@ class GameState {
         'day': day,
         'lastRip': lastRip?.map((e) => e.toJson()).toList(),
         'lastRipPaid': lastRipPaid,
+        'lastRipPackImageUrl': lastRipPackImageUrl,
         'valueHistory': valueHistory.map((e) => e.toJson()).toList(),
         'binders': binders.map((e) => e.toJson()).toList(),
         'marketOffers': marketOffers.map((e) => e.toJson()).toList(),
         'lastPlayedAtMs': lastPlayedAtMs,
         'engagement': engagement.toJson(),
+        'activeRentals': activeRentals.map(
+          (k, v) => MapEntry(k, v.toJson()),
+        ),
+        'activeSeason': activeSeason?.toJson(),
       };
 
   factory GameState.fromJson(Map<String, dynamic> j) {
@@ -361,6 +390,7 @@ class GameState {
         day: 1,
         lastRip: null,
         lastRipPaid: null,
+        lastRipPackImageUrl: null,
         message: null,
         migrationNotice:
             'Save upgraded to Riftbound. Parody inventory was reset.',
@@ -370,11 +400,22 @@ class GameState {
         marketOffers: const [],
         lastPlayedAtMs: null,
         engagement: const EngagementState(),
+        activeRentals: const {},
+        activeSeason: null,
       );
     }
     final fid = GameCatalog.normalizeId(
       (j['franchiseId'] as String?) ?? 'riftbound',
     );
+    final rentalsRaw = j['activeRentals'];
+    final Map<String, CardRental> rentals = {};
+    if (rentalsRaw is Map) {
+      for (final e in rentalsRaw.entries) {
+        rentals[e.key.toString()] =
+            CardRental.fromJson(Map<String, dynamic>.from(e.value as Map));
+      }
+    }
+    final seasonRaw = j['activeSeason'];
     return GameState(
       ready: true,
       catalogLoaded: true,
@@ -409,6 +450,7 @@ class GameState {
           ?.map((e) => OwnedCard.fromJson(e as Map<String, dynamic>))
           .toList(),
       lastRipPaid: (j['lastRipPaid'] as num?)?.toDouble(),
+      lastRipPackImageUrl: j['lastRipPackImageUrl'] as String?,
       message: null,
       migrationNotice: null,
       valueHistory: (j['valueHistory'] as List? ?? [])
@@ -425,6 +467,10 @@ class GameState {
       engagement: EngagementState.fromJson(
         j['engagement'] as Map<String, dynamic>?,
       ),
+      activeRentals: rentals,
+      activeSeason: seasonRaw is Map
+          ? Season.fromJson(Map<String, dynamic>.from(seasonRaw))
+          : null,
     );
   }
 }
@@ -472,6 +518,31 @@ abstract class _GameNotifierBase extends Notifier<GameState> {
   double fairFor(OwnedCard card);
   SealedProduct? sealedById(String id);
 
+  /// Best-effort sealed product art for an inventory pack (featured or catalog).
+  String? resolveUnopenedPackImageUrl(UnopenedPack pack) {
+    final featured = featuredPackById(pack.sealedProductId);
+    if (featured != null) return featured.assetPath;
+    final product = sealedById(pack.sealedProductId);
+    if (product != null) {
+      if (product.kind == SealedKind.box) {
+        try {
+          final packArt = _catalog.sealed.firstWhere(
+            (s) => s.setCode == pack.setCode && s.kind == SealedKind.pack,
+          );
+          if (packArt.displayArtUrl.isNotEmpty) return packArt.displayArtUrl;
+        } catch (_) {}
+      }
+      if (product.displayArtUrl.isNotEmpty) return product.displayArtUrl;
+    }
+    try {
+      final match = _catalog.sealed.firstWhere(
+        (s) => s.setCode == pack.setCode && s.kind == SealedKind.pack,
+      );
+      if (match.displayArtUrl.isNotEmpty) return match.displayArtUrl;
+    } catch (_) {}
+    return null;
+  }
+
   /// Engagement hooks (overridden by [_EngagementActions]).
   void _onEngagementPackOpened() {}
   void _onEngagementCardListed() {}
@@ -484,10 +555,19 @@ abstract class _GameNotifierBase extends Notifier<GameState> {
   }) =>
       state.engagement;
   Future<void> checkSetMilestones() async {}
+
+  /// Season progress (overridden by [_SeasonActions]).
+  void _bumpSeasonQuest(String trackId, [int by = 1]) {}
 }
 
 class GameNotifier extends _GameNotifierBase
-    with _RipSession, _ShopActions, _GradingActions, _EngagementActions {
+    with
+        _RipSession,
+        _ShopActions,
+        _GradingActions,
+        _EngagementActions,
+        _RentalActions,
+        _SeasonActions {
   RiftboundCatalog get catalog => _catalog;
 
   String get activeGameId => _catalog.gameId;
@@ -528,11 +608,16 @@ class GameNotifier extends _GameNotifierBase
         if (next.sealedListings.isEmpty) {
           next = next.copyWith(sealedListings: _generateSealedShop(next.events));
         }
+        if (next.activeSeason == null || !next.activeSeason!.isActive()) {
+          next = next.copyWith(activeSeason: Season.dragonHunt());
+        }
         next = next.copyWith(
           message: switch (id) {
             'pokemon' =>
               'Switched to Pokémon — your Pokémon market restored.',
             'mtg' => 'Switched to Magic — your Magic market restored.',
+            'onepiece' =>
+              'Switched to One Piece — your One Piece market restored.',
             _ => 'Switched to Riftbound — your Riftbound market restored.',
           },
         );
@@ -567,6 +652,7 @@ class GameNotifier extends _GameNotifierBase
       message: switch (id) {
         'pokemon' => 'Switched to Pokémon — sealed & singles stocked.',
         'mtg' => 'Switched to Magic — sealed & singles stocked.',
+        'onepiece' => 'Switched to One Piece — sealed & singles stocked.',
         _ => 'Switched to Riftbound — sealed & singles stocked.',
       },
       migrationNotice: null,
@@ -578,6 +664,7 @@ class GameNotifier extends _GameNotifierBase
       marketOffers: const [],
       lastPlayedAtMs: DateTime.now().millisecondsSinceEpoch,
       engagement: const EngagementState(),
+      activeSeason: Season.dragonHunt(),
     );
   }
 
@@ -634,6 +721,10 @@ class GameNotifier extends _GameNotifierBase
         await catchUpGameDays(nowMs: now, fromMs: last);
         await catchUpOnlineSales(nowMs: now, fromMs: last);
         await catchUpGrading();
+        if (state.activeSeason == null || !state.activeSeason!.isActive()) {
+          state = state.copyWith(activeSeason: Season.dragonHunt());
+        }
+        await cleanupExpiredRentals();
         await _persist();
         return;
       } catch (_) {
@@ -660,6 +751,7 @@ class GameNotifier extends _GameNotifierBase
       message: switch (gameId) {
         'pokemon' => 'Welcome to Bindora — Pokémon sealed & singles.',
         'mtg' => 'Welcome to Bindora — Magic sealed & singles.',
+        'onepiece' => 'Welcome to Bindora — One Piece sealed & singles.',
         _ => 'Welcome to Bindora — Riftbound sealed & singles.',
       },
       migrationNotice: null,
@@ -671,6 +763,7 @@ class GameNotifier extends _GameNotifierBase
       marketOffers: const [],
       lastPlayedAtMs: DateTime.now().millisecondsSinceEpoch,
       engagement: const EngagementState(),
+      activeSeason: Season.dragonHunt(),
     );
     state = fresh;
     final now = DateTime.now().millisecondsSinceEpoch;

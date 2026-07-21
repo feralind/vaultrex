@@ -1,18 +1,65 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/onboarding.dart';
+import '../dev/dev_studio.dart';
+import '../dev/dev_studio_panel.dart';
 import '../game/game_controller.dart';
 import '../models/enums.dart';
 import '../models/models.dart';
+import '../services/bindora_feel.dart';
 import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import '../ui/engagement/engagement_hub.dart';
 import 'brand.dart';
+import 'foil_slab.dart';
+import 'game_widgets.dart';
+import 'pack_peel_scrub.dart';
+
+/// Resolve sealed pack art for theater (explicit URL → saved rip → inventory).
+String? resolvePackTheaterImageUrl(
+  WidgetRef ref, {
+  String? packImageUrl,
+  String? packId,
+}) {
+  final explicit = packImageUrl?.trim();
+  if (explicit != null && explicit.isNotEmpty) return explicit;
+
+  final state = ref.read(gameProvider);
+  final saved = state.lastRipPackImageUrl?.trim();
+  if (saved != null && saved.isNotEmpty) return saved;
+
+  final notifier = ref.read(gameProvider.notifier);
+  final packs = state.unopened;
+  if (packs.isEmpty) return null;
+  UnopenedPack? pack;
+  if (packId == null) {
+    pack = packs.first;
+  } else {
+    for (final p in packs) {
+      if (p.id == packId) {
+        pack = p;
+        break;
+      }
+    }
+  }
+  if (pack == null) return null;
+  return notifier.resolveUnopenedPackImageUrl(pack);
+}
+
+String cardBackAssetForFranchise(String franchiseId) {
+  return switch (franchiseId) {
+    'pokemon' => 'assets/card_backs/pokemon_back.png',
+    'mtg' => 'assets/card_backs/mtg_back.png',
+    'onepiece' => 'assets/card_backs/onepiece_back.png',
+    _ => 'assets/card_backs/riftbound_back.png',
+  };
+}
 
 Future<void> showPackTheaterV2(
   BuildContext context,
@@ -22,6 +69,12 @@ Future<void> showPackTheaterV2(
   String? packId,
 }) async {
   final notifier = ref.read(gameProvider.notifier);
+  // Capture art before openPack removes the inventory entry.
+  final resolvedArt = resolvePackTheaterImageUrl(
+    ref,
+    packImageUrl: packImageUrl,
+    packId: packId,
+  );
   if (!alreadyOpened) {
     try {
       final opened = await notifier.openPack(packId: packId);
@@ -53,31 +106,45 @@ Future<void> showPackTheaterV2(
     return;
   }
 
-  for (final o in pulls) {
-    final def = notifier.cardById(o.cardId);
-    final url = def?.displayArtUrl ?? '';
-    if (url.isEmpty) continue;
-    // ignore: unawaited_futures
-    precacheImage(CachedNetworkImageProvider(url), context);
+  final art = resolvedArt ?? state.lastRipPackImageUrl;
+  final cardBack = cardBackAssetForFranchise(state.franchiseId);
+
+  // Skip network precache on Web — CanvasKit CORS decode spam (EncodingError).
+  if (!kIsWeb) {
+    for (final o in pulls) {
+      final def = notifier.cardById(o.cardId);
+      final url = def?.displayArtUrl ?? '';
+      if (url.isEmpty) continue;
+      if (url.toLowerCase().endsWith('.svg')) continue;
+      // ignore: unawaited_futures
+      precacheImage(CachedNetworkImageProvider(url), context);
+    }
   }
 
   await showGeneralDialog<void>(
     context: context,
     useRootNavigator: true,
     barrierDismissible: false,
-    barrierColor: Colors.black.withValues(alpha: 0.65),
-    transitionDuration: const Duration(milliseconds: 400),
+    barrierColor: Colors.black.withValues(alpha: 0.55),
+    transitionDuration: const Duration(milliseconds: 260),
     transitionBuilder: (context, anim, secondary, child) {
-      final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
+      final curved = CurvedAnimation(
+        parent: anim,
+        curve: Curves.easeOutCubic,
+      );
       return FadeTransition(
         opacity: curved,
-        child: child,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.98, end: 1.0).animate(curved),
+          child: child,
+        ),
       );
     },
     pageBuilder: (dialogContext, anim, secondary) {
       return PackRipTheaterV2(
         pulls: List<OwnedCard>.from(pulls),
-        packImageUrl: packImageUrl,
+        packImageUrl: art,
+        cardBackAsset: cardBack,
         onDone: () {
           if (dialogContext.mounted) {
             Navigator.of(dialogContext, rootNavigator: true).pop();
@@ -92,7 +159,9 @@ Future<void> showPackTheaterV2(
   }
 }
 
-enum _RipPhaseV2 { sealed, ripping, lineup, deciding }
+/// Frame map (reference Shorts samples):
+/// sealed idle → center V peel → flaps clear → card back hold → Y-flip → settle.
+enum _RipPhase { sealed, peeling, reveal }
 
 class PackRipTheaterV2 extends ConsumerStatefulWidget {
   const PackRipTheaterV2({
@@ -100,11 +169,13 @@ class PackRipTheaterV2 extends ConsumerStatefulWidget {
     required this.pulls,
     required this.onDone,
     this.packImageUrl,
+    this.cardBackAsset,
   });
 
   final List<OwnedCard> pulls;
   final VoidCallback onDone;
   final String? packImageUrl;
+  final String? cardBackAsset;
 
   @override
   ConsumerState<PackRipTheaterV2> createState() => _PackRipTheaterV2State();
@@ -112,70 +183,65 @@ class PackRipTheaterV2 extends ConsumerStatefulWidget {
 
 class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
     with TickerProviderStateMixin {
-  late final AnimationController _sealedTilt;
-  late final AnimationController _ripPeel;
-  late final AnimationController _cardTumble;
-  late final AnimationController _revealFlip;
-  late final AnimationController _glowPulse;
-
-  _RipPhaseV2 _phase = _RipPhaseV2.sealed;
+  _RipPhase _phase = _RipPhase.sealed;
+  double _tear = 0;
   int _cardIndex = 0;
+  bool _flipped = false;
   bool _deciding = false;
-  bool _sessionBusy = false;
+  bool _glow = false;
   double _swipeDx = 0;
   int _keptCount = 0;
-  bool _fastMode = false;
+  int _presentGen = 0;
+  bool _sessionBusy = false;
+  bool _fastRip = false;
   Future<void>? _inFlightDecide;
 
-  final List<_TumblingCard> _tumblingCards = [];
+  late final AnimationController _peelOut;
+  late final AnimationController _flip;
+  late final AnimationController _glowPulse;
+
+  bool get _closeEnabled =>
+      (_phase == _RipPhase.sealed || _phase == _RipPhase.reveal) &&
+      !_sessionBusy &&
+      _inFlightDecide == null;
 
   @override
   void initState() {
     super.initState();
-    _sealedTilt = AnimationController(
+    _peelOut = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 3000),
-    )..repeat(reverse: true);
-
-    _ripPeel = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 720),
     );
-
-    _cardTumble = AnimationController(
+    _flip = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 340),
     );
-
-    _revealFlip = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    );
-
     _glowPulse = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 780),
     );
-
     OnboardingStore.isFastRip().then((v) {
       if (!mounted) return;
-      setState(() => _fastMode = v);
+      setState(() {
+        _fastRip = v;
+        _flip.duration = Duration(milliseconds: v ? 180 : 340);
+        _peelOut.duration = Duration(milliseconds: v ? 280 : 720);
+      });
     });
   }
 
   @override
   void dispose() {
-    _sealedTilt.dispose();
-    _ripPeel.dispose();
-    _cardTumble.dispose();
-    _revealFlip.dispose();
+    _presentGen++;
+    _peelOut.dispose();
+    _flip.dispose();
     _glowPulse.dispose();
     super.dispose();
   }
 
-  OwnedCard get _currentCard => widget.pulls[_cardIndex];
+  OwnedCard get _current => widget.pulls[_cardIndex];
 
-  bool _isHit(OwnedCard owned, CardDef? def, double fair) {
+  bool _isGood(OwnedCard owned, CardDef? def, double fair) {
     if (def == null) return false;
     if (owned.foil && fair >= 5) return true;
     if (def.rarity.isRarePlus) return true;
@@ -183,125 +249,144 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
     return false;
   }
 
-  Color _getGlowColor(OwnedCard owned, CardDef? def) {
-    if (def == null) return Colors.transparent;
-    
-    // Foil cards get gold glow
-    if (owned.foil) return const Color(0xFFFBBF24);
-    
-    // Rarity-based colors
-    return switch (def.rarity) {
-      Rarity.epic || Rarity.showcase || Rarity.ultimate || Rarity.signature =>
-        const Color(0xFFA78BFA), // Purple
-      Rarity.rare || Rarity.overnumbered => const Color(0xFF60A5FA), // Blue
-      Rarity.uncommon => const Color(0xFF34D399), // Green
-      _ => const Color(0xFF64748B), // Gray
-    };
+  Future<void> _toggleFastRip() async {
+    final next = !_fastRip;
+    setState(() {
+      _fastRip = next;
+      _flip.duration = Duration(milliseconds: next ? 180 : 340);
+      _peelOut.duration = Duration(milliseconds: next ? 280 : 720);
+    });
+    await OnboardingStore.setFastRip(next);
   }
 
-  Future<void> _ripPack() async {
-    if (_phase != _RipPhaseV2.sealed || _sessionBusy) return;
-
-    HapticFeedback.heavyImpact();
-    SystemSound.play(SystemSoundType.click);
-
+  /// Swipe finished — pack stays sealed until this autoplays the rip.
+  Future<void> _openPack() async {
+    if (_phase != _RipPhase.sealed || _sessionBusy) return;
+    BindoraHaptics.packOpen();
+    unawaited(BindoraSounds.packOpen());
     setState(() {
-      _phase = _RipPhaseV2.ripping;
       _sessionBusy = true;
+      _phase = _RipPhase.peeling;
+      _tear = 0;
     });
 
-    // Peel animation
-    await _ripPeel.forward(from: 0);
+    if (_fastRip) {
+      setState(() => _tear = 1.0);
+    } else {
+      _peelOut
+        ..removeListener(_onPeelOutTick)
+        ..addListener(_onPeelOutTick);
+      await _peelOut.forward(from: 0);
+      _peelOut.removeListener(_onPeelOutTick);
+      if (!mounted) return;
+      setState(() => _tear = 1.0);
+    }
+
+    await Future<void>.delayed(
+      Duration(milliseconds: _fastRip ? 40 : 140),
+    );
     if (!mounted) return;
 
-    // Generate tumbling cards
-    _generateTumblingCards();
-
-    // Tumble animation
-    _cardTumble.forward(from: 0);
-    await Future<void>.delayed(const Duration(milliseconds: 1200));
-    if (!mounted) return;
-
+    BindoraHaptics.peelRip();
     setState(() {
-      _phase = _RipPhaseV2.lineup;
+      _phase = _RipPhase.reveal;
       _cardIndex = 0;
+      _flipped = false;
+      _deciding = false;
+      _glow = false;
+      _swipeDx = 0;
       _sessionBusy = false;
-      _tumblingCards.clear();
     });
-
+    if (!mounted || _phase != _RipPhase.reveal) return;
     await _presentCard();
   }
 
-  void _generateTumblingCards() {
-    _tumblingCards.clear();
-    for (var i = 0; i < widget.pulls.length; i++) {
-      _tumblingCards.add(
-        _TumblingCard(
-          index: i,
-          startX: 0,
-          startY: -200,
-          endX: (i.toDouble() - (widget.pulls.length / 2)) * 40,
-          endY: 100,
-          rotation: (math.pi * 2 * (i % 3)),
-          delay: Duration(milliseconds: 100 * i),
-          duration: const Duration(milliseconds: 1200),
-        ),
-      );
-    }
+  void _onPeelOutTick() {
+    if (!mounted || _phase != _RipPhase.peeling) return;
+    final t = Curves.easeInOutCubic.transform(_peelOut.value);
+    setState(() => _tear = t);
   }
 
   Future<void> _presentCard() async {
-    if (_phase != _RipPhaseV2.lineup) return;
-
+    final gen = ++_presentGen;
+    _flip.value = 0;
     setState(() {
+      _flipped = false;
       _deciding = false;
+      _glow = false;
+      _swipeDx = 0;
       _sessionBusy = true;
     });
+    final holdMs = _fastRip ? 0 : 220;
+    if (holdMs > 0) {
+      await Future<void>.delayed(Duration(milliseconds: holdMs));
+    }
+    if (!mounted || gen != _presentGen || _phase != _RipPhase.reveal) return;
+    BindoraHaptics.flipStart();
+    unawaited(BindoraSounds.flip());
+    await _flip.forward(from: 0);
+    if (!mounted || gen != _presentGen) return;
+    await _finishPresent(gen);
+  }
 
-    _revealFlip.forward(from: 0);
-    if (!mounted) return;
-
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
-
+  Future<void> _finishPresent(int gen) async {
+    if (!mounted || gen != _presentGen || _phase != _RipPhase.reveal) return;
+    if (_flipped || _deciding) return;
     final notifier = ref.read(gameProvider.notifier);
-    final owned = _currentCard;
+    final owned = _current;
     final def = notifier.cardById(owned.cardId);
     final fair = notifier.fairFor(owned);
-    final isHit = _isHit(owned, def, fair);
-
-    if (isHit) {
-      HapticFeedback.heavyImpact();
-      SystemSound.play(SystemSoundType.click);
+    final good = _isGood(owned, def, fair);
+    if (good) {
+      final tier = hapticTierFor(
+        isChase: good && fair >= 8,
+        foil: owned.foil,
+        rarePlus: def?.rarity.isRarePlus ?? false,
+      );
+      unawaited(BindoraHaptics.forTier(tier));
+      unawaited(BindoraSounds.revealForTier(tier));
+      setState(() => _glow = true);
       _glowPulse.forward(from: 0);
     } else {
-      HapticFeedback.selectionClick();
+      BindoraHaptics.peelTick();
     }
-
     setState(() {
+      _flipped = true;
       _deciding = true;
       _sessionBusy = false;
     });
   }
 
-  Future<void> _decide({required bool keep}) async {
-    if (!_deciding || _phase != _RipPhaseV2.lineup) return;
+  /// Tap during flip jumps to decide.
+  Future<void> _skipFlip() async {
+    if (_phase != _RipPhase.reveal || _deciding || _flipped) return;
+    final gen = _presentGen;
+    _flip.stop();
+    _flip.value = 1;
+    await _finishPresent(gen);
+  }
 
+  Future<void> _decide({required bool keep}) async {
+    if (!_deciding || _phase != _RipPhase.reveal || _inFlightDecide != null) {
+      return;
+    }
     setState(() {
       _deciding = false;
       _sessionBusy = true;
     });
 
     final notifier = ref.read(gameProvider.notifier);
-    final owned = _currentCard;
+    final owned = _current;
 
     final op = () async {
       await notifier.decideRipCard(owned.instanceId, keep: keep);
       if (keep) {
-        HapticFeedback.lightImpact();
+        unawaited(BindoraHaptics.swipeKeep());
+        unawaited(BindoraSounds.swipeKeep());
         if (mounted) setState(() => _keptCount += 1);
       } else {
-        HapticFeedback.mediumImpact();
+        unawaited(BindoraHaptics.swipeSell());
+        unawaited(BindoraSounds.swipeSell());
       }
 
       if (!mounted) return;
@@ -309,7 +394,6 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
         setState(() {
           _cardIndex += 1;
           _sessionBusy = false;
-          _revealFlip.reset();
         });
         await _presentCard();
       } else {
@@ -327,20 +411,27 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
     }
   }
 
-  Future<void> _keepAll() async {
-    if (_sessionBusy) return;
-
-    setState(() => _sessionBusy = true);
+  Future<void> _closeOrKeepAll({required bool keepRemaining}) async {
+    if (!_closeEnabled) return;
+    _presentGen++;
+    setState(() {
+      _sessionBusy = true;
+      _deciding = false;
+    });
     if (_inFlightDecide != null) {
       try {
         await _inFlightDecide;
       } catch (_) {}
     }
     final notifier = ref.read(gameProvider.notifier);
-    final ripLeft = ref.read(gameProvider).lastRip?.length ?? 0;
-    await notifier.finalizeRip(keepRemaining: true);
-    if (mounted && ripLeft > 0) {
-      setState(() => _keptCount += ripLeft);
+    if (keepRemaining) {
+      final ripLeft = ref.read(gameProvider).lastRip?.length ?? 0;
+      await notifier.finalizeRip(keepRemaining: true);
+      if (mounted && ripLeft > 0) {
+        setState(() => _keptCount += ripLeft);
+      }
+    } else {
+      await notifier.finalizeRip(keepRemaining: true);
     }
     if (!mounted) return;
     widget.onDone();
@@ -350,7 +441,7 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
   Widget build(BuildContext context) {
     final notifier = ref.read(gameProvider.notifier);
     final candyBal = ref.watch(gameProvider.select((s) => s.player.candy));
-    final inDeciding = _phase == _RipPhaseV2.deciding || _phase == _RipPhaseV2.lineup;
+    final inReveal = _phase == _RipPhase.reveal;
 
     return Material(
       color: CC.bg,
@@ -358,117 +449,120 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
               child: SizedBox(
                 height: 44,
                 child: Row(
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: (_sessionBusy || _inFlightDecide != null)
-                          ? null
-                          : _keepAll,
-                    ),
-                    const Spacer(),
-                    if (inDeciding)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: CC.candy.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: CC.candy, width: 1.5),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.inventory_2_outlined,
-                              size: 16,
-                              color: CC.candy,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              '$_keptCount',
-                              style: AppText.jakarta(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: CC.candy,
-                              ),
-                            ),
-                          ],
-                        ),
+                    if (_phase == _RipPhase.sealed || inReveal)
+                      IconButton(
+                        tooltip: 'Keep remaining & close',
+                        onPressed: _closeEnabled
+                            ? () => _closeOrKeepAll(keepRemaining: true)
+                            : null,
+                        icon: const Icon(Icons.close_rounded),
                       )
                     else
                       const SizedBox(width: 48),
-                    const Spacer(),
-                    IconButton(
-                      icon: Icon(
-                        Icons.bolt_rounded,
-                        color: _fastMode ? CC.accent : CC.inkMuted,
-                      ),
-                      onPressed: () async {
-                        final next = !_fastMode;
-                        setState(() => _fastMode = next);
-                        await OnboardingStore.setFastRip(next);
-                      },
+                    Expanded(
+                      child: inReveal
+                          ? Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.inventory_2_outlined,
+                                  size: 16,
+                                  color: CC.inkMuted,
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  constraints: const BoxConstraints(minWidth: 24),
+                                  height: 24,
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 6),
+                                  alignment: Alignment.center,
+                                  decoration: const BoxDecoration(
+                                    color: CC.candy,
+                                    borderRadius:
+                                        BorderRadius.all(Radius.circular(12)),
+                                  ),
+                                  child: Text(
+                                    '$_keptCount',
+                                    style: AppText.jakarta(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : const SizedBox.shrink(),
                     ),
+                    if (inReveal || _phase == _RipPhase.sealed)
+                      IconButton(
+                        tooltip: _fastRip ? 'Fast rip on' : 'Fast rip off',
+                        onPressed: _toggleFastRip,
+                        icon: Icon(
+                          Icons.bolt_rounded,
+                          color: _fastRip ? CC.accent : CC.inkMuted,
+                        ),
+                      )
+                    else
+                      const SizedBox(width: 8),
                   ],
                 ),
               ),
             ),
             Expanded(
-              child: _phase == _RipPhaseV2.sealed
-                  ? _SealedStage(
-                      packImageUrl: widget.packImageUrl,
-                      tiltAnim: _sealedTilt,
-                      onTap: _ripPack,
+              child: inReveal
+                  ? _RevealStage(
+                      pulls: widget.pulls,
+                      cardIndex: _cardIndex,
+                      def: notifier.cardById(_current.cardId),
+                      fair: notifier.fairFor(_current),
+                      flip: _flip,
+                      flipped: _flipped,
+                      glow: _glow,
+                      glowAnim: _glowPulse,
+                      swipeDx: _swipeDx,
+                      deciding: _deciding,
+                      onTapSkip: _skipFlip,
+                      onHorizontalDragUpdate: (d) {
+                        if (!_deciding) return;
+                        setState(() =>
+                            _swipeDx = (_swipeDx + d.delta.dx).clamp(-160.0, 160.0));
+                      },
+                      onHorizontalDragEnd: (d) {
+                        if (!_deciding) return;
+                        final v = d.primaryVelocity ?? 0;
+                        if (_swipeDx > 80 || v > 600) {
+                          _decide(keep: true);
+                        } else if (_swipeDx < -80 || v < -600) {
+                          _decide(keep: false);
+                        } else {
+                          setState(() => _swipeDx = 0);
+                        }
+                      },
                     )
-                  : _phase == _RipPhaseV2.ripping
-                      ? _RippingStage(
-                          ripAnim: _ripPeel,
-                          packImageUrl: widget.packImageUrl,
-                        )
-                      : _RevealLineupV2(
-                          currentCard: _currentCard,
-                          cardDef: notifier.cardById(_currentCard.cardId),
-                          fair: notifier.fairFor(_currentCard),
-                          revealAnim: _revealFlip,
-                          glowAnim: _glowPulse,
-                          swipeDx: _swipeDx,
-                          deciding: _deciding,
-                          cardIndex: _cardIndex,
-                          totalCards: widget.pulls.length,
-                          isHit: _isHit(
-                            _currentCard,
-                            notifier.cardById(_currentCard.cardId),
-                            notifier.fairFor(_currentCard),
+                  : ScrubPeelStage(
+                      progress: _tear.clamp(0.0, 1.0),
+                      showHint: _phase == _RipPhase.sealed && !_sessionBusy,
+                      interactive: _phase == _RipPhase.sealed && !_sessionBusy,
+                      packImageUrl: widget.packImageUrl,
+                      cardBackAsset: widget.cardBackAsset ??
+                          cardBackAssetForFranchise(
+                            ref.read(gameProvider).franchiseId,
                           ),
-                          glowColor: _getGlowColor(
-                            _currentCard,
-                            notifier.cardById(_currentCard.cardId),
-                          ),
-                          onHorizontalDragUpdate: (d) {
-                            if (!_deciding) return;
-                            setState(() => _swipeDx =
-                                (_swipeDx + d.delta.dx).clamp(-160.0, 160.0));
-                          },
-                          onHorizontalDragEnd: (d) {
-                            if (!_deciding) return;
-                            final v = d.primaryVelocity ?? 0;
-                            if (_swipeDx > 80 || v > 600) {
-                              _decide(keep: true);
-                            } else if (_swipeDx < -80 || v < -600) {
-                              _decide(keep: false);
-                            } else {
-                              setState(() => _swipeDx = 0);
-                            }
-                          },
-                        ),
+                      onSwipeCommit: () {
+                        if (_fastRip) {
+                          setState(() => _tear = 1.0);
+                        }
+                        unawaited(_openPack());
+                      },
+                    ),
             ),
-            if (inDeciding && _deciding)
+            if (inReveal && _deciding)
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
                 child: Column(
@@ -481,27 +575,62 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
                       ),
                     ),
                     Row(
-                      children: [
-                        Expanded(
-                          child: FilledButton.tonalIcon(
-                            onPressed: () => _decide(keep: false),
-                            icon: const Icon(Icons.close_rounded),
-                            label: const Text('Exchange'),
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 52,
+                        child: OutlinedButton(
+                          onPressed: () => _decide(keep: false),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: CC.ink,
+                            backgroundColor: CC.bgElevated,
+                            side: BorderSide(
+                              color: CC.line.withValues(alpha: 0.9),
+                            ),
+                            padding: EdgeInsets.zero,
+                            alignment: Alignment.center,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(28),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: () => _decide(keep: true),
-                            icon: const Icon(Icons.check_rounded),
-                            label: const Text('Keep'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: CC.accent,
+                          child: Text(
+                            '← Exchange',
+                            style: AppText.jakarta(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                              height: 1,
                             ),
                           ),
                         ),
-                      ],
+                      ),
                     ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: SizedBox(
+                        height: 52,
+                        child: FilledButton(
+                          onPressed: () => _decide(keep: true),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: CC.accent,
+                            padding: EdgeInsets.zero,
+                            alignment: Alignment.center,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                          ),
+                          child: Text(
+                            'Keep →',
+                            style: AppText.jakarta(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                              height: 1,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
                   ],
                 ),
               )
@@ -514,361 +643,381 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
   }
 }
 
-// Sealed pack with tilt effect
-class _SealedStage extends StatelessWidget {
-  const _SealedStage({
-    required this.packImageUrl,
-    required this.tiltAnim,
-    required this.onTap,
-  });
+/// Official card back art for face-down cards in theater.
+class _CardBack extends StatelessWidget {
+  const _CardBack({this.width = 200, this.height = 280});
 
-  final String? packImageUrl;
-  final AnimationController tiltAnim;
-  final VoidCallback onTap;
+  static const riftboundPath = 'assets/card_backs/riftbound_back.png';
+  static const pokemonPath = 'assets/card_backs/pokemon_back.png';
+  static const mtgPath = 'assets/card_backs/mtg_back.png';
+  static const onepiecePath = 'assets/card_backs/onepiece_back.png';
 
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedBuilder(
-        animation: tiltAnim,
-        builder: (context, _) {
-          final t = Curves.easeInOutCubic.transform(tiltAnim.value);
-          final angle = (t - 0.5) * 0.1;
-
-          return Center(
-            child: Transform(
-              alignment: Alignment.center,
-              transform: Matrix4.identity()
-                ..setEntry(3, 2, 0.001)
-                ..rotateX(angle)
-                ..rotateZ(angle * 0.5),
-              child: Stack(
-                children: [
-                  Container(
-                    width: 200,
-                    height: 280,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.5),
-                          blurRadius: 40,
-                          offset: const Offset(0, 20),
-                        ),
-                      ],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: packImageUrl != null
-                          ? Image.network(
-                              packImageUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  const ColoredBox(color: Color(0xFF1a1a2e)),
-                            )
-                          : const ColoredBox(color: Color(0xFF1a1a2e)),
-                    ),
-                  ),
-                  // Shine effect
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Colors.white.withValues(alpha: 0.1 + t * 0.05),
-                            Colors.transparent,
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-// Ripping animation
-class _RippingStage extends StatelessWidget {
-  const _RippingStage({
-    required this.ripAnim,
-    required this.packImageUrl,
-  });
-
-  final AnimationController ripAnim;
-  final String? packImageUrl;
+  final double width;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: ripAnim,
+    final franchise = refCatalogFranchiseV2(context);
+    final isPokemon = franchise == 'pokemon';
+    final isMtg = franchise == 'mtg';
+    final isOnePiece = franchise == 'onepiece';
+    final rawPath = switch (franchise) {
+      'pokemon' => pokemonPath,
+      'mtg' => mtgPath,
+      'onepiece' => onepiecePath,
+      _ => riftboundPath,
+    };
+
+    return ListenableBuilder(
+      listenable: DevStudio.instance,
       builder: (context, _) {
-        final t = ripAnim.value;
-        final peelHeight = 100 * t;
-        final gapHeight = 20 * t;
-
-        return Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Top flap
-              Transform.rotate(
-                angle: -t * 0.5,
-                child: Container(
-                  width: 200,
-                  height: peelHeight.clamp(0, 100),
-                  decoration: BoxDecoration(
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(8),
-                      bottomRight: Radius.circular(8),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 10,
+        final path = DevStudio.instance.resolveImage(rawPath);
+        return GestureDetector(
+          onLongPress: () =>
+              devSelectImageSource(context, rawPath, label: 'Card back'),
+          child: Container(
+            width: width,
+            height: height,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.42),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: path.startsWith('http')
+                  ? Image.network(
+                      path,
+                      width: width,
+                      height: height,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => _backFallback(
+                        isPokemon: isPokemon,
+                        isMtg: isMtg,
+                        isOnePiece: isOnePiece,
+                        width: width,
                       ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(8),
-                      bottomRight: Radius.circular(8),
+                    )
+                  : Image.asset(
+                      path,
+                      width: width,
+                      height: height,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => _backFallback(
+                        isPokemon: isPokemon,
+                        isMtg: isMtg,
+                        isOnePiece: isOnePiece,
+                        width: width,
+                      ),
                     ),
-                    child: packImageUrl != null
-                        ? Image.network(
-                            packImageUrl!,
-                            fit: BoxFit.cover,
-                            alignment: Alignment.topCenter,
-                          )
-                        : const ColoredBox(color: Color(0xFF1a1a2e)),
-                  ),
-                ),
-              ),
-              SizedBox(height: gapHeight.clamp(0, 20)),
-              // Bottom (closed) pack
-              Container(
-                width: 200,
-                height: 280 - peelHeight.clamp(0, 100),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.5),
-                      blurRadius: 30,
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: packImageUrl != null
-                      ? Image.network(
-                          packImageUrl!,
-                          fit: BoxFit.cover,
-                          alignment: Alignment.bottomCenter,
-                        )
-                      : const ColoredBox(color: Color(0xFF1a1a2e)),
-                ),
-              ),
-            ],
+            ),
           ),
         );
       },
     );
   }
+
+  Widget _backFallback({
+    required bool isPokemon,
+    required bool isMtg,
+    required bool isOnePiece,
+    required double width,
+  }) {
+    return isPokemon
+        ? ColoredBox(
+            color: const Color(0xFF0D1B4C),
+            child: Center(
+              child: Text(
+                'Pokémon',
+                style: AppText.jakarta(
+                  color: const Color(0xFFFFCB05),
+                  fontWeight: FontWeight.w900,
+                  fontSize: width * 0.16,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+          )
+        : ColoredBox(
+            color: isMtg
+                ? const Color(0xFF1A0A05)
+                : isOnePiece
+                    ? const Color(0xFF0A1628)
+                    : const Color(0xFF0C1428),
+            child: Center(
+              child: Image.asset(
+                isMtg
+                    ? 'assets/logos/mtg.png'
+                    : isOnePiece
+                        ? 'assets/logos/onepiece.png'
+                        : 'assets/logos/riftbound.png',
+                width: width * 0.55,
+                height: width * 0.28,
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) =>
+                    RiftMark(size: width * 0.42, framed: false),
+              ),
+            ),
+          );
+  }
 }
 
-// Reveal & flip animation
-class _RevealLineupV2 extends StatelessWidget {
-  const _RevealLineupV2({
-    required this.currentCard,
-    required this.cardDef,
+/// Reads franchise id from the active game notifier when available.
+String refCatalogFranchiseV2(BuildContext context) {
+  try {
+    final container = ProviderScope.containerOf(context, listen: false);
+    return container.read(gameProvider.notifier).catalog.gameId;
+  } catch (_) {
+    return 'riftbound';
+  }
+}
+
+Color _ambientFor(Rarity? rarity, {bool foil = false}) {
+  if (foil) return const Color(0xFFFBBF24);
+  return switch (rarity) {
+    Rarity.epic || Rarity.showcase || Rarity.ultimate || Rarity.signature =>
+      const Color(0xFFA78BFA),
+    Rarity.rare || Rarity.overnumbered => const Color(0xFF60A5FA),
+    Rarity.uncommon => const Color(0xFF34D399),
+    _ => const Color(0xFF64748B),
+  };
+}
+
+class _RevealStage extends StatelessWidget {
+  const _RevealStage({
+    required this.pulls,
+    required this.cardIndex,
+    required this.def,
     required this.fair,
-    required this.revealAnim,
+    required this.flip,
+    required this.flipped,
+    required this.glow,
     required this.glowAnim,
     required this.swipeDx,
     required this.deciding,
-    required this.cardIndex,
-    required this.totalCards,
-    required this.isHit,
-    required this.glowColor,
     required this.onHorizontalDragUpdate,
     required this.onHorizontalDragEnd,
+    this.onTapSkip,
   });
 
-  final OwnedCard currentCard;
-  final CardDef? cardDef;
+  final List<OwnedCard> pulls;
+  final int cardIndex;
+  final CardDef? def;
   final double fair;
-  final AnimationController revealAnim;
-  final AnimationController glowAnim;
+  final AnimationController flip;
+  final bool flipped;
+  final bool glow;
+  final Animation<double> glowAnim;
   final double swipeDx;
   final bool deciding;
-  final int cardIndex;
-  final int totalCards;
-  final bool isHit;
-  final Color glowColor;
+  final VoidCallback? onTapSkip;
   final void Function(DragUpdateDetails) onHorizontalDragUpdate;
   final void Function(DragEndDetails) onHorizontalDragEnd;
 
+  OwnedCard get owned => pulls[cardIndex];
+
   @override
   Widget build(BuildContext context) {
-    final artUrl = cardDef?.displayArtUrl ?? '';
+    final artUrl = def?.displayArtUrl ?? '';
+    final ambient = _ambientFor(def?.rarity, foil: owned.foil);
 
     return GestureDetector(
+      onTap: deciding ? null : onTapSkip,
       onHorizontalDragUpdate: onHorizontalDragUpdate,
       onHorizontalDragEnd: onHorizontalDragEnd,
       child: AnimatedBuilder(
-        animation: Listenable.merge([revealAnim, glowAnim]),
+        animation: Listenable.merge([flip, glowAnim]),
         builder: (context, _) {
-          final t = revealAnim.value;
+          final t = Curves.easeOutCubic.transform(flip.value);
           final angle = t * math.pi;
           final showFront = angle >= math.pi / 2;
-
-          final pulse = isHit
-              ? (0.3 + 0.2 * math.sin(glowAnim.value * math.pi * 2))
+          final displayAngle = showFront ? angle - math.pi : angle;
+          final pulse = glow
+              ? (0.35 + 0.3 * math.sin(glowAnim.value * math.pi * 2))
               : 0.0;
+          final keepHint = swipeDx > 24;
+          final exchangeHint = swipeDx < -24;
 
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              // Background glow - shows for ALL cards
-              IgnorePointer(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: RadialGradient(
-                      colors: [
-                        glowColor.withValues(
-                          alpha: showFront
-                              ? (isHit ? 0.3 + pulse * 0.2 : 0.12)
-                              : 0.05,
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              // Rare Candy–style face-on framing (not edge-to-edge zoomed).
+              // Portrait cards ~58% width; landscape slightly wider.
+              final aspect = def?.artAspectRatio ?? (2.5 / 3.5);
+              final maxH = math.min(
+                constraints.maxHeight * 0.58,
+                constraints.maxWidth *
+                    (def?.isLandscapeCard == true ? 0.78 : 1.05),
+              );
+              final maxW = constraints.maxWidth *
+                  (def?.isLandscapeCard == true ? 0.82 : 0.58);
+              var cardW = maxW;
+              var cardH = cardW / aspect;
+              if (cardH > maxH) {
+                cardH = maxH;
+                cardW = cardH * aspect;
+              }
+
+              return Stack(
+                fit: StackFit.expand,
+                clipBehavior: Clip.none,
+                children: [
+                  IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: RadialGradient(
+                          center: const Alignment(0, -0.12),
+                          radius: 1.0,
+                          colors: [
+                            ambient.withValues(
+                              alpha: showFront ? 0.38 + pulse * 0.2 : 0.18,
+                            ),
+                            CC.bg.withValues(alpha: 0.25),
+                            CC.bg,
+                          ],
+                          stops: const [0.0, 0.48, 1.0],
                         ),
-                        CC.bg,
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                    child: Column(
+                      children: [
+                        Expanded(
+                          child: Center(
+                            child: _ActiveLineup(
+                              remaining: pulls.length - cardIndex,
+                              cardW: cardW,
+                              cardH: cardH,
+                              swipeDx: swipeDx,
+                              ambient: ambient,
+                              pulse: pulse,
+                              displayAngle: displayAngle,
+                              showFront: showFront,
+                              owned: owned,
+                              artUrl: artUrl,
+                            ),
+                          ),
+                        ),
+                        AnimatedOpacity(
+                          opacity: flipped ? 1 : 0,
+                          duration: const Duration(milliseconds: 200),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  def?.name ?? 'Card',
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppText.jakarta(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 18,
+                                    height: 1.2,
+                                  ),
+                                ),
+                                if (def case final d?) ...[
+                                  if (d.setName.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      d.setName,
+                                      textAlign: TextAlign.center,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppText.jakarta(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                        color: CC.inkMuted,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                                const SizedBox(height: 8),
+                                if (def?.isUnlisted == true) ...[
+                                  Text(
+                                    'Not on market yet · Speculative value',
+                                    textAlign: TextAlign.center,
+                                    style: AppText.jakarta(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: CC.accentHot,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                ],
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      'Exchange for ',
+                                      style: AppText.jakarta(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: CC.inkMuted,
+                                      ),
+                                    ),
+                                    const Icon(
+                                      Icons.auto_awesome,
+                                      size: 14,
+                                      color: CC.candy,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${(fair * 100).round()}',
+                                      style: AppText.jakarta(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w800,
+                                        color: CC.candy,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (deciding) ...[
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    keepHint
+                                        ? 'Release to Keep'
+                                        : exchangeHint
+                                            ? 'Release to Exchange'
+                                            : 'Swipe left or right',
+                                    style: AppText.jakarta(
+                                      color: keepHint
+                                          ? CC.accent
+                                          : exchangeHint
+                                              ? CC.candy
+                                              : CC.inkMuted,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ] else if (!flipped) ...[
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    'Tap to skip flip',
+                                    style: AppText.jakarta(
+                                      color: CC.inkMuted,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                ),
-              ),
-              // Card + swipe transform
-              Center(
-                child: Transform.translate(
-                  offset: Offset(swipeDx, 0),
-                  child: _FlipCard(
-                    angle: angle,
-                    showFront: showFront,
-                    artUrl: artUrl,
-                    cardDef: cardDef,
-                    currentCard: currentCard,
-                    isHit: isHit,
-                    pulse: pulse,
-                    glowColor: glowColor,
-                  ),
-                ),
-              ),
-              // Info panel
-              Positioned(
-                bottom: 24,
-                left: 16,
-                right: 16,
-                child: AnimatedOpacity(
-                  opacity: showFront ? 1 : 0,
-                  duration: const Duration(milliseconds: 200),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        cardDef?.name ?? 'Card',
-                        textAlign: TextAlign.center,
-                        style: AppText.jakarta(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      if (cardDef?.setName.isNotEmpty == true)
-                        Text(
-                          cardDef!.setName,
-                          style: AppText.jakarta(
-                            fontSize: 13,
-                            color: CC.inkMuted,
-                          ),
-                        ),
-                      const SizedBox(height: 12),
-                      // Rarity badge + value indicator
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (currentCard.foil)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFBBF24).withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: const Color(0xFFFBBF24),
-                                  width: 1,
-                                ),
-                              ),
-                              child: Text(
-                                '✨ Foil',
-                                style: AppText.jakarta(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: const Color(0xFFFBBF24),
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ),
-                          if (isHit) ...[
-                            if (currentCard.foil) const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: glowColor.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: glowColor,
-                                  width: 1,
-                                ),
-                              ),
-                              child: Text(
-                                '⭐ Hit',
-                                style: AppText.jakarta(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: glowColor,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Card ${cardIndex + 1} of $totalCards',
-                        style: AppText.jakarta(
-                          fontSize: 12,
-                          color: CC.inkMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           );
         },
       ),
@@ -876,120 +1025,96 @@ class _RevealLineupV2 extends StatelessWidget {
   }
 }
 
-class _FlipCard extends StatelessWidget {
-  const _FlipCard({
-    required this.angle,
-    required this.showFront,
-    required this.artUrl,
-    required this.cardDef,
-    required this.currentCard,
-    required this.isHit,
+class _ActiveLineup extends StatelessWidget {
+  const _ActiveLineup({
+    required this.remaining,
+    required this.cardW,
+    required this.cardH,
+    required this.swipeDx,
+    required this.ambient,
     required this.pulse,
-    required this.glowColor,
+    required this.displayAngle,
+    required this.showFront,
+    required this.owned,
+    required this.artUrl,
   });
 
-  final double angle;
-  final bool showFront;
-  final String artUrl;
-  final CardDef? cardDef;
-  final OwnedCard currentCard;
-  final bool isHit;
+  final int remaining;
+  final double cardW;
+  final double cardH;
+  final double swipeDx;
+  final Color ambient;
   final double pulse;
-  final Color glowColor;
+  final double displayAngle;
+  final bool showFront;
+  final OwnedCard owned;
+  final String artUrl;
 
   @override
   Widget build(BuildContext context) {
-    final displayAngle = showFront ? angle - math.pi : angle;
+    final waiting = math.max(0, remaining - 1);
+    final peekCount = math.min(waiting, 5);
 
-    return Transform(
-      alignment: Alignment.center,
-      transform: Matrix4.identity()
-        ..setEntry(3, 2, 0.001)
-        ..rotateY(displayAngle),
-      child: Container(
-        width: 220,
-        height: 310,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: isHit
-                  ? glowColor.withValues(alpha: 0.5 + pulse * 0.2)
-                  : Colors.black.withValues(alpha: 0.5),
-              blurRadius: 30 + pulse * 10,
-              offset: const Offset(0, 10),
+    return SizedBox(
+      width: cardW + 20,
+      height: cardH + peekCount * 7.0 + 12,
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          for (var i = peekCount; i >= 1; i--)
+            Transform.translate(
+              offset: Offset(0, -i * 6.0),
+              child: Opacity(
+                opacity: (0.9 - i * 0.08).clamp(0.45, 0.92),
+                child: _CardBack(width: cardW, height: cardH),
+              ),
             ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              if (!showFront)
-                Container(
-                  color: const Color(0xFF0C1428),
-                  child: Center(
-                    child: Image.asset(
-                      'assets/logos/bindora.png',
-                      width: 100,
-                      opacity: const AlwaysStoppedAnimation(0.3),
-                      errorBuilder: (context, error, stackTrace) =>
-                          const SizedBox.shrink(),
+          Transform.translate(
+            offset: Offset(swipeDx * 0.45, 0),
+            child: Transform.rotate(
+              angle: swipeDx / 480,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: ambient.withValues(alpha: 0.3 + pulse * 0.22),
+                      blurRadius: 28 + pulse * 14,
+                      spreadRadius: 1,
                     ),
-                  ),
-                )
-              else
-                CachedNetworkImage(
-                  imageUrl: artUrl,
-                  fit: BoxFit.cover,
-                  errorWidget: (context, url, error) =>
-                      const ColoredBox(color: Color(0xFF0C1428)),
-                ),
-              // Glow overlay - shows for ALL cards but stronger for hits
-              if (showFront)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: RadialGradient(
-                          colors: [
-                            glowColor.withValues(
-                              alpha: isHit ? pulse * 0.4 : 0.08,
-                            ),
-                            Colors.transparent,
-                          ],
-                        ),
-                      ),
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      blurRadius: 22,
+                      offset: const Offset(0, 12),
                     ),
-                  ),
+                  ],
                 ),
-            ],
+                child: Transform(
+                  alignment: Alignment.center,
+                  transform: Matrix4.identity()
+                    ..setEntry(3, 2, 0.0016 / (cardW / 200))
+                    ..rotateY(displayAngle),
+                  child: showFront
+                      ? FoilChromatic(
+                          enabled: owned.foil,
+                          intensity: 0.78,
+                          autoPlay: true,
+                          child: CardArt(
+                            url: artUrl,
+                            width: cardW,
+                            height: cardH,
+                            foil: false,
+                            radius: 16,
+                          ),
+                        )
+                      : _CardBack(width: cardW, height: cardH),
+                ),
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
-}
-
-class _TumblingCard {
-  _TumblingCard({
-    required this.index,
-    required this.startX,
-    required this.startY,
-    required this.endX,
-    required this.endY,
-    required this.rotation,
-    required this.delay,
-    required this.duration,
-  });
-
-  final int index;
-  final double startX;
-  final double startY;
-  final double endX;
-  final double endY;
-  final double rotation;
-  final Duration delay;
-  final Duration duration;
 }

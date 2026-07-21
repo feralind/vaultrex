@@ -8,6 +8,8 @@ import '../dev/dev_studio.dart';
 import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import '../widgets/game_widgets.dart';
+import 'design_kit_screen.dart';
+import 'pack_theater_soft_lift_preview.dart';
 
 /// Shared pending target when long-pressing art in-app.
 abstract final class DevImagePick {
@@ -79,8 +81,9 @@ class _DevHubScreenState extends State<DevHubScreen>
       'assets/card_backs/riftbound_back.png',
       'assets/card_backs/pokemon_back.png',
       'assets/card_backs/mtg_back.png',
+      'assets/card_backs/onepiece_back.png',
       'assets/logos/bindora.png',
-      'assets/logos/riftbound_wordmark.png',
+      'assets/logos/riftbound.png',
       'assets/logos/mtg.png',
       'assets/rip/peel_sealed.png',
     ];
@@ -396,6 +399,29 @@ class _DevHubScreenState extends State<DevHubScreen>
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        Text('Design system', style: _h()),
+        const SizedBox(height: 8),
+        FilledButton.icon(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const DesignKitScreen()),
+          ),
+          icon: const Icon(Icons.palette_outlined),
+          label: const Text('Open design kit'),
+        ),
+        const SizedBox(height: 24),
+        Text('Pack theater', style: _h()),
+        const SizedBox(height: 8),
+        FilledButton.icon(
+          onPressed: () => openPackTheaterSoftLiftPreview(context),
+          icon: const Icon(Icons.auto_awesome_motion_rounded),
+          label: const Text('Live pack peel demo'),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Swipe-commit peel + pack_open / flip_card SFX.',
+          style: AppText.jakarta(color: CC.inkMuted, fontSize: 12),
+        ),
+        const SizedBox(height: 24),
         Text('Art preview', style: _h()),
         const SizedBox(height: 8),
         AspectRatio(

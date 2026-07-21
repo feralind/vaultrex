@@ -6,11 +6,12 @@ import 'database.dart';
 import 'pricing.dart';
 import 'riftbound_catalog.dart';
 
-const kCollectionFranchiseIds = ['riftbound', 'pokemon', 'mtg'];
+const kCollectionFranchiseIds = ['riftbound', 'pokemon', 'mtg', 'onepiece'];
 
 String franchiseLabel(String id) => switch (id) {
       'pokemon' => 'Pokémon',
       'mtg' => 'Magic',
+      'onepiece' => 'One Piece',
       _ => 'Riftbound',
     };
 

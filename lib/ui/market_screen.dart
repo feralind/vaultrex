@@ -10,12 +10,14 @@ import '../models/enums.dart';
 import '../models/models.dart';
 import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
+import '../widgets/brand.dart';
 import '../widgets/card_detail_sheet.dart';
 import '../widgets/cash_top_up_sheet.dart';
 import '../widgets/fake_google_pay_sheet.dart';
 import '../widgets/franchise_icon_row.dart';
 import '../widgets/game_widgets.dart';
 import '../widgets/live_ambient.dart';
+import '../widgets/ui_kit.dart';
 import 'engagement/engagement_hub.dart';
 import 'social/auction_pit_screen.dart';
 
@@ -217,6 +219,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
     final franchiseLabel = switch (active) {
       'pokemon' => 'Pokémon',
       'mtg' => 'Magic',
+      'onepiece' => 'One Piece',
       _ => 'Riftbound',
     };
     final openOffers = state.marketOffers.where((o) => o.isOpen).length;
@@ -227,7 +230,8 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
     final headerPadTop = lerpDouble(8, 2, c)!;
     final franchiseH = lerpDouble(64, 44, c)!;
     final searchPadV = lerpDouble(12, 6, c)!;
-    final cashPadV = lerpDouble(8, 5, c)!;
+    // cash pill uses shared CashBalance (fixed padding).
+
     final dealPadV = lerpDouble(10, 6, c)!;
 
     return LiveAmbientBackdrop(
@@ -247,50 +251,15 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
                         'Market',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AppText.jakarta(
+                        style: AppText.display().copyWith(
                           fontSize: titleSize,
-                          fontWeight: FontWeight.w800,
                           letterSpacing: -0.6,
                         ),
                       ),
                     ),
-                    Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () => showCashTopUp(context, ref),
-                        borderRadius: BorderRadius.circular(12),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 120),
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: cashPadV,
-                          ),
-                          decoration: BoxDecoration(
-                            color: CC.card,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: CC.line),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                '\$${state.player.cash.toStringAsFixed(2)}',
-                                style: AppText.jakarta(
-                                  fontWeight: FontWeight.w800,
-                                  color: const Color(0xFF34D399),
-                                  fontSize: lerpDouble(15, 13, c),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Icon(
-                                Icons.add_circle_outline,
-                                size: 16,
-                                color: CC.inkMuted.withValues(alpha: 0.9),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                    CashBalance(
+                      state.player.cash,
+                      onTap: () => showCashTopUp(context, ref),
                     ),
                   ],
                 ),
@@ -313,10 +282,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
                                     '$franchiseLabel · pick a TCG below',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: AppText.jakarta(
-                                      color: CC.inkMuted,
-                                      fontSize: 13,
-                                    ),
+                                    style: AppText.bodySm(),
                                   ),
                                 ),
                                 _HeaderChip(
@@ -459,21 +425,11 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
                     _MarketFilter.foil => 'Foil',
                   };
                   final on = _filter == f;
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: ChoiceChip(
-                      label: Text(label),
-                      selected: on,
-                      onSelected: (_) => setState(() => _filter = f),
-                      selectedColor: CC.accent.withValues(alpha: 0.25),
-                      backgroundColor: CC.card,
-                      labelStyle: AppText.jakarta(
-                        fontWeight: FontWeight.w600,
-                        color: CC.ink,
-                        fontSize: 12,
-                      ),
-                      side: BorderSide(color: on ? CC.accent : CC.line),
-                    ),
+                  return AppChip(
+                    label: label,
+                    selected: on,
+                    onTap: () => setState(() => _filter = f),
+                    compact: true,
                   );
                 }),
                 Padding(
@@ -486,44 +442,20 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
                 ),
                 ..._MarketSort.values.map((s) {
                   final on = _sort == s;
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: ChoiceChip(
-                      label: Text(s.label),
-                      selected: on,
-                      onSelected: (_) => setState(() => _sort = s),
-                      selectedColor: CC.scan.withValues(alpha: 0.22),
-                      backgroundColor: CC.card,
-                      labelStyle: AppText.jakarta(
-                        fontWeight: FontWeight.w600,
-                        color: CC.ink,
-                        fontSize: 12,
-                      ),
-                      side: BorderSide(
-                        color: on ? CC.scan.withValues(alpha: 0.75) : CC.line,
-                      ),
-                    ),
+                  return AppChip(
+                    label: s.label,
+                    selected: on,
+                    onTap: () => setState(() => _sort = s),
+                    compact: true,
                   );
                 }),
                 ...setCodes.map((s) {
                   final on = _set == s;
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: ChoiceChip(
-                      label: Text(s),
-                      selected: on,
-                      onSelected: (_) => setState(() => _set = on ? null : s),
-                      selectedColor: CC.scan.withValues(alpha: 0.18),
-                      backgroundColor: CC.card,
-                      labelStyle: AppText.jakarta(
-                        fontWeight: FontWeight.w600,
-                        color: CC.ink,
-                        fontSize: 12,
-                      ),
-                      side: BorderSide(
-                        color: on ? CC.scan.withValues(alpha: 0.7) : CC.line,
-                      ),
-                    ),
+                  return AppChip(
+                    label: s,
+                    selected: on,
+                    onTap: () => setState(() => _set = on ? null : s),
+                    compact: true,
                   );
                 }),
               ],
@@ -560,10 +492,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
                           padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
                           child: Text(
                             'Hot right now (${groups.length})',
-                            style: AppText.jakarta(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 18,
-                            ),
+                            style: AppText.titleSm(),
                           ),
                         ),
                         SizedBox(

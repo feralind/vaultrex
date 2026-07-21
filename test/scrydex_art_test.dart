@@ -67,6 +67,26 @@ CardDef _mtg({
   );
 }
 
+CardDef _op({
+  required String setCode,
+  required String number,
+  String name = 'Test',
+}) {
+  return CardDef(
+    id: 'op_${setCode}_$number',
+    productId: 1,
+    setCode: setCode,
+    setName: 'Romance Dawn',
+    name: name,
+    rarity: Rarity.common,
+    marketPrice: 1,
+    imageUrl: 'https://tcgplayer-cdn.tcgplayer.com/product/1_in_1000x1000.jpg',
+    imageUrlSmall: 'https://tcgplayer-cdn.tcgplayer.com/product/1_200w.jpg',
+    imageKey: 'k',
+    number: number,
+  );
+}
+
 void main() {
   test('Scrydex maps Pokémon set codes to expansion art URLs', () {
     final bulba = _pkm(setCode: 'MEW', number: '001/165');
@@ -121,6 +141,66 @@ void main() {
     );
   });
 
+  test('Scrydex signature star numbers use s suffix (not overnumbered art)', () {
+    final teemoSig = _rb(
+      setCode: 'OGN',
+      number: '307*/298',
+      name: 'Teemo - Swift Scout (Signature)',
+    );
+    final teemoOver = _rb(
+      setCode: 'OGN',
+      number: '307/298',
+      name: 'Teemo - Swift Scout (Overnumbered)',
+    );
+    expect(ScrydexArt.normalizeNumber('307*/298'), '307s');
+    expect(ScrydexArt.cardIdFor(teemoSig), 'OGN-307s');
+    expect(
+      ScrydexArt.imageUrl(teemoSig),
+      'https://images.scrydex.com/riftbound/OGN-307s/large',
+    );
+    expect(ScrydexArt.cardIdFor(teemoOver), 'OGN-307');
+    expect(ScrydexArt.printedNumberLabel(teemoSig), '#307*/298');
+    expect(teemoSig.displayArtUrl, contains('OGN-307s'));
+    expect(teemoOver.displayArtUrl, contains('OGN-307/'));
+  });
+
+  test('Scrydex alternate-art letter suffixes stay intact', () {
+    final alt = _rb(
+      setCode: 'OGN',
+      number: '121a/298',
+      name: 'Teemo - Strategist (Alternate Art)',
+    );
+    expect(ScrydexArt.cardIdFor(alt), 'OGN-121a');
+    expect(
+      ScrydexArt.imageUrl(alt),
+      'https://images.scrydex.com/riftbound/OGN-121a/large',
+    );
+  });
+
+  test('Runes and oversized prefer catalog art; tokens use Scrydex when present', () {
+    final rune = _rb(setCode: 'SFD', number: 'R01', name: 'Fury Rune');
+    final oversized = _rb(
+      setCode: 'OGS',
+      number: '279/298',
+      name: 'Fortified Position (Oversized)',
+    );
+    final token = _rb(
+      setCode: 'UNL',
+      number: 'T01 // T05',
+      name: 'Baron Pit // Gold',
+    );
+    expect(ScrydexArt.preferCatalogArt(rune), isTrue);
+    expect(ScrydexArt.preferCatalogArt(oversized), isTrue);
+    expect(ScrydexArt.preferCatalogArt(token), isFalse);
+    expect(ScrydexArt.imageUrl(rune), isNull);
+    expect(ScrydexArt.cardIdFor(token), 'UNL-T05');
+    expect(
+      ScrydexArt.imageUrl(token),
+      'https://images.scrydex.com/riftbound/UNL-T05/large',
+    );
+    expect(rune.displayArtUrl, contains('tcgplayer'));
+  });
+
   test('Scrydex maps MTG art + logos + symbols', () {
     final elves = _mtg(setCode: 'FDN', number: '227', name: 'Llanowar Elves');
     expect(ScrydexArt.cardIdFor(elves), 'FDN-227');
@@ -148,5 +228,60 @@ void main() {
       ScrydexArt.imageUrl(tok),
       'https://images.scrydex.com/magicthegathering/BLB-3/large',
     );
+  });
+
+  test('Scrydex maps One Piece OP01-001 style ids', () {
+    final luffy = _op(setCode: 'OP01', number: '001', name: 'Monkey.D.Luffy');
+    expect(ScrydexArt.cardIdFor(luffy), 'OP01-001');
+    expect(
+      ScrydexArt.imageUrl(luffy),
+      'https://images.scrydex.com/onepiece/OP01-001/large',
+    );
+    expect(luffy.isOnePieceCard, isTrue);
+    expect(luffy.franchiseId, 'onepiece');
+    expect(
+      ScrydexArt.expansionLogoUrl(luffy),
+      'https://images.scrydex.com/onepiece/OP01-logo/logo',
+    );
+    expect(ScrydexArt.displaySetName(luffy), 'Romance Dawn');
+  });
+
+  test('Scrydex pads One Piece bare collector numbers', () {
+    final zoro = _op(setCode: 'OP01', number: '6', name: 'Roronoa Zoro');
+    expect(ScrydexArt.cardIdFor(zoro), 'OP01-006');
+    expect(
+      ScrydexArt.imageUrl(zoro),
+      'https://images.scrydex.com/onepiece/OP01-006/large',
+    );
+  });
+
+  test('Scrydex accepts full One Piece number OP05-119', () {
+    final gear5 = _op(setCode: 'OP05', number: 'OP05-119', name: 'Luffy');
+    expect(ScrydexArt.normalizeNumber('OP05-119'), '119');
+    expect(ScrydexArt.cardIdFor(gear5), 'OP05-119');
+    expect(
+      ScrydexArt.imageUrl(gear5),
+      'https://images.scrydex.com/onepiece/OP05-119/large',
+    );
+  });
+
+  test('One Piece displayArtUrl prefers catalog over Scrydex', () {
+    final zoro = _op(setCode: 'OP01', number: 'OP01-001', name: 'Zoro');
+    expect(zoro.displayArtUrl, zoro.imageUrl);
+    expect(zoro.displayArtUrl.contains('scrydex'), isFalse);
+    final local = CardDef(
+      id: 'op_local',
+      productId: 1,
+      setCode: 'OP01',
+      setName: 'Romance Dawn',
+      name: 'Zoro',
+      rarity: Rarity.epic,
+      marketPrice: 1,
+      imageUrl: 'assets/card_art/onepiece/op_local.webp',
+      imageUrlSmall: 'assets/card_art/onepiece/op_local.webp',
+      imageKey: 'k',
+      number: 'OP01-001',
+    );
+    expect(local.displayArtUrl, 'assets/card_art/onepiece/op_local.webp');
   });
 }

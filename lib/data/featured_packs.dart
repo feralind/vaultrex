@@ -4,6 +4,7 @@ import '../models/enums.dart';
 import '../models/models.dart';
 import 'pokemon_featured_packs.dart';
 import 'mtg_featured_packs.dart';
+import 'onepiece_featured_packs.dart';
 
 /// Featured Pack tiers (separate from Riftbound sealed).
 enum FeaturedPackTier {
@@ -121,7 +122,9 @@ class FeaturedPackDef {
         ? 'pokemon'
         : id.startsWith('mtgfp_')
             ? 'mtg'
-            : 'riftbound';
+            : id.startsWith('opfp_')
+                ? 'onepiece'
+                : 'riftbound';
     return 'assets/featured_packs/$folder/pack_${tier.name}.png';
   }
 }
@@ -379,10 +382,11 @@ List<FeaturedPackDef> get kFeaturedPacks => [
       ),
     ];
 
-/// Featured packs for the active franchise (`riftbound` | `pokemon` | `mtg`).
+/// Featured packs for the active franchise (`riftbound` | `pokemon` | `mtg` | `onepiece`).
 List<FeaturedPackDef> featuredPacksFor(String gameId) => switch (gameId) {
       'pokemon' => kPokemonFeaturedPacks,
       'mtg' => kMtgFeaturedPacks,
+      'onepiece' => kOnePieceFeaturedPacks,
       _ => kFeaturedPacks,
     };
 
@@ -394,6 +398,9 @@ FeaturedPackDef? featuredPackById(String id) {
     if (p.id == id) return p;
   }
   for (final p in kMtgFeaturedPacks) {
+    if (p.id == id) return p;
+  }
+  for (final p in kOnePieceFeaturedPacks) {
     if (p.id == id) return p;
   }
   return null;

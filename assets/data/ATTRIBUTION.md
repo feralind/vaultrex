@@ -9,8 +9,10 @@
 - **`price_history.json`**: daily closes for UI charts. TCGplayer does not
   publish a free historical series; paths are mean-reverting around the
   researched spot (±realistic secondary-market volatility), ending at spot.
-- **Pokémon + Riftbound + MTG card scan art (runtime)**: [Scrydex](https://scrydex.com)
-  image CDN (`images.scrydex.com/{pokemon|riftbound|magicthegathering}/{id}/…`),
-  expansion logos (`…/{game}/{id}-logo/logo`), and set symbols for Pokémon/MTG
+- **Pokémon + Riftbound + MTG + One Piece card scan art (runtime)**: [Scrydex](https://scrydex.com)
+  image CDN (`images.scrydex.com/{pokemon|riftbound|magicthegathering|onepiece}/{id}/…`),
+  expansion logos (`…/{game}/{id}-logo/logo`), and set symbols for Pokémon/MTG/OP
   (`…/{game}/{id}-symbol/symbol`). Metadata/pricing API requires a Scrydex key
   (not bundled).
+- **One Piece spots** (`onepiece_catalog.json`): TCGCSV category **68**, groups
+  OP01/OP02/OP05/OP09/OP13/PRB-01. Rebuilt via `tools/build_onepiece_catalog.py`.

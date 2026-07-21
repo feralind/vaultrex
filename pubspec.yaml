@@ -35,13 +35,17 @@ flutter:
     - assets/data/pokemon_featured_packs.json
     - assets/data/mtg_catalog.json
     - assets/data/mtg_sealed.json
+    - assets/data/onepiece_catalog.json
+    - assets/data/onepiece_sealed.json
     - assets/data/price_history.json
     - assets/logos/
     - assets/sealed/
     - assets/card_backs/
+    - assets/card_art/onepiece/
     - assets/featured_packs/riftbound/
     - assets/featured_packs/pokemon/
     - assets/featured_packs/mtg/
+    - assets/featured_packs/onepiece/
     - assets/onboarding/
     - assets/instapacks/
     - assets/rip/
