@@ -31,39 +31,51 @@ class BindoraNotifications {
       FlutterLocalNotificationsPlugin();
 
   bool _ready = false;
+  Future<void>? _initFuture;
 
   Future<void> init() async {
-    if (kIsWeb) return;
-    tzdata.initializeTimeZones();
+    if (kIsWeb || _ready) return;
+    return _initFuture ??= _initBody();
+  }
+
+  Future<void> _initBody() async {
     try {
-      final info = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(info.identifier));
-    } catch (e) {
-      debugPrint('Timezone setup failed: $e');
-    }
+      tzdata.initializeTimeZones();
+      try {
+        final info = await FlutterTimezone.getLocalTimezone();
+        tz.setLocalLocation(tz.getLocation(info.identifier));
+      } catch (e) {
+        debugPrint('Timezone setup failed: $e');
+      }
 
-    const android = AndroidInitializationSettings('@drawable/ic_stat_bindora');
-    const ios = DarwinInitializationSettings(
-      requestAlertPermission: false,
-      requestBadgePermission: false,
-      requestSoundPermission: false,
-    );
-    await _plugin.initialize(
-      settings: const InitializationSettings(android: android, iOS: ios),
-    );
-    _ready = true;
-
-    if (Platform.isAndroid) {
-      final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
-      await androidPlugin?.createNotificationChannel(
-        const AndroidNotificationChannel(
-          'bindora_alerts',
-          'Bindora alerts',
-          description: 'Daily rewards, grading, auctions, and rentals',
-          importance: Importance.defaultImportance,
-        ),
+      const android = AndroidInitializationSettings('@drawable/ic_stat_bindora');
+      const ios = DarwinInitializationSettings(
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
       );
+      await _plugin.initialize(
+        settings: const InitializationSettings(android: android, iOS: ios),
+      );
+
+      if (Platform.isAndroid) {
+        final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+        await androidPlugin?.createNotificationChannel(
+          const AndroidNotificationChannel(
+            'bindora_alerts',
+            'Bindora alerts',
+            description: 'Daily rewards, grading, auctions, and rentals',
+            importance: Importance.defaultImportance,
+          ),
+        );
+      }
+      _ready = true;
+    } catch (e, st) {
+      // Never let notification setup crash / hang the app shell.
+      debugPrint('BindoraNotifications.init failed: $e\n$st');
+      _ready = false;
+      _initFuture = null; // allow a later retry
     }
   }
 
@@ -110,7 +122,9 @@ class BindoraNotifications {
 
   /// Cancel + reschedule based on game state and toggles.
   Future<void> syncFromGame(GameState state) async {
-    if (!_ready || kIsWeb || !state.ready) return;
+    if (kIsWeb || !state.ready) return;
+    if (!_ready) await init();
+    if (!_ready) return;
     final prefs = await loadPrefs();
     await _plugin.cancel(id: _idDaily);
     await _plugin.cancel(id: _idAuction);

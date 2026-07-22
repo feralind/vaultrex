@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#121212</color>
+    <!-- Matches Flutter CC.bg so native → first-frame handoff stays seamless. -->
+    <color name="splash_background">#0A0C12</color>
 </resources>

@@ -22,11 +22,25 @@ import 'ui/startup_splash.dart';
 import 'widgets/home_bottom_nav.dart';
 import 'widgets/pack_theater_v2.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await BindoraSounds.init();
-  await BindoraNotifications.instance.init();
+  // Paint immediately — never gate the first frame on audio / notifications.
+  // A hang or throw there used to leave Android on a blank black LaunchTheme.
   runApp(const ProviderScope(child: BindoraApp()));
+  unawaited(_warmSecondaryServices());
+}
+
+Future<void> _warmSecondaryServices() async {
+  try {
+    await BindoraSounds.init();
+  } catch (e, st) {
+    debugPrint('BindoraSounds warm failed: $e\n$st');
+  }
+  try {
+    await BindoraNotifications.instance.init();
+  } catch (e, st) {
+    debugPrint('BindoraNotifications warm failed: $e\n$st');
+  }
 }
 
 class AppScrollBehavior extends MaterialScrollBehavior {
