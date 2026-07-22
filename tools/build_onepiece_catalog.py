@@ -280,7 +280,7 @@ def main() -> int:
 
             scry = scrydex_image(code, number)
             # Prefer Limitless webp (same Bandai SAMPLE as Scrydex, faster CDN).
-            # Runtime/catalog may later point at local desampled assets.
+            # Runtime uses Limitless / Bandai / TCGPlayer CDN (SAMPLE watermark OK).
             lim = None
             if number:
                 import re as _re

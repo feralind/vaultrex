@@ -26,6 +26,8 @@ class GameCatalog {
   bool get isRiftbound => gameId == 'riftbound';
   bool get isMtg => gameId == 'mtg';
   bool get isOnePiece => gameId == 'onepiece';
+  bool get isYugioh => gameId == 'yugioh';
+  bool get isGundam => gameId == 'gundam';
 
   static final Map<String, GameCatalog> _cache = {};
 
@@ -33,6 +35,8 @@ class GameCatalog {
     if (gameId == 'pokemon') return 'pokemon';
     if (gameId == 'mtg') return 'mtg';
     if (gameId == 'onepiece') return 'onepiece';
+    if (gameId == 'yugioh') return 'yugioh';
+    if (gameId == 'gundam') return 'gundam';
     return 'riftbound';
   }
 
@@ -44,12 +48,16 @@ class GameCatalog {
       'pokemon' => 'assets/data/pokemon_catalog.json',
       'mtg' => 'assets/data/mtg_catalog.json',
       'onepiece' => 'assets/data/onepiece_catalog.json',
+      'yugioh' => 'assets/data/yugioh_catalog.json',
+      'gundam' => 'assets/data/gundam_catalog.json',
       _ => 'assets/data/riftbound_catalog.json',
     };
     final sealedAsset = switch (id) {
       'pokemon' => 'assets/data/pokemon_sealed.json',
       'mtg' => 'assets/data/mtg_sealed.json',
       'onepiece' => 'assets/data/onepiece_sealed.json',
+      'yugioh' => 'assets/data/yugioh_sealed.json',
+      'gundam' => 'assets/data/gundam_sealed.json',
       _ => 'assets/data/sealed_products.json',
     };
     final cardRaw =
@@ -76,7 +84,12 @@ class GameCatalog {
         .where((p) =>
             p.kind == SealedKind.pack ||
             p.kind == SealedKind.box ||
-            ((id == 'pokemon' || id == 'mtg' || id == 'onepiece') &&
+            (id == 'gundam' && p.kind == SealedKind.deck) ||
+            ((id == 'pokemon' ||
+                    id == 'mtg' ||
+                    id == 'onepiece' ||
+                    id == 'yugioh' ||
+                    id == 'gundam') &&
                 p.kind == SealedKind.other &&
                 p.marketPrice > 0))
         .where((p) => p.kind == SealedKind.pack || p.kind == SealedKind.box)

@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Adaptive launcher fill — OS applies round/squircle mask (Seventy-style). -->
-    <color name="ic_launcher_background">#0A0C12</color>
+    <color name="ic_launcher_background">#121212</color>
 </resources>

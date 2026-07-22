@@ -8,6 +8,14 @@ mixin _RentalActions on _GameNotifierBase {
       state = state.copyWith(message: 'That card is already on rental.');
       return;
     }
+    final perks = BusinessPerks.forLevel(state.player.businessLevel);
+    if (state.activeRentals.length >= perks.maxActiveRentals) {
+      state = state.copyWith(
+        message:
+            'Rental slots full (${perks.maxActiveRentals}). Level up for more.',
+      );
+      return;
+    }
     final idx =
         state.collection.indexWhere((c) => c.instanceId == instanceId);
     if (idx < 0) {
@@ -34,9 +42,10 @@ mixin _RentalActions on _GameNotifierBase {
 
     final fair = fairFor(card);
     final grade = card.grade!;
-    final rate = (fair * (grade / 10) * 12 + grade * 8)
+    final rawRate = (fair * (grade / 10) * 12 + grade * 8)
         .clamp(25.0, 450.0)
         .toDouble();
+    final rate = (rawRate * perks.rentalDailyMult).clamp(10.0, 450.0);
     final now = DateTime.now().millisecondsSinceEpoch;
     final until =
         now + const Duration(days: kRentalDurationDays).inMilliseconds;

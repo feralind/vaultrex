@@ -13,6 +13,7 @@ import '../dev/dev_studio_panel.dart';
 import '../game/game_controller.dart';
 import '../models/enums.dart';
 import '../models/models.dart';
+import '../services/bindora_feel.dart';
 import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import 'brand.dart';
@@ -20,6 +21,7 @@ import 'foil_slab.dart';
 import 'game_widgets.dart';
 import 'pack_peel_scrub.dart';
 import 'pack_theater_v2.dart' show cardBackAssetForFranchise, resolvePackTheaterImageUrl;
+import '../ui/engagement/engagement_hub.dart' show showOpenAnotherSheet;
 
 Future<void> showPackTheater(
   BuildContext context,
@@ -111,6 +113,21 @@ Future<void> showPackTheater(
       );
     },
   );
+  if (context.mounted) {
+    var hadChase = false;
+    for (final o in pulls) {
+      final def = notifier.cardById(o.cardId);
+      if (isChaseHit(
+        fair: notifier.fairFor(o),
+        foil: o.foil,
+        rarePlus: def?.rarity.isRarePlus ?? false,
+      )) {
+        hadChase = true;
+        break;
+      }
+    }
+    await showOpenAnotherSheet(context, ref, hadChase: hadChase);
+  }
 }
 
 /// Frame map (reference Shorts samples):
@@ -322,13 +339,23 @@ class _PackRipTheaterState extends ConsumerState<PackRipTheater>
     final def = notifier.cardById(owned.cardId);
     final fair = notifier.fairFor(owned);
     final good = _isGood(owned, def, fair);
-    if (good) {
-      HapticFeedback.heavyImpact();
-      SystemSound.play(SystemSoundType.click);
+    final chase = isChaseHit(
+      fair: fair,
+      foil: owned.foil,
+      rarePlus: def?.rarity.isRarePlus ?? false,
+    );
+    if (good || chase) {
+      final tier = hapticTierFor(
+        isChase: chase,
+        foil: owned.foil,
+        rarePlus: def?.rarity.isRarePlus ?? false,
+      );
+      unawaited(BindoraHaptics.forTier(tier));
+      unawaited(BindoraSounds.revealForTier(tier));
       setState(() => _glow = true);
       _glowPulse.forward(from: 0);
     } else {
-      HapticFeedback.selectionClick();
+      BindoraHaptics.peelTick();
     }
     setState(() {
       _flipped = true;
@@ -624,6 +651,7 @@ class _CardBack extends StatelessWidget {
   static const pokemonPath = 'assets/card_backs/pokemon_back.png';
   static const mtgPath = 'assets/card_backs/mtg_back.png';
   static const onepiecePath = 'assets/card_backs/onepiece_back.png';
+  static const yugiohPath = 'assets/card_backs/yugioh_back.png';
 
   final double width;
   final double height;
@@ -634,10 +662,12 @@ class _CardBack extends StatelessWidget {
     final isPokemon = franchise == 'pokemon';
     final isMtg = franchise == 'mtg';
     final isOnePiece = franchise == 'onepiece';
+    final isYugioh = franchise == 'yugioh';
     final rawPath = switch (franchise) {
       'pokemon' => pokemonPath,
       'mtg' => mtgPath,
       'onepiece' => onepiecePath,
+      'yugioh' => yugiohPath,
       _ => riftboundPath,
     };
 
@@ -673,6 +703,7 @@ class _CardBack extends StatelessWidget {
                         isPokemon: isPokemon,
                         isMtg: isMtg,
                         isOnePiece: isOnePiece,
+                        isYugioh: isYugioh,
                         width: width,
                       ),
                     )
@@ -685,6 +716,7 @@ class _CardBack extends StatelessWidget {
                         isPokemon: isPokemon,
                         isMtg: isMtg,
                         isOnePiece: isOnePiece,
+                        isYugioh: isYugioh,
                         width: width,
                       ),
                     ),
@@ -699,6 +731,7 @@ class _CardBack extends StatelessWidget {
     required bool isPokemon,
     required bool isMtg,
     required bool isOnePiece,
+    required bool isYugioh,
     required double width,
   }) {
     return isPokemon
@@ -721,14 +754,18 @@ class _CardBack extends StatelessWidget {
                 ? const Color(0xFF1A0A05)
                 : isOnePiece
                     ? const Color(0xFF0A1628)
-                    : const Color(0xFF0C1428),
+                    : isYugioh
+                        ? const Color(0xFF1A1028)
+                        : const Color(0xFF0C1428),
             child: Center(
               child: Image.asset(
                 isMtg
                     ? 'assets/logos/mtg.png'
                     : isOnePiece
                         ? 'assets/logos/onepiece.png'
-                        : 'assets/logos/riftbound.png',
+                        : isYugioh
+                            ? 'assets/logos/yugioh.png'
+                            : 'assets/logos/riftbound.png',
                 width: width * 0.55,
                 height: width * 0.28,
                 fit: BoxFit.contain,

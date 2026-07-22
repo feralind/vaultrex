@@ -9,8 +9,10 @@ import '../theme/app_text.dart';
 import '../theme/app_theme.dart';
 import '../widgets/card_detail_sheet.dart';
 import '../widgets/game_widgets.dart';
+import '../widgets/live_ambient.dart';
 import '../widgets/portfolio_value_chart.dart';
 import '../widgets/ui_kit.dart';
+import '../widgets/cash_top_up_sheet.dart';
 import 'binder_room_screen.dart';
 import 'create_binder_sheet.dart';
 import 'engagement/engagement_hub.dart';
@@ -105,68 +107,54 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen>
         final unique = scopedCards.map((c) => c.owned.cardId).toSet().length;
         final value = scopedCards.fold<double>(0, (s, e) => s + e.fair);
 
-        return Column(
+        return LiveAmbientBackdrop(
+          intensity: 0.75,
+          child: Column(
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: Row(
                 children: [
-                  Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: CC.scan, width: 2),
-                      color: CC.cardSoft,
-                    ),
-                    child: const Icon(Icons.person, color: CC.inkMuted),
-                  ),
-                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Collector',
-                          style: AppText.jakarta(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 18,
+                          'Collection',
+                          style: AppText.display().copyWith(
+                            fontSize: 28,
+                            letterSpacing: -0.6,
                           ),
                         ),
                         Text(
                           _franchise == 'ALL'
-                              ? 'All franchises'
-                              : '${franchiseLabel(_franchise)} collection',
-                          style: AppText.jakarta(
-                            color: CC.inkMuted,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
+                              ? 'All franchises · $unique cards'
+                              : '${franchiseLabel(_franchise)} · $unique cards',
+                          style: AppText.bodySm(),
                         ),
                       ],
                     ),
                   ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        '$unique cards',
-                        style: AppText.jakarta(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                        ),
-                      ),
-                      Text(
-                        '\$${value.toStringAsFixed(2)} value',
-                        style: AppText.jakarta(
-                          color: CC.inkMuted,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
+                  BalanceBar(
+                    candy: state.player.candy,
+                    cash: state.player.cash,
+                    onTopUp: () => showCashTopUp(context, ref),
                   ),
                 ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  '\$${value.toStringAsFixed(2)} binder value',
+                  style: AppText.jakarta(
+                    color: CC.inkMuted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 8),
@@ -248,6 +236,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen>
               ),
             ),
           ],
+        ),
         );
       },
     );
@@ -396,6 +385,8 @@ class _CardsTab extends ConsumerWidget {
                 'pokemon' => 'PK',
                 'mtg' => 'MTG',
                 'onepiece' => 'OP',
+                'yugioh' => 'YG',
+                'gundam' => 'GD',
                 _ => 'RB',
               }}'
             : s.setCode;
@@ -541,7 +532,10 @@ class _CardsTab extends ConsumerWidget {
                                         : franchiseLabel(entry.franchiseId) ==
                                                 'One Piece'
                                             ? 'OP'
-                                            : 'RB',
+                                            : franchiseLabel(entry.franchiseId) ==
+                                                    'Yu-Gi-Oh!'
+                                                ? 'YG'
+                                                : 'RB',
                                 style: AppText.jakarta(
                                   fontSize: 9,
                                   fontWeight: FontWeight.w800,

@@ -2,6 +2,7 @@ import 'dart:math';
 
 import '../models/enums.dart';
 import '../models/models.dart';
+import 'engagement_defs.dart';
 
 class Pricing {
   static double trendMult(List<MarketEvent> events, String setCode) {
@@ -119,6 +120,6 @@ class Pricing {
 
   static double platformFeeRate(PlayerStats player) {
     if (player.ownedUpgrades.contains('fee_cut')) return 0.10;
-    return 0.14;
+    return BusinessPerks.forLevel(player.businessLevel).listingFeeRate;
   }
 }

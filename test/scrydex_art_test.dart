@@ -284,4 +284,25 @@ void main() {
     );
     expect(local.displayArtUrl, 'assets/card_art/onepiece/op_local.webp');
   });
+
+  test('Yu-Gi-Oh! catalog art is preferred and franchise tags resolve', () {
+    final dm = CardDef(
+      id: 'ygo_123',
+      productId: 123,
+      setCode: 'RA05',
+      setName: 'Rarity Collection 5',
+      name: 'Dark Magician',
+      rarity: Rarity.epic,
+      marketPrice: 10,
+      imageUrl: 'assets/card_art/yugioh/pc_46986414.webp',
+      imageUrlSmall: 'assets/card_art/yugioh/pc_46986414.webp',
+      imageKey: 'ygo_123',
+      number: 'RA05-EN001',
+    );
+    expect(dm.isYugiohCard, isTrue);
+    expect(dm.franchiseId, 'yugioh');
+    expect(dm.franchiseDisplayName, 'Yu-Gi-Oh!');
+    expect(dm.displayArtUrl, 'assets/card_art/yugioh/pc_46986414.webp');
+    expect(dm.thumbArtUrl, 'assets/card_art/yugioh/pc_46986414.webp');
+  });
 }

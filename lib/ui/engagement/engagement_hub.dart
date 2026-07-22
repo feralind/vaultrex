@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,10 +15,13 @@ import '../../services/bindora_feel.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_text.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/game_widgets.dart';
 import '../../widgets/pack_theater_v2.dart';
 import '../../widgets/ui_kit.dart';
 import '../rentals_screen.dart';
 import '../season_quests_screen.dart';
+import '../featured_pack_detail.dart';
+import '../pack_detail.dart';
 
 // ─── Shared tiles ───────────────────────────────────────────────────────────
 
@@ -1056,6 +1061,34 @@ class BusinessProgressScreen extends ConsumerWidget {
             style: AppText.jakarta(color: CC.inkMuted),
           ),
           const SizedBox(height: 16),
+          Text(
+            'Shop unlocks',
+            style: AppText.jakarta(fontWeight: FontWeight.w800, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          ...BusinessPerks.unlockChecklist(player.businessLevel).map(
+            (u) => ListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              leading: Icon(
+                u.unlocked ? Icons.lock_open : Icons.lock_outline,
+                color: u.unlocked ? CC.accent : CC.inkMuted,
+                size: 20,
+              ),
+              title: Text(
+                u.label,
+                style: AppText.jakarta(
+                  color: u.unlocked ? CC.ink : CC.inkMuted,
+                  fontSize: 13,
+                ),
+              ),
+              trailing: Text(
+                'Lv ${u.minLevel}',
+                style: AppText.jakarta(color: CC.inkMuted, fontSize: 12),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           ...businessTitles.map(
             (t) => ListTile(
               contentPadding: EdgeInsets.zero,
@@ -1136,9 +1169,13 @@ class ModesHubScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final best = ref.watch(gameProvider.select((s) => s.engagement.survivalBestRound));
+    final eng = ref.watch(gameProvider.select((s) => s.engagement));
+    final candy = ref.watch(gameProvider.select((s) => s.player.candy));
     final notifier = ref.read(gameProvider.notifier);
     final sets = notifier.catalog.bySet.keys.toList()..sort();
+    final now = DateTime.now();
+    final week =
+        now.year * 100 + (now.difference(DateTime(now.year)).inDays ~/ 7);
 
     return Scaffold(
       backgroundColor: CC.bg,
@@ -1149,8 +1186,24 @@ class ModesHubScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Sealed draft', style: AppText.jakarta(fontWeight: FontWeight.w800, fontSize: 16)),
-          Text('2400 candy · 3 packs from one set', style: AppText.jakarta(color: CC.inkMuted, fontSize: 12)),
+          Text(
+            'Bounded sessions — spend candy, chase a score.',
+            style: AppText.jakarta(color: CC.inkMuted, fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Candy: $candy',
+            style: AppText.jakarta(fontWeight: FontWeight.w700, color: CC.candy),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Sealed draft',
+            style: AppText.jakarta(fontWeight: FontWeight.w800, fontSize: 16),
+          ),
+          Text(
+            '2400 candy · 3 packs · best pool EV ${eng.draftBestScore}',
+            style: AppText.jakarta(color: CC.inkMuted, fontSize: 12),
+          ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -1158,41 +1211,103 @@ class ModesHubScreen extends ConsumerWidget {
             children: sets.take(12).map((code) {
               return ActionChip(
                 label: Text(code),
-                onPressed: () async {
-                  final pulls = await notifier.runSealedDraft(setCode: code);
-                  if (pulls != null && context.mounted) {
-                    await showPackTheaterV2(context, ref, alreadyOpened: true);
-                  }
-                },
+                onPressed: candy < 2400
+                    ? null
+                    : () async {
+                        final pulls =
+                            await notifier.runSealedDraft(setCode: code);
+                        if (pulls != null && context.mounted) {
+                          await showPackTheaterV2(
+                            context,
+                            ref,
+                            alreadyOpened: true,
+                          );
+                        }
+                      },
               );
             }).toList(),
           ),
           const SizedBox(height: 24),
-          FilledButton(
-            onPressed: () async {
-              final pulls = await notifier.runWeeklyChallenge();
-              if (pulls != null && context.mounted) {
-                await showPackTheaterV2(context, ref, alreadyOpened: true);
-              }
-            },
-            child: const Text('Weekly seeded challenge (900 candy)'),
+          Text(
+            'Weekly seed #$week',
+            style: AppText.jakarta(fontWeight: FontWeight.w800, fontSize: 16),
           ),
-          const SizedBox(height: 16),
-          Text('Survival best: round $best', style: AppText.jakarta(color: CC.inkMuted)),
+          Text(
+            '900 candy · shared seed · best EV ${eng.weeklyBestScore}',
+            style: AppText.jakarta(color: CC.inkMuted, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          FilledButton(
+            onPressed: candy < 900
+                ? null
+                : () async {
+                    final pulls = await notifier.runWeeklyChallenge();
+                    if (pulls != null && context.mounted) {
+                      await showPackTheaterV2(
+                        context,
+                        ref,
+                        alreadyOpened: true,
+                      );
+                    }
+                  },
+            child: const Text('Play weekly challenge'),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Survival',
+            style: AppText.jakarta(fontWeight: FontWeight.w800, fontSize: 16),
+          ),
+          Text(
+            'Rising cost each round · best round ${eng.survivalBestRound}',
+            style: AppText.jakarta(color: CC.inkMuted, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
           FilledButton.tonal(
             onPressed: () async {
               var round = 1;
-              while (await notifier.survivalRound(round: round)) {
+              while (true) {
+                final ok = await notifier.survivalRound(round: round);
+                if (!ok || !context.mounted) break;
+                final cont = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    backgroundColor: CC.bgElevated,
+                    title: Text(
+                      'Round $round cleared',
+                      style: AppText.jakarta(fontWeight: FontWeight.w800),
+                    ),
+                    content: Text(
+                      'Continue? Next round costs more candy.',
+                      style: AppText.jakarta(color: CC.inkMuted),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cash out'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('Continue'),
+                      ),
+                    ],
+                  ),
+                );
+                if (cont != true) break;
                 round++;
                 if (round > 40) break;
               }
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Survival ended at round ${round - 1}')),
+                  SnackBar(
+                    content: Text(
+                      'Survival ended · best ${ref.read(gameProvider).engagement.survivalBestRound}',
+                    ),
+                    behavior: SnackBarBehavior.floating,
+                  ),
                 );
               }
             },
-            child: const Text('Run survival session'),
+            child: const Text('Start survival'),
           ),
         ],
       ),
@@ -1218,6 +1333,11 @@ class SetCompletionGridScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(gameProvider.notifier);
     final async = ref.watch(unifiedCollectionProvider);
+    final String gameId = franchiseId ??
+        ref.watch(gameProvider.select((s) => s.franchiseId));
+    final rotation = ref.watch(
+      gameProvider.select((s) => s.engagement.featuredRotationSeed),
+    );
 
     List<CardDef> all;
     Set<String> ownedIds;
@@ -1250,6 +1370,47 @@ class SetCompletionGridScreen extends ConsumerWidget {
             ? '${all.first.setName} · ${franchiseLabel(franchiseId!)}'
             : all.first.setName;
 
+    final missing = all.where((c) => !ownedIds.contains(c.id)).toList();
+    final pullPack = featuredPackForSet(
+      gameId: gameId,
+      setCode: setCode,
+      catalogCards: notifier.catalog.cards,
+      rotationSeed: rotation,
+    );
+
+    Future<void> pullForHole([CardDef? hole]) async {
+      if (pullPack != null) {
+        await showFeaturedPackDetail(context, ref, pullPack);
+        return;
+      }
+      // Fallback: sealed listing matching set.
+      final state = ref.read(gameProvider);
+      for (final listing in state.sealedListings) {
+        final product = notifier.sealedById(listing.sealedProductId);
+        if (product == null || product.setCode != setCode) continue;
+        if (!context.mounted) return;
+        await showPackDetail(
+          context,
+          ref,
+          product: product,
+          listing: listing,
+        );
+        return;
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              hole == null
+                  ? 'No pack currently covers $setCode — check Instapacks.'
+                  : 'No pack covers #${hole.number ?? hole.name} yet.',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+
     return Scaffold(
       backgroundColor: CC.bg,
       appBar: AppBar(
@@ -1265,7 +1426,8 @@ class SetCompletionGridScreen extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Text(
-                '${ownedIds.length} / ${all.length} collected',
+                '${ownedIds.length} / ${all.length} collected'
+                '${missing.isEmpty ? ' · complete!' : ' · ${missing.length} holes'}',
                 style: AppText.jakarta(color: CC.inkMuted, fontSize: 13),
               ),
             ),
@@ -1282,37 +1444,129 @@ class SetCompletionGridScreen extends ConsumerWidget {
               itemBuilder: (context, i) {
                 final def = all[i];
                 final have = ownedIds.contains(def.id);
-                return Container(
-                  decoration: BoxDecoration(
-                    color: CC.card,
+                final art = def.displayArtUrl.isNotEmpty
+                    ? def.displayArtUrl
+                    : def.imageUrl;
+                if (have) {
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: CC.card,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: CC.accent.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(7),
+                      child: CardArt(
+                        url: art,
+                        width: double.infinity,
+                        height: double.infinity,
+                        radius: 0,
+                        autoPlay: false,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  );
+                }
+                return Material(
+                  color: CC.card,
+                  borderRadius: BorderRadius.circular(8),
+                  child: InkWell(
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: have ? CC.accent.withValues(alpha: 0.4) : CC.line,
+                    onTap: () => pullForHole(def),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: CC.inkMuted.withValues(alpha: 0.4),
+                          width: 1.2,
+                        ),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(7),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            if (art.isNotEmpty)
+                              ColorFiltered(
+                                colorFilter: const ColorFilter.matrix(<double>[
+                                  0.2, 0.2, 0.2, 0, 0,
+                                  0.2, 0.2, 0.2, 0, 0,
+                                  0.2, 0.2, 0.2, 0, 0,
+                                  0, 0, 0, 0.28, 0,
+                                ]),
+                                child: CardArt(
+                                  url: art,
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  radius: 0,
+                                  autoPlay: false,
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            else
+                              ColoredBox(
+                                color: CC.bgElevated,
+                                child: Icon(
+                                  Icons.style_outlined,
+                                  size: 22,
+                                  color: CC.inkMuted.withValues(alpha: 0.4),
+                                ),
+                              ),
+                            Center(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.55),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  def.number ?? '?',
+                                  style: AppText.jakarta(
+                                    color: Colors.white70,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                  child: have
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(7),
-                          child: CachedNetworkImage(
-                            imageUrl: def.imageUrlSmall.isNotEmpty
-                                ? def.imageUrlSmall
-                                : def.imageUrl,
-                            fit: BoxFit.cover,
-                          ),
-                        )
-                      : Center(
-                          child: Text(
-                            def.number ?? '?',
-                            style: AppText.jakarta(
-                              color: CC.inkMuted,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ),
                 );
               },
             ),
           ),
+          if (missing.isNotEmpty)
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: FilledButton(
+                    onPressed: () => pullForHole(),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: CC.candy,
+                      foregroundColor: Colors.black,
+                    ),
+                    child: Text(
+                      pullPack != null
+                          ? 'Pull for this hole · ${pullPack.name}'
+                          : 'Find a pack for this set',
+                      style: AppText.jakarta(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -1389,88 +1643,212 @@ class _GyroFoilCardState extends State<GyroFoilCard> {
   }
 }
 
-/// Post-rip “Open another” sheet.
+/// Post-rip habit loop — inventory first, else heated pack, else cheapest.
 Future<void> showOpenAnotherSheet(
   BuildContext context,
-  WidgetRef ref,
-) async {
+  WidgetRef ref, {
+  bool hadChase = false,
+}) async {
   final state = ref.read(gameProvider);
   final notifier = ref.read(gameProvider.notifier);
   final hasInv = state.unopened.isNotEmpty;
   final candy = state.player.candy;
   final cash = state.player.cash;
   final packs = featuredPacksFor(state.franchiseId);
+
   FeaturedPackDef? cheap;
+  FeaturedPackDef? heated;
+  var bestHeat = 0;
   for (final p in packs) {
+    final affordable = candy >= p.candyPrice || cash >= p.priceUsd;
+    if (!affordable) continue;
     if (cheap == null || p.candyPrice < cheap.candyPrice) cheap = p;
+    final dry = state.engagement.featuredPity[p.id] ?? 0;
+    final heat = pityHeatPercent(dry);
+    if (heat >= 40 && heat >= bestHeat) {
+      bestHeat = heat;
+      heated = p;
+    }
+  }
+  final suggest = heated ?? cheap;
+  if (!hasInv && suggest == null) {
+    // Nothing actionable — skip sheet so rip doesn't end on a dead prompt.
+    return;
   }
 
   if (!context.mounted) return;
+  if (hadChase) {
+    unawaited(BindoraHaptics.forTier(HapticTier.chase));
+    unawaited(BindoraSounds.chaseStinger());
+  } else {
+    await BindoraHaptics.success();
+  }
+  if (!context.mounted) return;
+
+  final heatLine = heated != null
+      ? 'Chase heat $bestHeat% on ${heated.name} — don\'t let it cool.'
+      : (hadChase
+          ? 'You hit heat. One more pack while the session is live.'
+          : 'One more rip — keep the session alive.');
+
   await showModalBottomSheet<void>(
     context: context,
-    backgroundColor: CC.card,
+    backgroundColor: CC.bgElevated,
+    isScrollControlled: true,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(AppSpace.rCard)),
     ),
     builder: (ctx) {
       return SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpace.s16,
+            AppSpace.s12,
+            AppSpace.s16,
+            AppSpace.s16,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'Open another?',
-                style: AppText.jakarta(fontSize: 20, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Keep the streak going.',
-                style: AppText.jakarta(color: CC.inkMuted, fontSize: 13),
-              ),
-              const SizedBox(height: 16),
-              if (hasInv)
-                FilledButton(
-                  onPressed: () async {
-                    Navigator.pop(ctx);
-                    if (!context.mounted) return;
-                    await showPackTheaterV2(context, ref);
-                  },
-                  child: Text('Open inventory pack (${state.unopened.length} left)'),
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: CC.line,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
                 ),
-              if (cheap != null) ...[
-                const SizedBox(height: 8),
-                FilledButton.tonal(
-                  onPressed: (candy >= cheap.candyPrice || cash >= cheap.priceUsd)
-                      ? () async {
-                          Navigator.pop(ctx);
-                          final pay = candy >= cheap!.candyPrice
-                              ? PaymentMethod.candy
-                              : PaymentMethod.cash;
-                          final ok = await notifier.buyFeaturedPack(
-                            cheap.id,
-                            payWith: pay,
-                          );
-                          if (ok && context.mounted) {
-                            await showPackTheaterV2(
-                              context,
-                              ref,
-                              alreadyOpened: true,
-                              packImageUrl: cheap.assetPath,
-                            );
-                          }
-                        }
-                      : null,
-                  child: Text(
-                    'Buy ${cheap.name} · ${cheap.candyPrice} candy / \$${cheap.priceUsd.toStringAsFixed(2)}',
+              ),
+              const SizedBox(height: AppSpace.s16),
+              ScreenTitle(
+                heated != null
+                    ? 'Heat is cooking'
+                    : (hadChase ? 'Chase heat — rip again?' : 'Open another?'),
+                subtitle: heatLine,
+              ),
+              const SizedBox(height: AppSpace.s8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: BalanceBar(candy: candy, cash: cash),
+              ),
+              const SizedBox(height: AppSpace.s16),
+              if (hasInv)
+                SizedBox(
+                  height: 52,
+                  child: FilledButton(
+                    onPressed: () async {
+                      await BindoraHaptics.claim();
+                      if (!ctx.mounted) return;
+                      Navigator.pop(ctx);
+                      if (!context.mounted) return;
+                      await showPackTheaterV2(context, ref);
+                    },
+                    style: hadChase
+                        ? FilledButton.styleFrom(
+                            backgroundColor: CC.candy,
+                            foregroundColor: Colors.black,
+                          )
+                        : null,
+                    child: Text(
+                      hadChase
+                          ? 'Rip again · ${state.unopened.length} left'
+                          : 'Open pack · ${state.unopened.length} left',
+                      style: AppText.jakarta(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ),
+              if (suggest != null) ...[
+                if (hasInv) const SizedBox(height: AppSpace.s8),
+                Material(
+                  color: CC.card,
+                  borderRadius: BorderRadius.circular(AppSpace.rCard),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(AppSpace.rCard),
+                    onTap: () async {
+                      await BindoraHaptics.claim();
+                      if (!ctx.mounted) return;
+                      Navigator.pop(ctx);
+                      final pay = candy >= suggest.candyPrice
+                          ? PaymentMethod.candy
+                          : PaymentMethod.cash;
+                      final ok = await notifier.buyFeaturedPack(
+                        suggest.id,
+                        payWith: pay,
+                      );
+                      if (ok && context.mounted) {
+                        await showPackTheaterV2(
+                          context,
+                          ref,
+                          alreadyOpened: true,
+                          packImageUrl: suggest.assetPath,
+                        );
+                      }
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpace.s12),
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Image.asset(
+                              suggest.assetPath,
+                              width: 52,
+                              height: 72,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, _, _) => Container(
+                                width: 52,
+                                height: 72,
+                                color: CC.cardSoft,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: AppSpace.s12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  heated != null
+                                      ? '${suggest.name} · $bestHeat% heat'
+                                      : suggest.name,
+                                  style: AppText.titleSm(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${suggest.candyPrice} candy · \$${suggest.priceUsd.toStringAsFixed(2)}',
+                                  style: AppText.bodySm(
+                                    color: heated != null
+                                        ? CC.candy
+                                        : CC.inkMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            color: heated != null ? CC.candy : CC.accent,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ],
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpace.s8),
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('Done for now'),
+                child: Text(
+                  'Done for now',
+                  style: AppText.bodySm(color: CC.inkMuted),
+                ),
               ),
             ],
           ),

@@ -43,11 +43,10 @@ class CardDef {
 
   /// Full-res art for grids, slabs, and detail.
   ///
-  /// One Piece: prefer catalog URL first. Official digital renders (Scrydex /
-  /// Bandai / Limitless / TCGPlayer) all carry Bandai's SAMPLE watermark;
-  /// catalog may point at Limitless webp or locally desampled assets.
+  /// One Piece / Yu-Gi-Oh!: catalog URL first (bundled assets / Limitless /
+  /// YGOPRODeck). Pokémon / MTG / Riftbound prefer Scrydex when mapped.
   String get displayArtUrl {
-    if (isOnePieceCard) {
+    if (isOnePieceCard || isYugiohCard || isGundamCard) {
       if (imageUrl.isNotEmpty) return imageUrl;
       final catalog = ScrydexArt.catalogArtUrl(this);
       if (catalog != null) return catalog;
@@ -65,7 +64,7 @@ class CardDef {
 
   /// Tiny thumbs only (list rows ~64px). Prefer Scrydex medium, else small.
   String get thumbArtUrl {
-    if (isOnePieceCard) {
+    if (isOnePieceCard || isYugiohCard || isGundamCard) {
       if (imageUrlSmall.isNotEmpty) return imageUrlSmall;
       if (imageUrl.isNotEmpty) return imageUrl;
       final catalog = ScrydexArt.catalogArtUrl(this);
@@ -99,13 +98,21 @@ class CardDef {
 
   bool get isOnePieceCard => id.startsWith('op_');
 
+  bool get isYugiohCard => id.startsWith('ygo_');
+
+  bool get isGundamCard => id.startsWith('gd_');
+
   String get franchiseId => isPokemonCard
       ? 'pokemon'
       : isMtgCard
           ? 'mtg'
           : isOnePieceCard
               ? 'onepiece'
-              : 'riftbound';
+              : isYugiohCard
+                  ? 'yugioh'
+                  : isGundamCard
+                      ? 'gundam'
+                      : 'riftbound';
 
   /// Uppercase chip label for detail / collection tags.
   String get franchiseTag => isPokemonCard
@@ -114,7 +121,11 @@ class CardDef {
           ? 'MAGIC'
           : isOnePieceCard
               ? 'ONE PIECE'
-              : 'RIFTBOUND';
+              : isYugiohCard
+                  ? 'YU-GI-OH!'
+                  : isGundamCard
+                      ? 'GUNDAM'
+                      : 'RIFTBOUND';
 
   String get franchiseDisplayName => isPokemonCard
       ? 'Pokémon'
@@ -122,7 +133,11 @@ class CardDef {
           ? 'Magic'
           : isOnePieceCard
               ? 'One Piece'
-              : 'Riftbound';
+              : isYugiohCard
+                  ? 'Yu-Gi-Oh!'
+                  : isGundamCard
+                      ? 'Gundam'
+                      : 'Riftbound';
 
   /// Approximate print year for slab / detail chrome.
   String get setYear => switch (setCode) {
@@ -134,7 +149,11 @@ class CardDef {
         'OP01' || 'OP02' => '2022',
         'OP05' => '2023',
         'OP09' || 'OP13' || 'PRB01' => '2024',
-        _ => isPokemonCard || isMtgCard || isOnePieceCard ? '2024' : '2025',
+        'LOB' => '2002',
+        'RA04' || 'RA05' || 'DOOD' || 'PHRE' || 'BPRO' || 'BLZD' => '2025',
+        _ => isPokemonCard || isMtgCard || isOnePieceCard || isYugiohCard
+            ? '2024'
+            : '2025',
       };
 
   /// PSA slab set line, e.g. "2023 SV: SCARLET & VIOLET 151".
@@ -893,8 +912,8 @@ class UpgradeDef {
 
 class PlayerStats {
   const PlayerStats({
-    this.cash = 350,
-    this.candy = 25000,
+    this.cash = 300,
+    this.candy = 0,
     this.xp = 0,
     this.businessLevel = 1,
     this.packsOpened = 0,

@@ -63,6 +63,33 @@ class RiftboundPackOpener {
       if (don != null) cards.add(don);
       return cards.take(7).toList();
     }
+    if (catalog.isYugioh) {
+      // Modern TCG booster ~9 cards. Some reprint sets (RA0x) are rare+ heavy
+      // with few/no commons — fall back to whatever the set actually stocks.
+      final cards = <OwnedCard>[];
+      cards.addAll(_drawManyOrAny(setCode, Rarity.common, 5, foil: false));
+      cards.addAll(_drawManyOrAny(setCode, Rarity.uncommon, 3, foil: false));
+      cards.addAll(_drawRarePlus(setCode, 1, forceFoil: false));
+      while (cards.length < 9) {
+        final filler = _pickAny(setCode);
+        if (filler == null) break;
+        cards.add(_instantiate(filler, foil: false));
+      }
+      return cards.take(9).toList();
+    }
+    if (catalog.isGundam) {
+      // Gundam Card Game booster ≈ 7 cards (6 + resource/token-ish filler).
+      final cards = <OwnedCard>[];
+      cards.addAll(_drawManyOrAny(setCode, Rarity.common, 3, foil: false));
+      cards.addAll(_drawManyOrAny(setCode, Rarity.uncommon, 2, foil: false));
+      cards.addAll(_drawRarePlus(setCode, 1, forceFoil: false));
+      while (cards.length < 7) {
+        final filler = _pickAny(setCode);
+        if (filler == null) break;
+        cards.add(_instantiate(filler, foil: false));
+      }
+      return cards.take(7).toList();
+    }
     final cards = <OwnedCard>[];
     cards.addAll(_drawMany(setCode, Rarity.common, 7, foil: false));
     cards.addAll(_drawMany(setCode, Rarity.uncommon, 3, foil: false));
@@ -72,18 +99,21 @@ class RiftboundPackOpener {
     return cards;
   }
 
-  /// 36 packs for Pokémon boxes; 30 for MTG; 24 for Riftbound / One Piece.
-  List<OwnedCard> openBox(String setCode) {
-    final packs = catalog.isPokemon
-        ? 36
-        : catalog.isMtg
-            ? 30
-            : 24;
+  /// Open a sealed box as N packs of [setCode].
+  /// Prefer [packCount] from the sealed product's `packsPerBox`; otherwise
+  /// use franchise defaults (36 Pokémon / 30 MTG / 24 other).
+  List<OwnedCard> openBox(String setCode, {int? packCount}) {
+    final packs = packCount ??
+        (catalog.isPokemon
+            ? 36
+            : catalog.isMtg
+                ? 30
+                : 24);
     final all = <OwnedCard>[];
     for (var i = 0; i < packs; i++) {
       all.addAll(openPack(setCode));
     }
-    _boxCorrection(all, setCode);
+    // No forced chase injection — box odds = sum of pack odds.
     return all;
   }
 
@@ -115,13 +145,37 @@ class RiftboundPackOpener {
     return out;
   }
 
+  /// Like [_drawMany], but fills shortfalls from any card in the set.
+  List<OwnedCard> _drawManyOrAny(
+    String setCode,
+    Rarity rarity,
+    int count, {
+    required bool foil,
+  }) {
+    final out = _drawMany(setCode, rarity, count, foil: foil);
+    while (out.length < count) {
+      final def = _pickAny(setCode);
+      if (def == null) break;
+      out.add(_instantiate(def, foil: foil));
+    }
+    return out;
+  }
+
+  CardDef? _pickAny(String setCode) {
+    final all = catalog.bySet[setCode];
+    if (all == null || all.isEmpty) return null;
+    return all[_rng.nextInt(all.length)];
+  }
+
   List<OwnedCard> _drawRarePlus(String setCode, int count, {required bool forceFoil}) {
     final out = <OwnedCard>[];
     for (var i = 0; i < count; i++) {
       final rarity = _rollRarePlus(setCode);
       final def = _pick(setCode, rarity) ??
           _pick(setCode, Rarity.rare) ??
-          _pick(setCode, Rarity.epic);
+          _pick(setCode, Rarity.epic) ??
+          _pick(setCode, Rarity.showcase) ??
+          _pickAny(setCode);
       if (def == null) continue;
       out.add(_instantiate(def, foil: forceFoil));
     }
@@ -183,23 +237,45 @@ class RiftboundPackOpener {
   Rarity _rollRarePlus(String setCode) {
     final roll = _rng.nextDouble();
     if (catalog.isPokemon) {
-      if (roll < 0.78) return Rarity.rare;
-      if (roll < 0.96) return Rarity.epic;
+      // Modern SV booster rare slot ≈ mostly Rare; IR/SIR (Epic) ~1/6–1/8 packs.
+      if (roll < 0.84) return Rarity.rare;
+      if (roll < 0.97) return Rarity.epic;
       return Rarity.promo;
     }
     if (catalog.isOnePiece) {
-      // C/UC/R/SR/SEC curve: mostly Rare, SR≈Epic, SEC≈Showcase, Leader≈Promo.
-      if (roll < 0.70) return Rarity.rare;
-      if (roll < 0.90) return Rarity.epic;
-      if (roll < 0.97) return Rarity.showcase;
+      // OPTCG: R common in rare slot; SR less often; SEC / Leader rare.
+      if (roll < 0.74) return Rarity.rare;
+      if (roll < 0.92) return Rarity.epic;
+      if (roll < 0.98) return Rarity.showcase;
       return Rarity.promo;
     }
-    // Approximate community rates; Ultimate mainly Unleashed+.
+    if (catalog.isYugioh) {
+      // Modern TCG rare slot: mostly Rare/Super, Ultra less, Starlight/Secret rare.
+      if (roll < 0.72) return Rarity.rare;
+      if (roll < 0.90) return Rarity.epic;
+      if (roll < 0.985) return Rarity.showcase;
+      return Rarity.promo;
+    }
+    if (catalog.isGundam) {
+      // GCG: R common in rare slot; LR less; LR+/SCR rarer.
+      if (roll < 0.70) return Rarity.rare;
+      if (roll < 0.90) return Rarity.epic;
+      if (roll < 0.98) return Rarity.showcase;
+      return Rarity.promo;
+    }
+    if (catalog.isMtg) {
+      // Play Booster rare/mythic slot — mostly rares, ~1/7–1/8 mythic-ish.
+      if (roll < 0.86) return Rarity.rare;
+      if (roll < 0.97) return Rarity.epic;
+      if (roll < 0.995) return Rarity.showcase;
+      return Rarity.signature;
+    }
+    // Riftbound: community-ish rare+ foil slots (no box chase injection).
     if (setCode == 'UNL' && roll < 0.001) return Rarity.ultimate;
-    if (roll < 0.72) return Rarity.rare;
-    if (roll < 0.90) return Rarity.epic;
-    if (roll < 0.97) return Rarity.showcase;
-    if (roll < 0.995) return Rarity.overnumbered;
+    if (roll < 0.78) return Rarity.rare;
+    if (roll < 0.93) return Rarity.epic;
+    if (roll < 0.98) return Rarity.showcase;
+    if (roll < 0.996) return Rarity.overnumbered;
     return Rarity.signature;
   }
 
@@ -253,35 +329,5 @@ class RiftboundPackOpener {
     final u2 = _rng.nextDouble();
     final z = sqrt(-2 * log(u1)) * cos(2 * pi * u2);
     return mean + z * std;
-  }
-
-  void _boxCorrection(List<OwnedCard> all, String setCode) {
-    // Ensure ~6+ epics across the box among rare+ slots.
-    final epicDefs = catalog.pool(setCode, Rarity.epic);
-    if (epicDefs.isEmpty) return;
-    var guard = 0;
-    while (guard < 40) {
-      final epics = all.where((c) {
-        final d = catalog.byId[c.cardId];
-        return d?.rarity == Rarity.epic;
-      }).length;
-      if (epics >= 6) break;
-      guard++;
-      final idx = _rng.nextInt(all.length);
-      all[idx] = _instantiate(epicDefs[_rng.nextInt(epicDefs.length)], foil: true);
-    }
-
-    // ~2 alt/showcase arts per box
-    final show = catalog.pool(setCode, Rarity.showcase);
-    if (show.isEmpty) return;
-    guard = 0;
-    while (guard < 20) {
-      final showCount =
-          all.where((c) => catalog.byId[c.cardId]?.rarity == Rarity.showcase).length;
-      if (showCount >= 2) break;
-      guard++;
-      final idx = _rng.nextInt(all.length);
-      all[idx] = _instantiate(show[_rng.nextInt(show.length)], foil: true);
-    }
   }
 }

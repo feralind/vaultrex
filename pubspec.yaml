@@ -1,7 +1,7 @@
-name: bindora
+﻿name: bindora
 description: Bindora - offline TCG collecting. Rip packs, collect, flip, grade.
 publish_to: 'none'
-version: 1.4.5+19
+version: 1.4.6+20
 
 environment:
   sdk: ^3.12.2
@@ -19,6 +19,9 @@ dependencies:
   flutter_svg: ^2.3.0
   http: ^1.4.0
   audioplayers: ^6.8.1
+  flutter_local_notifications: ^22.1.0
+  timezone: ^0.11.1
+  flutter_timezone: ^5.1.0
 
 dev_dependencies:
   flutter_test:
@@ -37,15 +40,22 @@ flutter:
     - assets/data/mtg_sealed.json
     - assets/data/onepiece_catalog.json
     - assets/data/onepiece_sealed.json
+    - assets/data/yugioh_catalog.json
+    - assets/data/yugioh_sealed.json
+    - assets/data/gundam_catalog.json
+    - assets/data/gundam_sealed.json
     - assets/data/price_history.json
     - assets/logos/
     - assets/sealed/
     - assets/card_backs/
-    - assets/card_art/onepiece/
     - assets/featured_packs/riftbound/
     - assets/featured_packs/pokemon/
     - assets/featured_packs/mtg/
     - assets/featured_packs/onepiece/
+    - assets/featured_packs/yugioh/
+    - assets/featured_packs/gundam/
+    - assets/card_art/onepiece/
+    - assets/card_art/yugioh/
     - assets/onboarding/
     - assets/instapacks/
     - assets/rip/

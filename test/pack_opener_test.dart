@@ -53,6 +53,27 @@ void main() {
     expect(opener.openPack(pokeSet), hasLength(10));
   });
 
+  test('openPack for yugioh catalog returns 9 cards', () async {
+    GameCatalog.clearCache();
+    final ygo = await GameCatalog.load('yugioh');
+    expect(ygo.isYugioh, isTrue);
+    expect(ygo.cards, isNotEmpty);
+    // Prefer a set with commons when available; RA04/RA05 are rare+ heavy.
+    final setCode = ygo.bySet.keys.firstWhere(
+      (code) => ygo.pool(code, Rarity.common).isNotEmpty,
+      orElse: () => ygo.bySet.keys.first,
+    );
+    final opener = RiftboundPackOpener(ygo, rng: Random(11));
+    final pack = opener.openPack(setCode);
+    expect(pack, hasLength(9));
+    // Reprint sets without commons still fill to 9.
+    final ra = opener.openPack('RA05');
+    expect(ra, hasLength(9));
+    final first = ygo.byId[pack.first.cardId]!;
+    expect(first.isYugiohCard, isTrue);
+    expect(first.displayArtUrl, contains('ygoprodeck.com'));
+  });
+
   test('condition distribution is mostly mint or nearMint', () {
     final opener = RiftboundPackOpener(catalog, rng: Random(99));
     var mintOrNm = 0;

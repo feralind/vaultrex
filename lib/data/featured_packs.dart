@@ -5,8 +5,13 @@ import '../models/models.dart';
 import 'pokemon_featured_packs.dart';
 import 'mtg_featured_packs.dart';
 import 'onepiece_featured_packs.dart';
+import 'yugioh_featured_packs.dart';
+import 'gundam_featured_packs.dart';
 
 /// Featured Pack tiers (separate from Riftbound sealed).
+///
+/// [millennium] and [divine] are Yu-Gi-Oh–only pack tiers (art under
+/// `assets/featured_packs/yugioh/`). Other franchises stop at [mythic].
 enum FeaturedPackTier {
   common,
   uncommon,
@@ -14,6 +19,8 @@ enum FeaturedPackTier {
   epic,
   legendary,
   mythic,
+  millennium,
+  divine,
 }
 
 extension FeaturedPackTierX on FeaturedPackTier {
@@ -24,6 +31,8 @@ extension FeaturedPackTierX on FeaturedPackTier {
         FeaturedPackTier.epic => 'Epic',
         FeaturedPackTier.legendary => 'Legendary',
         FeaturedPackTier.mythic => 'Mythic',
+        FeaturedPackTier.millennium => 'Millennium',
+        FeaturedPackTier.divine => 'Divine',
       };
 
   /// Legacy flat path — prefer [FeaturedPackDef.assetPath] (franchise folders).
@@ -60,6 +69,16 @@ extension FeaturedPackTierX on FeaturedPackTier {
             Color(0xFF67E8F9),
             Color(0xFFFDE68A),
             Color(0xFFC084FC),
+          ],
+        FeaturedPackTier.millennium => const [
+            Color(0xFFFDE68A),
+            Color(0xFF6D28D9),
+            Color(0xFFEAB308),
+          ],
+        FeaturedPackTier.divine => const [
+            Color(0xFFFFFBEB),
+            Color(0xFFD4AF37),
+            Color(0xFF0A0A0F),
           ],
       };
 }
@@ -124,7 +143,11 @@ class FeaturedPackDef {
             ? 'mtg'
             : id.startsWith('opfp_')
                 ? 'onepiece'
-                : 'riftbound';
+                : id.startsWith('ygofp_')
+                    ? 'yugioh'
+                    : id.startsWith('gdfp_')
+                        ? 'gundam'
+                        : 'riftbound';
     return 'assets/featured_packs/$folder/pack_${tier.name}.png';
   }
 }
@@ -382,13 +405,22 @@ List<FeaturedPackDef> get kFeaturedPacks => [
       ),
     ];
 
-/// Featured packs for the active franchise (`riftbound` | `pokemon` | `mtg` | `onepiece`).
-List<FeaturedPackDef> featuredPacksFor(String gameId) => switch (gameId) {
-      'pokemon' => kPokemonFeaturedPacks,
-      'mtg' => kMtgFeaturedPacks,
-      'onepiece' => kOnePieceFeaturedPacks,
-      _ => kFeaturedPacks,
-    };
+/// Featured packs for the active franchise.
+/// [rotationSeed] rotates order when the timed drop restocks.
+List<FeaturedPackDef> featuredPacksFor(String gameId, {int rotationSeed = 0}) {
+  final packs = switch (gameId) {
+    'pokemon' => kPokemonFeaturedPacks,
+    'mtg' => kMtgFeaturedPacks,
+    'onepiece' => kOnePieceFeaturedPacks,
+    'yugioh' => kYugiohFeaturedPacks,
+    'gundam' => kGundamFeaturedPacks,
+    _ => kFeaturedPacks,
+  };
+  if (packs.isEmpty || rotationSeed <= 0) return packs;
+  final i = rotationSeed % packs.length;
+  if (i == 0) return packs;
+  return [...packs.sublist(i), ...packs.sublist(0, i)];
+}
 
 FeaturedPackDef? featuredPackById(String id) {
   for (final p in kFeaturedPacks) {
@@ -403,7 +435,48 @@ FeaturedPackDef? featuredPackById(String id) {
   for (final p in kOnePieceFeaturedPacks) {
     if (p.id == id) return p;
   }
+  for (final p in kYugiohFeaturedPacks) {
+    if (p.id == id) return p;
+  }
+  for (final p in kGundamFeaturedPacks) {
+    if (p.id == id) return p;
+  }
   return null;
+}
+
+/// Cheapest featured pack whose pool includes [setCode] cards.
+FeaturedPackDef? featuredPackForSet({
+  required String gameId,
+  required String setCode,
+  required List<CardDef> catalogCards,
+  int rotationSeed = 0,
+}) {
+  FeaturedPackDef? best;
+  for (final p in featuredPacksFor(gameId, rotationSeed: rotationSeed)) {
+    final pool = p.poolSelector(catalogCards);
+    if (!pool.any((e) => e.card.setCode == setCode)) continue;
+    if (best == null || p.candyPrice < best.candyPrice) best = p;
+  }
+  return best;
+}
+
+/// Featured pack with the highest pity dry streak (for heat CTA).
+FeaturedPackDef? hottestFeaturedPack({
+  required String gameId,
+  required Map<String, int> featuredPity,
+  int rotationSeed = 0,
+}) {
+  final packs = featuredPacksFor(gameId, rotationSeed: rotationSeed);
+  FeaturedPackDef? best;
+  var bestDry = -1;
+  for (final p in packs) {
+    final dry = featuredPity[p.id] ?? 0;
+    if (dry > bestDry) {
+      bestDry = dry;
+      best = p;
+    }
+  }
+  return bestDry > 0 ? best : (packs.isEmpty ? null : packs.first);
 }
 
 bool _isPlayable(CardDef c) =>
@@ -411,6 +484,8 @@ bool _isPlayable(CardDef c) =>
     c.rarity != Rarity.none &&
     c.marketPrice > 0 &&
     !c.name.toLowerCase().contains('oversized');
+
+bool _inSets(CardDef c, Set<String> codes) => codes.contains(c.setCode);
 
 List<({CardDef card, double weight})> _weightByPrice(
   Iterable<CardDef> cards, {
@@ -426,64 +501,79 @@ List<({CardDef card, double weight})> _weightByPrice(
 }
 
 List<({CardDef card, double weight})> _commonPool(List<CardDef> all) {
-  return _weightByPrice(all, weightOf: (c) {
-    if (c.rarity == Rarity.common) return 8;
-    if (c.rarity == Rarity.uncommon && c.marketPrice < 4) return 5;
-    if (c.rarity == Rarity.rare && c.marketPrice < 20) return 1.2;
-    if (c.rarity == Rarity.epic && c.marketPrice < 40) return 0.25;
-    return 0;
-  });
+  return _weightByPrice(
+    all.where((c) => c.setCode == 'OGN'),
+    weightOf: (c) {
+      if (c.rarity == Rarity.common) return 8;
+      if (c.rarity == Rarity.uncommon && c.marketPrice < 4) return 5;
+      if (c.rarity == Rarity.rare && c.marketPrice < 20) return 1.2;
+      if (c.rarity == Rarity.epic && c.marketPrice < 40) return 0.25;
+      return 0;
+    },
+  );
 }
 
 List<({CardDef card, double weight})> _uncommonPool(List<CardDef> all) {
-  return _weightByPrice(all, weightOf: (c) {
-    if (c.rarity == Rarity.common) return 3;
-    if (c.rarity == Rarity.uncommon) return 7;
-    if (c.rarity == Rarity.rare) return 4;
-    if (c.rarity == Rarity.epic && c.marketPrice < 80) return 0.8;
-    return 0;
-  });
+  return _weightByPrice(
+    all.where((c) => _inSets(c, const {'OGN', 'SFD'})),
+    weightOf: (c) {
+      if (c.rarity == Rarity.common) return 3;
+      if (c.rarity == Rarity.uncommon) return 7;
+      if (c.rarity == Rarity.rare) return 4;
+      if (c.rarity == Rarity.epic && c.marketPrice < 80) return 0.8;
+      return 0;
+    },
+  );
 }
 
 List<({CardDef card, double weight})> _rarePool(List<CardDef> all) {
-  return _weightByPrice(all, weightOf: (c) {
-    if (c.rarity == Rarity.uncommon && c.marketPrice >= 1) return 2;
-    if (c.rarity == Rarity.rare) return 8;
-    if (c.rarity == Rarity.epic) return 4;
-    if (c.rarity == Rarity.showcase && c.marketPrice < 200) return 0.6;
-    return 0;
-  });
+  return _weightByPrice(
+    all.where((c) => _inSets(c, const {'SFD', 'OGN'})),
+    weightOf: (c) {
+      if (c.rarity == Rarity.uncommon && c.marketPrice >= 1) return 2;
+      if (c.rarity == Rarity.rare) return 8;
+      if (c.rarity == Rarity.epic) return 4;
+      if (c.rarity == Rarity.showcase && c.marketPrice < 200) return 0.6;
+      return 0;
+    },
+  );
 }
 
 List<({CardDef card, double weight})> _epicPool(List<CardDef> all) {
-  return _weightByPrice(all, weightOf: (c) {
-    if (c.rarity == Rarity.rare && c.marketPrice >= 5) return 2;
-    if (c.rarity == Rarity.epic) return 8;
-    if (c.rarity == Rarity.showcase && c.marketPrice < 500) {
-      return c.marketPrice < 300 ? 2.5 : 1.0;
-    }
-    if (c.name.contains('Signature') && c.marketPrice < 800) return 0.35;
-    return 0;
-  });
+  return _weightByPrice(
+    all.where((c) => _inSets(c, const {'SFD', 'UNL'})),
+    weightOf: (c) {
+      if (c.rarity == Rarity.rare && c.marketPrice >= 5) return 2;
+      if (c.rarity == Rarity.epic) return 8;
+      if (c.rarity == Rarity.showcase && c.marketPrice < 500) {
+        return c.marketPrice < 300 ? 2.5 : 1.0;
+      }
+      if (c.name.contains('Signature') && c.marketPrice < 800) return 0.35;
+      return 0;
+    },
+  );
 }
 
 List<({CardDef card, double weight})> _legendaryPool(List<CardDef> all) {
-  return _weightByPrice(all, weightOf: (c) {
-    if (c.rarity == Rarity.epic && c.marketPrice >= 25) return 3;
-    if (c.rarity == Rarity.showcase) {
-      if (c.name.contains('Signature')) {
-        return c.marketPrice >= 500 ? 2.5 : 1.2;
+  return _weightByPrice(
+    all.where((c) => _inSets(c, const {'UNL', 'SFD'})),
+    weightOf: (c) {
+      if (c.rarity == Rarity.epic && c.marketPrice >= 25) return 3;
+      if (c.rarity == Rarity.showcase) {
+        if (c.name.contains('Signature')) {
+          return c.marketPrice >= 500 ? 2.5 : 1.2;
+        }
+        if (c.name.contains('Overnumbered')) return 3.5;
+        if (c.name.contains('Ultimate')) return 1.5;
+        return c.marketPrice >= 80 ? 4 : 1;
       }
-      if (c.name.contains('Overnumbered')) return 3.5;
-      if (c.name.contains('Ultimate')) return 1.5;
-      return c.marketPrice >= 80 ? 4 : 1;
-    }
-    return 0;
-  });
+      return 0;
+    },
+  );
 }
 
 List<({CardDef card, double weight})> _mythicPool(List<CardDef> all) {
-  return _weightByPrice(all, weightOf: (c) {
+  return _weightByPrice(all.where((c) => c.setCode == 'UNL'), weightOf: (c) {
     if (c.rarity != Rarity.showcase && c.rarity != Rarity.epic) return 0;
     if (c.name.contains('Signature')) {
       return c.marketPrice >= 1000 ? 6 : 3.5;

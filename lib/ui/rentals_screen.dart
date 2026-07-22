@@ -57,12 +57,16 @@ class RentalsScreen extends ConsumerWidget {
             decoration: BoxDecoration(
               color: CC.card,
               borderRadius: BorderRadius.circular(AppSpace.rCard),
-              border: Border.all(color: CC.line),
+              border: Border.all(
+                color: pending > 0
+                    ? CC.cash.withValues(alpha: 0.45)
+                    : CC.line,
+              ),
               gradient: RadialGradient(
                 center: Alignment.topRight,
                 radius: 1.2,
                 colors: [
-                  CC.cash.withValues(alpha: 0.14),
+                  CC.cash.withValues(alpha: pending > 0 ? 0.22 : 0.14),
                   Colors.transparent,
                 ],
               ),
@@ -70,10 +74,35 @@ class RentalsScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Rental earnings', style: AppText.titleSm()),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text('Passive candy desk', style: AppText.titleSm()),
+                    ),
+                    if (pending > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: CC.cash.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'Ready',
+                          style: AppText.jakarta(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: CC.cash,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
                 const SizedBox(height: AppSpace.s4),
                 Text(
-                  'Start fee: $kRentalStartFeeCandy candy per loan.',
+                  'Loan PSA slabs · start fee $kRentalStartFeeCandy candy · claim anytime.',
                   style: AppText.bodySm(),
                 ),
                 const SizedBox(height: AppSpace.s16),
@@ -108,7 +137,8 @@ class RentalsScreen extends ConsumerWidget {
                       ? () => notifier.claimRentalEarnings()
                       : null,
                   style: FilledButton.styleFrom(
-                    backgroundColor: CC.accent,
+                    backgroundColor: pending > 0 ? CC.cash : CC.accent,
+                    foregroundColor: Colors.black,
                     padding: const EdgeInsets.symmetric(
                       vertical: AppSpace.s16,
                       horizontal: AppSpace.s24,
@@ -121,6 +151,7 @@ class RentalsScreen extends ConsumerWidget {
                     pending > 0
                         ? 'Claim $pending candy'
                         : 'Claim earnings',
+                    style: AppText.jakarta(fontWeight: FontWeight.w800),
                   ),
                 ),
               ],

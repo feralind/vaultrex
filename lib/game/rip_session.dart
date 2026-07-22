@@ -131,10 +131,36 @@ mixin _RipSession on _GameNotifierBase {
         if (!inRip) return;
 
         final card = rip!.firstWhere((c) => c.instanceId == instanceId);
+        final def = _catalog.byId[card.cardId];
+        final alreadyOwned = state.collection.any((c) => c.cardId == card.cardId);
+        String msg = 'Kept for collection.';
+        if (alreadyOwned) {
+          final fair = fairFor(card);
+          final candyWorth = (fair * 0.70 * 100).round().clamp(1, 999999);
+          msg = 'Dupe kept — also ~$candyWorth candy if exchanged.';
+        } else if (def != null) {
+          final setCards = _catalog.bySet[def.setCode] ?? [];
+          if (setCards.length >= 2) {
+            final owned = state.collection
+                .map((c) => c.cardId)
+                .where((id) => _catalog.byId[id]?.setCode == def.setCode)
+                .toSet()
+                .length;
+            final after = owned + 1;
+            final left = setCards.length - after;
+            if (left == 0) {
+              msg = 'Kept — ${def.setName} complete!';
+            } else if (left == 1) {
+              msg = 'Kept — 1 away from completing ${def.setName}!';
+            } else if (left <= 5) {
+              msg = 'Kept — $after/${setCards.length} in ${def.setName}.';
+            }
+          }
+        }
         state = state.copyWith(
           collection: [...state.collection, card],
           lastRip: rip.where((c) => c.instanceId != instanceId).toList(),
-          message: 'Kept for collection.',
+          message: msg,
           recentlyKeptIds: {...state.recentlyKeptIds, instanceId},
         );
         _recordCollectionValue();
@@ -217,20 +243,28 @@ mixin _RipSession on _GameNotifierBase {
   }
 
   Future<void> openBoxBurst(String setCode) async {
-    // Convenience: if player has 24 packs of set, open as box with correction.
-    final matching = state.unopened.where((p) => p.setCode == setCode).take(24).toList();
-    if (matching.length < 24) {
-      state = state.copyWith(message: 'Need 24 $setCode packs queued.');
+    // Franchise-accurate pack count (matches sealed box defaults).
+    final need = _catalog.isPokemon
+        ? 36
+        : _catalog.isMtg
+            ? 30
+            : 24;
+    final matching =
+        state.unopened.where((p) => p.setCode == setCode).take(need).toList();
+    if (matching.length < need) {
+      state = state.copyWith(
+        message: 'Need $need $setCode packs queued for a box break.',
+      );
       return;
     }
-    final pulls = _opener.openBox(setCode);
+    final pulls = _opener.openBox(setCode, packCount: need);
     final remain = [...state.unopened];
     for (final m in matching) {
       remain.removeWhere((p) => p.id == m.id);
     }
     final player = state.player.copyWith(
-      packsOpened: state.player.packsOpened + 24,
-      xp: state.player.xp + 40,
+      packsOpened: state.player.packsOpened + need,
+      xp: state.player.xp + (need >= 30 ? 50 : 40),
     );
     final packArt = matching.isNotEmpty
         ? resolveUnopenedPackImageUrl(matching.first)
@@ -240,7 +274,7 @@ mixin _RipSession on _GameNotifierBase {
       unopened: remain,
       lastRip: pulls,
       lastRipPackImageUrl: packArt,
-      message: 'Box break: ${pulls.length} cards from $setCode.',
+      message: 'Box break: ${pulls.length} cards from $setCode ($need packs).',
     );
     _checkAchievements();
     await _persist();

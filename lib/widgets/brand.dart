@@ -145,7 +145,72 @@ class GameBrandLogo extends StatelessWidget {
   }
 }
 
-/// Transparent game tile: logo + name on ambient bg, subtle selected underline.
+/// Logo with a soft accent glow that follows the mark — no filled card plate.
+class GlowingGameLogo extends StatelessWidget {
+  const GlowingGameLogo({
+    super.key,
+    required this.asset,
+    required this.glowColor,
+    this.height = 44,
+    this.width,
+    this.glowing = false,
+    this.glowStrength = 1,
+  });
+
+  final String asset;
+  final Color glowColor;
+  final double height;
+  final double? width;
+  final bool glowing;
+  final double glowStrength;
+
+  @override
+  Widget build(BuildContext context) {
+    final logo = GameBrandLogo(asset: asset, height: height, width: width);
+    if (!glowing) return logo;
+
+    final strength = glowStrength.clamp(0.35, 1.6);
+    final blur = 7.0 * strength;
+    final tint = glowColor.withValues(alpha: (0.55 * strength).clamp(0.2, 0.9));
+
+    return Stack(
+      alignment: Alignment.center,
+      clipBehavior: Clip.none,
+      children: [
+        // Soft bloom behind the mark (logo-shaped, not a rounded rect plate).
+        ImageFiltered(
+          imageFilter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+          child: Opacity(
+            opacity: 0.95,
+            child: ColorFiltered(
+              colorFilter: ColorFilter.mode(tint, BlendMode.srcATop),
+              child: logo,
+            ),
+          ),
+        ),
+        ImageFiltered(
+          imageFilter: ui.ImageFilter.blur(
+            sigmaX: blur * 0.45,
+            sigmaY: blur * 0.45,
+          ),
+          child: Opacity(
+            opacity: 0.55,
+            child: ColorFiltered(
+              colorFilter: ColorFilter.mode(
+                glowColor.withValues(alpha: 0.85),
+                BlendMode.srcATop,
+              ),
+              child: logo,
+            ),
+          ),
+        ),
+        logo,
+      ],
+    );
+  }
+}
+
+/// Transparent game tile: logo + name on ambient bg, soft selected glow.
 class GamePickTile extends StatelessWidget {
   const GamePickTile({
     super.key,
@@ -182,27 +247,12 @@ class GamePickTile extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Soft glow behind logo when selected — not a filled card frame.
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOut,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: selected
-                        ? [
-                            BoxShadow(
-                              color: accent.withValues(alpha: 0.45),
-                              blurRadius: 22,
-                              spreadRadius: 1,
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: GameBrandLogo(
-                    asset: logoAsset,
-                    height: 72 * logoScale,
-                  ),
+                GlowingGameLogo(
+                  asset: logoAsset,
+                  glowColor: accent,
+                  height: 72 * logoScale,
+                  glowing: selected,
+                  glowStrength: 1.25,
                 ),
                 const SizedBox(height: 10),
                 Text(
@@ -227,7 +277,7 @@ class GamePickTile extends StatelessWidget {
                     boxShadow: selected
                         ? [
                             BoxShadow(
-                              color: accent.withValues(alpha: 0.7),
+                              color: accent.withValues(alpha: 0.75),
                               blurRadius: 10,
                             ),
                           ]
@@ -478,13 +528,19 @@ class _FoilPack extends StatelessWidget {
     final isPokemon = franchiseId == 'pokemon';
     final isMtg = franchiseId == 'mtg';
     final isOnePiece = franchiseId == 'onepiece';
+    final isYugioh = franchiseId == 'yugioh';
+    final isGundam = franchiseId == 'gundam';
     final brandLabel = isPokemon
         ? 'POKÉMON'
         : isMtg
             ? 'MAGIC'
             : isOnePiece
                 ? 'ONE PIECE'
-                : 'RIFTBOUND';
+                : isYugioh
+                    ? 'YU-GI-OH!'
+                    : isGundam
+                        ? 'GUNDAM'
+                        : 'RIFTBOUND';
 
     return Container(
       width: width,
@@ -543,7 +599,11 @@ class _FoilPack extends StatelessWidget {
                           ? 'assets/logos/mtg.png'
                           : isOnePiece
                               ? 'assets/logos/onepiece.png'
-                              : 'assets/logos/riftbound.png',
+                              : isYugioh
+                                  ? 'assets/logos/yugioh.png'
+                                  : isGundam
+                                      ? 'assets/logos/gundam.png'
+                                      : 'assets/logos/riftbound.png',
                       width: width * 0.55,
                       fit: BoxFit.contain,
                       errorBuilder: (_, _, _) =>

@@ -88,7 +88,11 @@ mixin _ShopActions on _GameNotifierBase {
         return false;
       }
       final total = pack.priceUsd;
-      final candyCost = pack.candyPrice;
+      final perks = BusinessPerks.forLevel(state.player.businessLevel);
+      final candyCost = max(
+        1,
+        (pack.candyPrice * (1.0 - perks.featuredCandyDiscount)).round(),
+      );
       var player = state.player;
 
       if (payWith == PaymentMethod.cash) {
@@ -108,7 +112,8 @@ mixin _ShopActions on _GameNotifierBase {
       final dry = state.engagement.featuredPity[pack.id] ?? 0;
       final pulls = _featuredOpener.open(
         pack,
-        pityBoost: pityWeightBoost(dry),
+        pityBoost: pityWeightBoost(dry) * perks.featuredPityBonus,
+        dryCount: dry,
       );
       if (pulls.isEmpty) {
         // Refund on empty open (should not happen with a loaded catalog).
@@ -126,12 +131,11 @@ mixin _ShopActions on _GameNotifierBase {
         final f = fairFor(o);
         return f > m ? f : m;
       });
-      final hitChase = maxFair >= 8 ||
-          pulls.any((o) {
-            final d = _catalog.byId[o.cardId];
-            return d != null && d.rarity.isRarePlus && o.foil;
-          });
-
+      // Theater FX still celebrate mid pulls; pity only clears on real chase.
+      final hitChase = isFeaturedPityChase(
+        maxFair: maxFair,
+        packPriceUsd: pack.priceUsd,
+      );
       player = player.copyWith(
         packsOpened: player.packsOpened + 1,
         xp: player.xp + 3,

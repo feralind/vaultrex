@@ -16,6 +16,8 @@ class TcgcsvPriceRefresh {
   static const pokemonCategory = 3;
   static const mtgCategory = 1;
   static const onepieceCategory = 68;
+  static const yugiohCategory = 2;
+  static const gundamCategory = 86;
 
   static const riftboundGroups = <String, int>{
     'OGS': 24439,
@@ -51,12 +53,35 @@ class TcgcsvPriceRefresh {
     'PRB01': 23496,
   };
 
+  static const yugiohGroups = <String, int>{
+    'LOB': 22881,
+    'RA04': 23891,
+    'RA05': 24555,
+    'DOOD': 24357,
+    'PHRE': 24475,
+    'BPRO': 24558,
+    'BLZD': 24581,
+  };
+
+  static const gundamGroups = <String, int>{
+    'GD01': 24221,
+    'GD02': 24408,
+    'GD03': 24522,
+    'GD04': 24633,
+    'GD05': 24699,
+    'ST01': 24222,
+    'ST02': 24223,
+    'EB01': 24693,
+  };
+
   static DateTime? lastRefreshAt;
 
   static Map<String, int> groupsFor(String gameId) => switch (gameId) {
         'pokemon' => pokemonGroups,
         'mtg' => mtgGroups,
         'onepiece' => onepieceGroups,
+        'yugioh' => yugiohGroups,
+        'gundam' => gundamGroups,
         _ => riftboundGroups,
       };
 
@@ -64,6 +89,8 @@ class TcgcsvPriceRefresh {
         'pokemon' => pokemonCategory,
         'mtg' => mtgCategory,
         'onepiece' => onepieceCategory,
+        'yugioh' => yugiohCategory,
+        'gundam' => gundamCategory,
         _ => riftboundCategory,
       };
 

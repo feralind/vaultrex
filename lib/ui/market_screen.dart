@@ -220,6 +220,8 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
       'pokemon' => 'Pokémon',
       'mtg' => 'Magic',
       'onepiece' => 'One Piece',
+      'yugioh' => 'Yu-Gi-Oh!',
+      'gundam' => 'Gundam',
       _ => 'Riftbound',
     };
     final openOffers = state.marketOffers.where((o) => o.isOpen).length;
@@ -257,9 +259,10 @@ class _MarketScreenState extends ConsumerState<MarketScreen>
                         ),
                       ),
                     ),
-                    CashBalance(
-                      state.player.cash,
-                      onTap: () => showCashTopUp(context, ref),
+                    BalanceBar(
+                      candy: state.player.candy,
+                      cash: state.player.cash,
+                      onTopUp: () => showCashTopUp(context, ref),
                     ),
                   ],
                 ),

@@ -17,6 +17,7 @@ import 'engagement/engagement_hub.dart';
 import 'featured_pack_detail.dart';
 import 'pack_detail.dart';
 import 'sealed_inventory.dart';
+import 'social/auction_pit_screen.dart';
 
 class InstapacksScreen extends ConsumerStatefulWidget {
   const InstapacksScreen({super.key});
@@ -29,6 +30,7 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen>
     with SingleTickerProviderStateMixin {
   String? _pendingGame;
   late final AnimationController _sharedFloat;
+  bool _dailyRitualShown = false;
 
   @override
   void initState() {
@@ -37,6 +39,66 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen>
       vsync: this,
       duration: const Duration(milliseconds: 2800),
     )..repeat(reverse: true);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeDailyRitual());
+  }
+
+  Future<void> _maybeDailyRitual() async {
+    if (!mounted || _dailyRitualShown) return;
+    final state = ref.read(gameProvider);
+    if (!state.ready) return;
+    final eng = state.engagement;
+    if (eng.dailyClaimDate == engagementDayKey()) return;
+    _dailyRitualShown = true;
+    final streak = eng.dailyStreak;
+    final preview = dailyClaimCandyForStreak(
+      eng.dailyClaimDate ==
+              engagementDayKey(DateTime.now().subtract(const Duration(days: 1)))
+          ? streak + 1
+          : 1,
+    );
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: CC.bgElevated,
+        title: Text(
+          'Daily candy',
+          style: AppText.jakarta(fontWeight: FontWeight.w800),
+        ),
+        content: Text(
+          'Claim ~$preview candy and keep your streak cooking before you rip.',
+          style: AppText.jakarta(color: CC.inkMuted, height: 1.35),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Later',
+              style: AppText.jakarta(color: CC.inkMuted),
+            ),
+          ),
+          FilledButton(
+            onPressed: () async {
+              await ref.read(gameProvider.notifier).claimDailyLogin();
+              if (ctx.mounted) Navigator.pop(ctx);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Daily claimed — streak locked in'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: CC.candy,
+              foregroundColor: Colors.black,
+            ),
+            child: const Text('Claim'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -61,12 +123,17 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen>
 
     final candy = state.player.candy;
     final cash = state.player.cash;
-    final featuredPacks = featuredPacksFor(active);
+    final featuredPacks = featuredPacksFor(
+      active,
+      rotationSeed: state.engagement.featuredRotationSeed,
+    );
     final hasMarket = featuredPacks.isNotEmpty || listings.isNotEmpty;
     final sealedTitle = switch (active) {
       'pokemon' => 'Pokémon Sealed',
       'mtg' => 'Magic Sealed',
       'onepiece' => 'One Piece Sealed',
+      'yugioh' => 'Yu-Gi-Oh! Sealed',
+      'gundam' => 'Gundam Sealed',
       _ => 'Riftbound Sealed',
     };
 
@@ -78,6 +145,18 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen>
             candy: candy,
             cash: cash,
             onTopUp: () => showCashTopUp(context, ref),
+          ),
+        ),
+        const SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 4),
+            child: _InstapacksHeatStrip(),
+          ),
+        ),
+        const SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: _AuctionPressureChip(),
           ),
         ),
         SliverToBoxAdapter(
@@ -228,6 +307,213 @@ class _InstapacksScreenState extends ConsumerState<InstapacksScreen>
   }
 }
 
+/// Compact daily / pity / 1-away / season strip under the Instapacks hero.
+class _InstapacksHeatStrip extends ConsumerWidget {
+  const _InstapacksHeatStrip();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final eng = ref.watch(gameProvider.select((s) => s.engagement));
+    final season = ref.watch(gameProvider.select((s) => s.activeSeason));
+    final notifier = ref.read(gameProvider.notifier);
+    final claimed = eng.dailyClaimDate == engagementDayKey();
+    final away = notifier.oneAwaySets();
+    var maxHeat = 0;
+    for (final dry in eng.featuredPity.values) {
+      final h = pityHeatPercent(dry);
+      if (h > maxHeat) maxHeat = h;
+    }
+    final seasonDone = season?.quests.where((q) => q.complete).length ?? 0;
+    final seasonTotal = season?.quests.length ?? 0;
+
+    final chips = <Widget>[
+      if (!claimed)
+        _HeatChip(
+          label: 'Daily ready',
+          color: CC.candy,
+          onTap: () async {
+            await notifier.claimDailyLogin();
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Daily claimed'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          },
+        )
+      else
+        _HeatChip(
+          label: 'Streak ${eng.dailyStreak}',
+          color: CC.scan,
+          onTap: () => openEngagementHub(context),
+        ),
+      if (maxHeat > 0)
+        _HeatChip(
+          label: 'Chase heat $maxHeat%',
+          color: CC.candy,
+          onTap: () {
+            final pack = hottestFeaturedPack(
+              gameId: ref.read(gameProvider).franchiseId,
+              featuredPity: eng.featuredPity,
+              rotationSeed: eng.featuredRotationSeed,
+            );
+            if (pack == null) return;
+            showFeaturedPackDetail(context, ref, pack);
+          },
+        ),
+      if (away.isNotEmpty)
+        _HeatChip(
+          label: '1-away · ${away.first.setName}',
+          color: CC.accent,
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => SetCompletionGridScreen(
+                  setCode: away.first.setCode,
+                ),
+              ),
+            );
+          },
+        ),
+      if (seasonTotal > 0)
+        _HeatChip(
+          label: 'Season $seasonDone/$seasonTotal',
+          color: const Color(0xFFFB923C),
+          onTap: () => openEngagementHub(context),
+        ),
+    ];
+
+    if (chips.isEmpty) return const SizedBox.shrink();
+
+    return SizedBox(
+      height: 36,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: chips.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (_, i) => chips[i],
+      ),
+    );
+  }
+}
+
+class _HeatChip extends StatelessWidget {
+  const _HeatChip({
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: color.withValues(alpha: 0.16),
+      borderRadius: BorderRadius.circular(99),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(99),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(99),
+            border: Border.all(color: color.withValues(alpha: 0.35)),
+          ),
+          child: Text(
+            label,
+            style: AppText.jakarta(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Ending-soon auction / rival pressure on Instapacks cold open.
+class _AuctionPressureChip extends ConsumerWidget {
+  const _AuctionPressureChip();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auctions = ref.watch(gameProvider.select((s) => s.auctions));
+    if (auctions.isEmpty) return const SizedBox.shrink();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    AuctionLot? soonest;
+    var soonestLeft = 1 << 30;
+    for (final a in auctions) {
+      final end = a.endsAtMs;
+      if (end == null) continue;
+      final left = end - now;
+      if (left <= 0) continue;
+      if (left < soonestLeft) {
+        soonestLeft = left;
+        soonest = a;
+      }
+    }
+    soonest ??= auctions.first;
+    final secs = soonest.endsAtMs == null
+        ? null
+        : ((soonest.endsAtMs! - now) / 1000).ceil().clamp(0, 99999);
+    final rival = soonest.rivalName;
+    final label = secs == null
+        ? (rival != null
+            ? '$rival is bidding in the Pit'
+            : '${auctions.length} live lots in the Pit')
+        : (rival != null
+            ? '$rival sniping · ${secs}s left'
+            : 'Lot ending · ${secs}s · ${auctions.length} live');
+
+    return Material(
+      color: const Color(0xFFF472B6).withValues(alpha: 0.14),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => const AuctionPitScreen(),
+          ),
+        ),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: const Color(0xFFF472B6).withValues(alpha: 0.35),
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.gavel_rounded, size: 18, color: Color(0xFFF472B6)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  style: AppText.jakarta(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                    color: const Color(0xFFF472B6),
+                  ),
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: CC.inkMuted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Bindora Instapacks header: title, blurb, half-fade pack fan.
 class _InstapacksHero extends StatefulWidget {
   const _InstapacksHero({
@@ -287,9 +573,9 @@ class _InstapacksHeroState extends State<_InstapacksHero>
                       textAlign: TextAlign.center,
                       style: AppText.display(),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Text(
-                      'Rip packs whenever you want — real cards, real pulls.',
+                      'Real cards. Real pulls.',
                       textAlign: TextAlign.center,
                       style: AppText.bodySm(),
                     ),
@@ -463,30 +749,20 @@ class _GameIcon extends StatelessWidget {
     return InkWell(
       onTap: locked ? null : onTap,
       borderRadius: BorderRadius.circular(12),
+      splashColor: color.withValues(alpha: 0.12),
+      highlightColor: color.withValues(alpha: 0.06),
       child: Opacity(
         opacity: locked ? 0.35 : 1,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: selected
-                    ? [
-                        BoxShadow(
-                          color: color.withValues(alpha: 0.5),
-                          blurRadius: 14,
-                        ),
-                      ]
-                    : null,
-              ),
-              child: GameBrandLogo(
-                asset: logoAsset,
-                height: markH,
-                width: logoScale > 1 ? markH : 72,
-              ),
+            GlowingGameLogo(
+              asset: logoAsset,
+              glowColor: color,
+              height: markH,
+              width: logoScale > 1 ? markH : 72,
+              glowing: selected,
+              glowStrength: 1.15,
             ),
             const SizedBox(height: 6),
             AnimatedContainer(
@@ -497,7 +773,12 @@ class _GameIcon extends StatelessWidget {
                 color: color,
                 borderRadius: BorderRadius.circular(4),
                 boxShadow: selected
-                    ? [BoxShadow(color: color.withValues(alpha: 0.6), blurRadius: 8)]
+                    ? [
+                        BoxShadow(
+                          color: color.withValues(alpha: 0.7),
+                          blurRadius: 8,
+                        ),
+                      ]
                     : null,
               ),
             ),

@@ -274,68 +274,89 @@ List<({CardDef card, double weight})> _weight(
   return out;
 }
 
+bool _inSets(CardDef c, Set<String> codes) => codes.contains(c.setCode);
+
 List<({CardDef card, double weight})> _starterPool(List<CardDef> all) {
-  return _weight(all, weightOf: (c) {
-    if (c.rarity == Rarity.common) return 8;
-    if (c.rarity == Rarity.uncommon && c.marketPrice < 4) return 5;
-    if (c.rarity == Rarity.rare && c.marketPrice < 25) return 1.2;
-    if (c.rarity == Rarity.epic && c.marketPrice < 50) return 0.25;
-    return 0;
-  });
+  // Romance Dawn + Paramount War.
+  return _weight(
+    all.where((c) => _inSets(c, const {'OP01', 'OP02'})),
+    weightOf: (c) {
+      if (c.rarity == Rarity.common) return 8;
+      if (c.rarity == Rarity.uncommon && c.marketPrice < 4) return 5;
+      if (c.rarity == Rarity.rare && c.marketPrice < 25) return 1.2;
+      if (c.rarity == Rarity.epic && c.marketPrice < 50) return 0.25;
+      return 0;
+    },
+  );
 }
 
 List<({CardDef card, double weight})> _grandLinePool(List<CardDef> all) {
-  return _weight(all, weightOf: (c) {
-    if (c.rarity == Rarity.common) return 2;
-    if (c.rarity == Rarity.uncommon) return 6;
-    if (c.rarity == Rarity.rare) return 5;
-    if (c.rarity == Rarity.epic && c.marketPrice < 120) return 1.0;
-    return 0;
-  });
+  return _weight(
+    all.where((c) => _inSets(c, const {'OP05', 'OP09'})),
+    weightOf: (c) {
+      if (c.rarity == Rarity.common) return 2;
+      if (c.rarity == Rarity.uncommon) return 6;
+      if (c.rarity == Rarity.rare) return 5;
+      if (c.rarity == Rarity.epic && c.marketPrice < 120) return 1.0;
+      return 0;
+    },
+  );
 }
 
 List<({CardDef card, double weight})> _newWorldPool(List<CardDef> all) {
-  return _weight(all, weightOf: (c) {
-    if (c.rarity == Rarity.uncommon && c.marketPrice >= 1) return 2;
-    if (c.rarity == Rarity.rare) return 7;
-    if (c.rarity == Rarity.epic) return 5;
-    if (c.marketPrice >= 100 && c.marketPrice < 500) return 0.8;
-    return 0;
-  });
+  return _weight(
+    all.where((c) => _inSets(c, const {'OP09', 'OP13'})),
+    weightOf: (c) {
+      if (c.rarity == Rarity.uncommon && c.marketPrice >= 1) return 2;
+      if (c.rarity == Rarity.rare) return 7;
+      if (c.rarity == Rarity.epic) return 5;
+      if (c.marketPrice >= 100 && c.marketPrice < 500) return 0.8;
+      return 0;
+    },
+  );
 }
 
 List<({CardDef card, double weight})> _yonkoPool(List<CardDef> all) {
-  return _weight(all, weightOf: (c) {
-    if (c.rarity == Rarity.rare && c.marketPrice >= 5) return 2;
-    if (c.rarity == Rarity.epic) {
-      return c.marketPrice < 300 ? 6 : 2.5;
-    }
-    if (c.rarity == Rarity.showcase || c.marketPrice >= 200) return 1.2;
-    return 0;
-  });
+  return _weight(
+    all.where((c) => _inSets(c, const {'OP09', 'OP13'})),
+    weightOf: (c) {
+      if (c.rarity == Rarity.rare && c.marketPrice >= 5) return 2;
+      if (c.rarity == Rarity.epic) {
+        return c.marketPrice < 300 ? 6 : 2.5;
+      }
+      if (c.rarity == Rarity.showcase || c.marketPrice >= 200) return 1.2;
+      return 0;
+    },
+  );
 }
 
 List<({CardDef card, double weight})> _secretVaultPool(List<CardDef> all) {
-  return _weight(all, weightOf: (c) {
-    if (c.rarity == Rarity.epic && c.marketPrice >= 25) return 3;
-    if (c.rarity == Rarity.showcase ||
-        c.name.toLowerCase().contains('manga') ||
-        c.name.toLowerCase().contains('(sp)')) {
-      return c.marketPrice >= 400 ? 5 : 2.5;
-    }
-    if (c.rarity == Rarity.epic) return 2;
-    return 0;
-  });
+  return _weight(
+    all.where((c) => _inSets(c, const {'OP13', 'PRB01'})),
+    weightOf: (c) {
+      if (c.rarity == Rarity.epic && c.marketPrice >= 25) return 3;
+      if (c.rarity == Rarity.showcase ||
+          c.name.toLowerCase().contains('manga') ||
+          c.name.toLowerCase().contains('(sp)')) {
+        return c.marketPrice >= 400 ? 5 : 2.5;
+      }
+      if (c.rarity == Rarity.epic) return 2;
+      return 0;
+    },
+  );
 }
 
 List<({CardDef card, double weight})> _emperorsPool(List<CardDef> all) {
-  return _weight(all, weightOf: (c) {
-    if (c.name.toLowerCase().contains('manga') ||
-        c.rarity == Rarity.showcase) {
-      return c.marketPrice >= 1000 ? 7 : 4;
-    }
-    if (c.rarity == Rarity.epic && c.marketPrice >= 80) return 3;
-    if (c.marketPrice >= 150) return 2;
-    return 0;
-  });
+  return _weight(
+    all.where((c) => _inSets(c, const {'OP13', 'PRB01'})),
+    weightOf: (c) {
+      if (c.name.toLowerCase().contains('manga') ||
+          c.rarity == Rarity.showcase) {
+        return c.marketPrice >= 1000 ? 7 : 4;
+      }
+      if (c.rarity == Rarity.epic && c.marketPrice >= 80) return 3;
+      if (c.marketPrice >= 150) return 2;
+      return 0;
+    },
+  );
 }

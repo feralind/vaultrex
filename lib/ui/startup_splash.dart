@@ -19,7 +19,6 @@ class StartupSplash extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = progress.clamp(0.0, 1.0);
-    final pct = (p * 100).round().clamp(0, 100);
 
     return Scaffold(
       backgroundColor: CC.bg,
@@ -44,46 +43,46 @@ class StartupSplash extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width: 88,
-                    height: 88,
+                    width: 96,
+                    height: 96,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(26),
                       boxShadow: [
                         BoxShadow(
-                          color: CC.scan.withValues(alpha: 0.22),
-                          blurRadius: 28,
-                          spreadRadius: 2,
+                          color: CC.scan.withValues(alpha: 0.20),
+                          blurRadius: 32,
+                          spreadRadius: 1,
                         ),
                         BoxShadow(
-                          color: CC.accent.withValues(alpha: 0.18),
-                          blurRadius: 36,
-                          offset: const Offset(0, 8),
+                          color: CC.accent.withValues(alpha: 0.14),
+                          blurRadius: 40,
+                          offset: const Offset(0, 10),
                         ),
                       ],
                     ),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(26),
                       child: Image.asset(
                         AppBrand.logoAsset,
                         fit: BoxFit.cover,
                         errorBuilder: (_, _, _) => const ColoredBox(
                           color: CC.card,
-                          child: Center(child: RiftMark(size: 48)),
+                          child: Center(child: RiftMark(size: 52)),
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 22),
+                  const SizedBox(height: 26),
                   Text(
                     AppBrand.name,
                     style: AppText.jakarta(
                       fontWeight: FontWeight.w800,
-                      fontSize: 28,
-                      letterSpacing: 0.4,
+                      fontSize: 30,
+                      letterSpacing: 0.5,
                       color: CC.ink,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 14),
                   Text(
                     status,
                     textAlign: TextAlign.center,
@@ -93,19 +92,21 @@ class StartupSplash extends StatelessWidget {
                       color: CC.inkMuted,
                     ),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 32),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(999),
                     child: SizedBox(
-                      height: 6,
-                      width: double.infinity,
+                      height: 4,
+                      width: 168,
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          const ColoredBox(color: CC.line),
+                          ColoredBox(
+                            color: CC.line.withValues(alpha: 0.7),
+                          ),
                           FractionallySizedBox(
                             alignment: Alignment.centerLeft,
-                            widthFactor: p <= 0 ? 0.04 : p,
+                            widthFactor: p <= 0 ? 0.06 : p,
                             child: const DecoratedBox(
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
@@ -120,16 +121,6 @@ class StartupSplash extends StatelessWidget {
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    '$pct%',
-                    style: AppText.jakarta(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                      letterSpacing: 0.8,
-                      color: CC.scan,
                     ),
                   ),
                 ],

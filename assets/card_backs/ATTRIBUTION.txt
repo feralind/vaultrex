@@ -6,5 +6,9 @@
 - mtg_back.png — Magic: The Gathering card back
 - onepiece_back.png — One Piece Card Game style back (navy/gold Bindora placeholder;
   swap for user-supplied OPTCG back art when available)
+- yugioh_back.png — Yu-Gi-Oh! style card back
+- gundam_back.png — Gundam Card Game–inspired reverse (navy HUD frame, V-fin crest,
+  GUNDAM CARD GAME wordmark). Placeholder homage — not Bandai official art.
+  Swap for licensed/user-supplied official GCG back when available.
 
 All trademarks belong to their respective owners.

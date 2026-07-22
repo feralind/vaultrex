@@ -54,6 +54,9 @@ class EngagementState {
     this.featuredDropEndsAtMs,
     this.lastRivalBoardSize = 0,
     this.rivalMoodSeed = 0,
+    this.featuredRotationSeed = 0,
+    this.draftBestScore = 0,
+    this.weeklyBestScore = 0,
   });
 
   final List<PullHistoryEntry> pullHistory;
@@ -78,6 +81,12 @@ class EngagementState {
   final int lastRivalBoardSize;
   /// Day-seeded mood salt so pit feed feels alive across sessions.
   final int rivalMoodSeed;
+  /// Bumps when featured drop timer restocks — rotates Instapacks order.
+  final int featuredRotationSeed;
+  /// Best draft EV score (fair $ of kept cards × 100).
+  final int draftBestScore;
+  /// Best weekly challenge EV score.
+  final int weeklyBestScore;
 
   EngagementState copyWith({
     List<PullHistoryEntry>? pullHistory,
@@ -98,6 +107,9 @@ class EngagementState {
     int? featuredDropEndsAtMs,
     int? lastRivalBoardSize,
     int? rivalMoodSeed,
+    int? featuredRotationSeed,
+    int? draftBestScore,
+    int? weeklyBestScore,
   }) {
     return EngagementState(
       pullHistory: pullHistory ?? this.pullHistory,
@@ -120,6 +132,9 @@ class EngagementState {
       featuredDropEndsAtMs: featuredDropEndsAtMs ?? this.featuredDropEndsAtMs,
       lastRivalBoardSize: lastRivalBoardSize ?? this.lastRivalBoardSize,
       rivalMoodSeed: rivalMoodSeed ?? this.rivalMoodSeed,
+      featuredRotationSeed: featuredRotationSeed ?? this.featuredRotationSeed,
+      draftBestScore: draftBestScore ?? this.draftBestScore,
+      weeklyBestScore: weeklyBestScore ?? this.weeklyBestScore,
     );
   }
 
@@ -139,6 +154,9 @@ class EngagementState {
         'featuredDropEndsAtMs': featuredDropEndsAtMs,
         'lastRivalBoardSize': lastRivalBoardSize,
         'rivalMoodSeed': rivalMoodSeed,
+        'featuredRotationSeed': featuredRotationSeed,
+        'draftBestScore': draftBestScore,
+        'weeklyBestScore': weeklyBestScore,
       };
 
   factory EngagementState.fromJson(Map<String, dynamic>? j) {
@@ -176,6 +194,9 @@ class EngagementState {
       featuredDropEndsAtMs: j['featuredDropEndsAtMs'] as int?,
       lastRivalBoardSize: j['lastRivalBoardSize'] as int? ?? 0,
       rivalMoodSeed: j['rivalMoodSeed'] as int? ?? 0,
+      featuredRotationSeed: j['featuredRotationSeed'] as int? ?? 0,
+      draftBestScore: j['draftBestScore'] as int? ?? 0,
+      weeklyBestScore: j['weeklyBestScore'] as int? ?? 0,
     );
   }
 }
@@ -190,16 +211,37 @@ String engagementDayKey([DateTime? now]) {
 
 int dailyClaimCandyForStreak(int streak) {
   final s = streak.clamp(1, 7);
-  return 200 + s * 75;
+  // Slightly juicier faucet so entry featured packs stay reachable daily.
+  return 240 + s * 90;
 }
 
-/// Chase heat 0–100 from consecutive dry featured rips.
-int pityHeatPercent(int dryCount) =>
-    (dryCount * 12).clamp(0, 100);
+/// Dry rips before hard pity forces a top-band highlight.
+const int kFeaturedHardPityDry = 12;
 
+/// Chase heat 0–100 — saturates exactly when hard pity fires.
+int pityHeatPercent(int dryCount) =>
+    ((dryCount / kFeaturedHardPityDry) * 100).round().clamp(0, 100);
+
+/// Soft weight curve — early dopamine nudge, ramps into hard pity.
 double pityWeightBoost(int dryCount) {
   if (dryCount <= 0) return 1.0;
-  return 1.0 + math.min(0.85, dryCount * 0.08);
+  // ~1.15 at 2 dry, ~1.55 at 6, ~2.0 at 10, capped before hard pity.
+  return 1.0 + math.min(1.15, dryCount * 0.115);
+}
+
+/// Fair-$ threshold that clears featured pity for this pack price.
+/// Flat $8 was wiping heat on mid/high packs every rip.
+double featuredChaseFairThreshold(double packPriceUsd) {
+  final scaled = packPriceUsd * 0.48;
+  return math.max(12.0, scaled);
+}
+
+/// Pity-clearing chase (not the same as theater “nice pull” FX).
+bool isFeaturedPityChase({
+  required double maxFair,
+  required double packPriceUsd,
+}) {
+  return maxFair >= featuredChaseFairThreshold(packPriceUsd);
 }
 
 class GhostRankEntry {

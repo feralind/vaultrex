@@ -16,3 +16,8 @@
   (not bundled).
 - **One Piece spots** (`onepiece_catalog.json`): TCGCSV category **68**, groups
   OP01/OP02/OP05/OP09/OP13/PRB-01. Rebuilt via `tools/build_onepiece_catalog.py`.
+- **Yu-Gi-Oh! spots** (`yugioh_catalog.json`): TCGCSV category **2**, groups
+  LOB/RA04/RA05/DOOD/PHRE/BPRO/BLZD. Card art is **rehosted locally** under
+  `assets/card_art/yugioh/` (sourced from [YGOPRODeck](https://ygoprodeck.com);
+  their CDN forbids hotlinking and lacks CORS). Rebuild catalog with
+  `tools/build_yugioh_catalog.py`, then `tools/cache_yugioh_art.py`.

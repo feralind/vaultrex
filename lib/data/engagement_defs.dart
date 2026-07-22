@@ -130,6 +130,85 @@ int businessLevelFromXp(int xp) {
 /// Binder pages unlocked from business level (base 2).
 int binderPagesForLevel(int level) => 2 + (level ~/ 3).clamp(0, 10);
 
+/// Structural unlocks promised by [businessTitles] blurbs.
+class BusinessPerks {
+  const BusinessPerks({
+    required this.listingFeeRate,
+    required this.auctionPitTarget,
+    required this.maxConcurrentGrading,
+    required this.featuredCandyDiscount,
+    required this.featuredPityBonus,
+    required this.rentalDailyMult,
+    required this.maxActiveRentals,
+  });
+
+  /// Platform fee on online sales (lower is better for player).
+  final double listingFeeRate;
+
+  /// How many auction lots the pit tries to keep live.
+  final int auctionPitTarget;
+
+  /// Concurrent unrevealed PSA jobs; higher = bigger shop.
+  final int maxConcurrentGrading;
+
+  /// Fraction off featured candy price (0–0.15).
+  final double featuredCandyDiscount;
+
+  /// Extra pity weight mult on featured opens (≥1).
+  final double featuredPityBonus;
+
+  /// Multiplier on rental candy/day (soft-caps printers at low level).
+  final double rentalDailyMult;
+
+  /// Cap on simultaneous active rentals.
+  final int maxActiveRentals;
+
+  static BusinessPerks forLevel(int level) {
+    final fee = level >= 5 ? 0.11 : 0.14;
+    final auctions = level >= 8 ? 12 : 11;
+    final grading = level >= 12 ? 3 : (level >= 5 ? 2 : 1);
+    final featDisc = level >= 18 ? 0.12 : (level >= 12 ? 0.05 : 0.0);
+    final pity = level >= 18 ? 1.15 : 1.0;
+    final rentalMult = level >= 25
+        ? 1.0
+        : level >= 12
+            ? 0.85
+            : level >= 5
+                ? 0.7
+                : 0.55;
+    final rentSlots = level >= 25
+        ? 6
+        : level >= 12
+            ? 4
+            : level >= 5
+                ? 3
+                : 2;
+    return BusinessPerks(
+      listingFeeRate: fee,
+      auctionPitTarget: auctions,
+      maxConcurrentGrading: grading,
+      featuredCandyDiscount: featDisc,
+      featuredPityBonus: pity,
+      rentalDailyMult: rentalMult,
+      maxActiveRentals: rentSlots,
+    );
+  }
+
+  /// Locked → unlocked lines for Business Progress UI.
+  static List<({int minLevel, String label, bool unlocked})> unlockChecklist(
+    int level,
+  ) {
+    return [
+      (minLevel: 3, label: '+1 binder page tier', unlocked: level >= 3),
+      (minLevel: 5, label: 'Cheaper listing fees (11%)', unlocked: level >= 5),
+      (minLevel: 8, label: '+1 auction pit slot', unlocked: level >= 8),
+      (minLevel: 12, label: 'Extra grading queue (3 slots)', unlocked: level >= 12),
+      (minLevel: 18, label: 'Featured candy discount + pity', unlocked: level >= 18),
+      (minLevel: 25, label: 'Max rental rate + 6 rental slots', unlocked: level >= 25),
+    ];
+  }
+}
+
 class DailyGoalDef {
   const DailyGoalDef({
     required this.id,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,7 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'data/engagement_defs.dart';
 import 'data/onboarding.dart';
 import 'game/game_controller.dart';
+import 'game/home_nav.dart';
 import 'services/bindora_feel.dart';
+import 'services/bindora_notifications.dart';
 import 'services/startup_preload.dart';
 import 'theme/app_theme.dart';
 import 'ui/collection_screen.dart';
@@ -21,6 +25,7 @@ import 'widgets/pack_theater_v2.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await BindoraSounds.init();
+  await BindoraNotifications.instance.init();
   runApp(const ProviderScope(child: BindoraApp()));
 }
 
@@ -60,7 +65,7 @@ class _RootState extends State<_Root> {
   bool _bootDone = false;
   bool _onboarded = false;
   double _preloadProgress = 0;
-  String _preloadStatus = 'Starting…';
+  String _preloadStatus = 'Warming Instapacks…';
 
   @override
   void initState() {
@@ -106,18 +111,32 @@ class _RootState extends State<_Root> {
 
   @override
   Widget build(BuildContext context) {
+    final Widget body;
     if (!_bootDone) {
-      return StartupSplash(
+      body = StartupSplash(
+        key: const ValueKey('splash'),
         progress: _preloadProgress,
         status: _preloadStatus,
       );
-    }
-    if (!_onboarded) {
-      return OnboardingFlow(
+    } else if (!_onboarded) {
+      body = OnboardingFlow(
+        key: const ValueKey('onboard'),
         onDone: () => setState(() => _onboarded = true),
       );
+    } else {
+      body = const HomeShell(key: ValueKey('home'));
     }
-    return const HomeShell();
+
+    // Short fade splash → shell so cold open feels intentional.
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 380),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeIn,
+      transitionBuilder: (child, animation) {
+        return FadeTransition(opacity: animation, child: child);
+      },
+      child: body,
+    );
   }
 }
 
@@ -156,7 +175,13 @@ class _HomeShellState extends ConsumerState<HomeShell>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptLastRip());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybePromptLastRip();
+      final game = ref.read(gameProvider);
+      if (game.ready) {
+        unawaited(BindoraNotifications.instance.syncFromGame(game));
+      }
+    });
   }
 
   @override
@@ -174,6 +199,10 @@ class _HomeShellState extends ConsumerState<HomeShell>
       notifier.catchUpGameDays(nowMs: now, fromMs: last);
       notifier.catchUpOnlineSales(nowMs: now, fromMs: last);
       notifier.catchUpGrading();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      final game = ref.read(gameProvider);
+      unawaited(BindoraNotifications.instance.syncFromGame(game));
     }
   }
 
@@ -234,7 +263,16 @@ class _HomeShellState extends ConsumerState<HomeShell>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int?>(homeTabRequestProvider, (prev, next) {
+      if (next == null) return;
+      setState(() => _index = next);
+      ref.read(homeTabRequestProvider.notifier).clear();
+    });
+
     ref.listen<GameState>(gameProvider, (prev, next) {
+      if (next.ready && (prev == null || !prev.ready)) {
+        unawaited(BindoraNotifications.instance.syncFromGame(next));
+      }
       final had = prev?.lastRip?.isNotEmpty == true;
       final has = next.lastRip?.isNotEmpty == true;
       if (!has) {
@@ -248,10 +286,16 @@ class _HomeShellState extends ConsumerState<HomeShell>
       if (msg != null &&
           msg != prev?.message &&
           msg.startsWith('While you were away:')) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          if (!mounted) return;
+          await BindoraHaptics.success();
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(msg)),
+            SnackBar(
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: CC.card,
+              content: Text(msg, style: const TextStyle(color: CC.ink)),
+            ),
           );
         });
       }
@@ -259,10 +303,30 @@ class _HomeShellState extends ConsumerState<HomeShell>
       final resume = next.engagement.pendingResumeMessage;
       if (resume != null &&
           resume != prev?.engagement.pendingResumeMessage) {
+        final toCollection = resume.contains('PSA') ||
+            resume.contains('slab') ||
+            resume.contains('Collection');
         WidgetsBinding.instance.addPostFrameCallback((_) async {
           if (!mounted) return;
+          await BindoraHaptics.claim();
+          if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(resume)),
+            SnackBar(
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: CC.card,
+              content: Text(resume, style: const TextStyle(color: CC.ink)),
+              action: toCollection
+                  ? SnackBarAction(
+                      label: 'Collection',
+                      textColor: CC.accent,
+                      onPressed: () {
+                        ref.read(homeTabRequestProvider.notifier).request(
+                              HomeTabs.collection,
+                            );
+                      },
+                    )
+                  : null,
+            ),
           );
           await ref.read(gameProvider.notifier).clearResumeMessage();
         });

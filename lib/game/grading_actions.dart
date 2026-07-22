@@ -13,6 +13,15 @@ mixin _GradingActions on _GameNotifierBase {
       state = state.copyWith(message: 'Already at PSA.');
       return;
     }
+    final perks = BusinessPerks.forLevel(state.player.businessLevel);
+    final inFlight = state.grading.where((g) => !g.revealed).length;
+    if (inFlight >= perks.maxConcurrentGrading) {
+      state = state.copyWith(
+        message:
+            'Grading queue full (${perks.maxConcurrentGrading}). Level up or wait for a slab.',
+      );
+      return;
+    }
     final fee = company.fee.toDouble();
     if (state.player.cash < fee) {
       state = state.copyWith(message: 'Need \$${fee.toStringAsFixed(0)} for grading.');
@@ -51,6 +60,7 @@ mixin _GradingActions on _GameNotifierBase {
   Future<int> catchUpGrading() async {
     await tickRealtimeGrading();
     var n = 0;
+    final grades = <double>[];
     final pending = state.grading
         .where((g) => g.ready && !g.revealed)
         .map((g) => g.id)
@@ -58,12 +68,26 @@ mixin _GradingActions on _GameNotifierBase {
     for (final id in pending) {
       await revealSlab(id);
       n++;
+      for (final g in state.grading) {
+        if (g.id == id && g.resultGrade != null) {
+          grades.add(g.resultGrade!);
+          break;
+        }
+      }
     }
     if (n > 0) {
       final prev = state.engagement.pendingResumeMessage;
-      final slabMsg = n == 1
-          ? 'A slab is ready — check Collection.'
-          : '$n slabs ready — check Collection.';
+      String slabMsg;
+      if (n == 1 && grades.isNotEmpty) {
+        final g = grades.first;
+        slabMsg = g >= 10
+            ? 'PSA 10 ready — check Collection.'
+            : 'PSA ${g.toStringAsFixed(g % 1 == 0 ? 0 : 1)} ready — check Collection.';
+      } else if (grades.any((g) => g >= 10)) {
+        slabMsg = '$n slabs ready · includes a PSA 10.';
+      } else {
+        slabMsg = '$n slabs ready — check Collection.';
+      }
       state = state.copyWith(
         engagement: state.engagement.copyWith(
           pendingResumeMessage:

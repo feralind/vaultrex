@@ -160,9 +160,9 @@ def resolve_remote(card: dict) -> str | None:
     b = bandai_url(number)
     if b and head_ok(b):
         return b
-    # keep existing scrydex / tcgplayer if present
+    # Keep existing remote CDN only — never reuse local desampled assets.
     existing = card.get("imageUrl") or ""
-    if existing:
+    if existing.startswith("http"):
         return existing
     pid = card.get("productId")
     if pid:
@@ -177,21 +177,35 @@ def main() -> None:
         action="store_true",
         help="Download + desample SAMPLE watermark into local webp assets",
     )
+    ap.add_argument(
+        "--gaps-only",
+        action="store_true",
+        help="Skip cards already on assets/card_art (preserve Drive AA / prior scrub)",
+    )
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--limit", type=int, default=0, help="Process only N cards (debug)")
     args = ap.parse_args()
 
     catalog = json.loads(CATALOG.read_text(encoding="utf-8-sig"))
     cards = catalog["cards"]
+    if args.gaps_only:
+        cards = [
+            c
+            for c in cards
+            if not str(c.get("imageUrl") or "").startswith("assets/card_art/")
+        ]
     if args.limit:
         cards = cards[: args.limit]
 
-    print(f"cards={len(cards)} scrub={args.scrub}")
+    print(f"cards={len(cards)} scrub={args.scrub} gaps_only={args.gaps_only}")
     if args.scrub:
         ART_DIR.mkdir(parents=True, exist_ok=True)
 
     def work(card: dict) -> tuple[str, str | None, str]:
         cid = card["id"]
+        existing = str(card.get("imageUrl") or "")
+        if args.gaps_only and existing.startswith("assets/card_art/"):
+            return cid, existing, "kept-local"
         remote = resolve_remote(card)
         if not remote:
             return cid, None, "no-url"
@@ -232,16 +246,13 @@ def main() -> None:
         url, status = results[c["id"]]
         by_status[status] = by_status.get(status, 0) + 1
         if url:
-            # Keep Scrydex in imageUrl if we only remapped remote — store limitless as primary
             c["imageUrl"] = url
-            if status == "scrubbed":
-                c["imageUrlSmall"] = url
-            elif url.endswith(".webp") and "limitless" in url:
-                c["imageUrlSmall"] = url
+            # Thumbs use same HD source (SAMPLE watermark OK — no desample blur).
+            c["imageUrlSmall"] = url
     catalog["imageSource"] = (
         "limitless+desample-local"
         if args.scrub
-        else "limitlesstcg CDN (Bandai SAMPLE on official renders)"
+        else "limitlesstcg CDN (Bandai SAMPLE watermark OK — no local desample)"
     )
     CATALOG.write_text(
         json.dumps(catalog, ensure_ascii=False, separators=(",", ":")),

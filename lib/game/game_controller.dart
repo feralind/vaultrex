@@ -378,7 +378,7 @@ class GameState {
         ready: true,
         catalogLoaded: true,
         franchiseId: 'riftbound',
-        player: const PlayerStats(cash: 350, candy: 25000),
+        player: const PlayerStats(cash: 300, candy: 0),
         collection: const [],
         unopened: const [],
         sealedListings: const [],
@@ -609,7 +609,7 @@ class GameNotifier extends _GameNotifierBase
           next = next.copyWith(sealedListings: _generateSealedShop(next.events));
         }
         if (next.activeSeason == null || !next.activeSeason!.isActive()) {
-          next = next.copyWith(activeSeason: Season.dragonHunt());
+          next = next.copyWith(activeSeason: Season.forNow());
         }
         next = next.copyWith(
           message: switch (id) {
@@ -618,6 +618,10 @@ class GameNotifier extends _GameNotifierBase
             'mtg' => 'Switched to Magic — your Magic market restored.',
             'onepiece' =>
               'Switched to One Piece — your One Piece market restored.',
+            'yugioh' =>
+              'Switched to Yu-Gi-Oh! — your Yu-Gi-Oh! market restored.',
+            'gundam' =>
+              'Switched to Gundam — your Gundam market restored.',
             _ => 'Switched to Riftbound — your Riftbound market restored.',
           },
         );
@@ -653,6 +657,8 @@ class GameNotifier extends _GameNotifierBase
         'pokemon' => 'Switched to Pokémon — sealed & singles stocked.',
         'mtg' => 'Switched to Magic — sealed & singles stocked.',
         'onepiece' => 'Switched to One Piece — sealed & singles stocked.',
+        'yugioh' => 'Switched to Yu-Gi-Oh! — sealed & singles stocked.',
+        'gundam' => 'Switched to Gundam — sealed & singles stocked.',
         _ => 'Switched to Riftbound — sealed & singles stocked.',
       },
       migrationNotice: null,
@@ -664,7 +670,7 @@ class GameNotifier extends _GameNotifierBase
       marketOffers: const [],
       lastPlayedAtMs: DateTime.now().millisecondsSinceEpoch,
       engagement: const EngagementState(),
-      activeSeason: Season.dragonHunt(),
+      activeSeason: Season.forNow(),
     );
   }
 
@@ -722,7 +728,7 @@ class GameNotifier extends _GameNotifierBase
         await catchUpOnlineSales(nowMs: now, fromMs: last);
         await catchUpGrading();
         if (state.activeSeason == null || !state.activeSeason!.isActive()) {
-          state = state.copyWith(activeSeason: Season.dragonHunt());
+          state = state.copyWith(activeSeason: Season.forNow());
         }
         await cleanupExpiredRentals();
         await _persist();
@@ -736,7 +742,7 @@ class GameNotifier extends _GameNotifierBase
       ready: true,
       catalogLoaded: true,
       franchiseId: gameId,
-      player: sharedWallet ?? const PlayerStats(cash: 350, candy: 25000),
+      player: sharedWallet ?? const PlayerStats(cash: 300, candy: 0),
       collection: const [],
       unopened: const [],
       sealedListings: _generateSealedShop(const []),
@@ -752,6 +758,8 @@ class GameNotifier extends _GameNotifierBase
         'pokemon' => 'Welcome to Bindora — Pokémon sealed & singles.',
         'mtg' => 'Welcome to Bindora — Magic sealed & singles.',
         'onepiece' => 'Welcome to Bindora — One Piece sealed & singles.',
+        'yugioh' => 'Welcome to Bindora — Yu-Gi-Oh! sealed & singles.',
+        'gundam' => 'Welcome to Bindora — Gundam sealed & singles.',
         _ => 'Welcome to Bindora — Riftbound sealed & singles.',
       },
       migrationNotice: null,
@@ -763,7 +771,7 @@ class GameNotifier extends _GameNotifierBase
       marketOffers: const [],
       lastPlayedAtMs: DateTime.now().millisecondsSinceEpoch,
       engagement: const EngagementState(),
-      activeSeason: Season.dragonHunt(),
+      activeSeason: Season.forNow(),
     );
     state = fresh;
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -1212,7 +1220,8 @@ class GameNotifier extends _GameNotifierBase
     return _sellerNames[_rng.nextInt(_sellerNames.length)];
   }
 
-  static const int _auctionPitTarget = 11;
+  int get _auctionPitSize =>
+      BusinessPerks.forLevel(state.player.businessLevel).auctionPitTarget;
 
   int _auctionEndsAtMs([int? nowMs]) {
     final now = nowMs ?? DateTime.now().millisecondsSinceEpoch;
@@ -1272,7 +1281,7 @@ class GameNotifier extends _GameNotifierBase
 
     final finished =
         auctions.where((a) => a.endsAtMs != null && a.endsAtMs! <= now).toList();
-    final underTarget = auctions.length < _auctionPitTarget;
+    final underTarget = auctions.length < _auctionPitSize;
     if (finished.isEmpty && !stamped && !underTarget) return;
 
     var player = state.player;
@@ -1296,10 +1305,10 @@ class GameNotifier extends _GameNotifierBase
           auctions.where((a) => a.endsAtMs == null || a.endsAtMs! > now).toList();
     }
 
-    if (auctions.length < _auctionPitTarget) {
+    if (auctions.length < _auctionPitSize) {
       auctions = [
         ...auctions,
-        ..._generateAuctions(_auctionPitTarget - auctions.length, now),
+        ..._generateAuctions(_auctionPitSize - auctions.length, now),
       ];
     }
 
@@ -1460,6 +1469,7 @@ class GameNotifier extends _GameNotifierBase
     List<OwnedCard> collection,
     List<OnlineListing> online,
     int soldCount,
+    double soldNet,
   }) _tryFillOnlineListings({
     required PlayerStats player,
     required List<OwnedCard> collection,
@@ -1471,6 +1481,7 @@ class GameNotifier extends _GameNotifierBase
     var coll = [...collection];
     var listings = [...online];
     final soldIds = <String>[];
+    var soldNet = 0.0;
     for (final listing
         in listings.where((l) => l.status == OnlineListingStatus.active)) {
       OwnedCard? card;
@@ -1501,11 +1512,13 @@ class GameNotifier extends _GameNotifierBase
           .clamp(0.0, 1.0);
       if (_rng.nextDouble() < chance) {
         final fee = listing.ask * Pricing.platformFeeRate(p);
+        final net = listing.ask - fee;
         p = p.copyWith(
-          cash: p.cash + listing.ask - fee,
+          cash: p.cash + net,
           cardsSold: p.cardsSold + 1,
           xp: p.xp + 3,
         );
+        soldNet += net;
         soldIds.add(listing.id);
         coll = coll
             .where((c) => c.instanceId != listing.ownedInstanceId)
@@ -1526,6 +1539,7 @@ class GameNotifier extends _GameNotifierBase
       collection: coll,
       online: listings,
       soldCount: soldIds.length,
+      soldNet: soldNet,
     );
   }
 
@@ -1587,6 +1601,7 @@ class GameNotifier extends _GameNotifierBase
     var collection = [...state.collection];
     var online = [...state.onlineListings];
     var soldTotal = 0;
+    var soldNet = 0.0;
     for (var i = 0; i < checks; i++) {
       if (online.isEmpty) break;
       final fill = _tryFillOnlineListings(
@@ -1600,6 +1615,17 @@ class GameNotifier extends _GameNotifierBase
       collection = fill.collection;
       online = fill.online;
       soldTotal += fill.soldCount;
+      soldNet += fill.soldNet;
+    }
+
+    String? resumeMsg = state.engagement.pendingResumeMessage;
+    if (soldTotal > 0) {
+      final cashBit = soldNet >= 0.01
+          ? ' · +\$${soldNet.toStringAsFixed(soldNet >= 10 ? 0 : 2)}'
+          : '';
+      final sales =
+          'While away: $soldTotal listing${soldTotal == 1 ? '' : 's'} sold$cashBit.';
+      resumeMsg = resumeMsg == null ? sales : '$sales · $resumeMsg';
     }
 
     state = state.copyWith(
@@ -1607,14 +1633,8 @@ class GameNotifier extends _GameNotifierBase
       collection: collection,
       onlineListings: online,
       lastPlayedAtMs: now,
-      message: soldTotal > 0
-          ? 'While you were away: $soldTotal listing(s) sold.'
-          : state.message,
       engagement: soldTotal > 0
-          ? state.engagement.copyWith(
-              pendingResumeMessage:
-                  'While away: $soldTotal listing(s) sold.',
-            )
+          ? state.engagement.copyWith(pendingResumeMessage: resumeMsg)
           : state.engagement,
     );
     if (soldTotal > 0) {
@@ -1692,10 +1712,10 @@ class GameNotifier extends _GameNotifierBase
       }
     }
     auctions = auctions.where((a) => a.endsInTurns > 0).toList();
-    if (auctions.length < _auctionPitTarget) {
+    if (auctions.length < _auctionPitSize) {
       auctions = [
         ...auctions,
-        ..._generateAuctions(_auctionPitTarget - auctions.length),
+        ..._generateAuctions(_auctionPitSize - auctions.length),
       ];
     }
 

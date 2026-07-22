@@ -150,8 +150,8 @@ class _CardInspectPageState extends State<CardInspectPage>
     final size = MediaQuery.sizeOf(context);
     final aspect = def.artAspectRatio;
 
-    final maxW = size.width - 32;
-    final maxH = size.height - pad.top - pad.bottom - 140;
+    final maxW = (size.width - 32) * 0.85;
+    final maxH = (size.height - pad.top - pad.bottom - 140) * 0.85;
     var cardW = maxW;
     var cardH = cardW / aspect;
     if (cardH > maxH) {
@@ -199,15 +199,7 @@ class _CardInspectPageState extends State<CardInspectPage>
       child: card,
     );
 
-    // Physical depth under the face, then perspective tilt.
-    final depth = InspectDepthShell(
-      tiltX: _tiltX,
-      tiltY: _tiltY,
-      slab: graded,
-      borderRadius: graded ? 6 : 14,
-      child: card,
-    );
-
+    // Flat face + perspective tilt — no extruded thickness / edge bevel.
     final tilted = Transform(
       alignment: Alignment.center,
       filterQuality: FilterQuality.medium,
@@ -219,7 +211,7 @@ class _CardInspectPageState extends State<CardInspectPage>
       child: Transform.scale(
         scale: _scale,
         filterQuality: FilterQuality.medium,
-        child: depth,
+        child: card,
       ),
     );
 
@@ -403,7 +395,7 @@ class _InspectMeta extends StatelessWidget {
             Text(
               grade != null
                   ? 'Drag to tilt the slab · pinch zoom · double-tap reset'
-                  : 'Drag to tilt · watch the edge · pinch zoom · double-tap reset',
+                  : 'Drag to tilt · pinch zoom · double-tap reset',
               style: AppText.jakarta(
                 color: Colors.white38,
                 fontSize: 11,

@@ -53,13 +53,13 @@ abstract final class StartupPreload {
       );
     }
 
-    report(0.02, 'Starting…');
+    report(0.02, 'Warming Instapacks…');
 
     final id = GameCatalog.normalizeId(
       gameId ?? await OnboardingStore.selectedGame(),
     );
 
-    report(0.06, 'Loading catalog…');
+    report(0.06, 'Warming Instapacks…');
     GameCatalog catalog;
     try {
       catalog = await GameCatalog.load(id);
@@ -75,9 +75,9 @@ abstract final class StartupPreload {
     final cards = _filterUrls(_cardImageUrls(catalog, id));
 
     final phases = <({String status, List<String> urls, double weight})>[
-      (status: 'Loading chrome…', urls: critical, weight: 0.12),
-      (status: 'Loading packs…', urls: packs, weight: 0.28),
-      (status: 'Loading cards…', urls: cards, weight: 0.60),
+      (status: 'Warming Instapacks…', urls: critical, weight: 0.12),
+      (status: 'Warming packs…', urls: packs, weight: 0.28),
+      (status: 'Warming art…', urls: cards, weight: 0.60),
     ];
 
     final totalWeight =
@@ -143,6 +143,7 @@ abstract final class StartupPreload {
       'assets/card_backs/pokemon_back.png',
       'assets/card_backs/mtg_back.png',
       'assets/card_backs/onepiece_back.png',
+      'assets/card_backs/yugioh_back.png',
       ScrubPeelStage.sealedAsset,
       ScrubPeelStage.sealedFallbackPack,
       'assets/instapacks/border_left.png',
@@ -156,10 +157,34 @@ abstract final class StartupPreload {
       if (_isRasterPath(logo)) out.add(logo);
     }
 
-    // All featured pack arts (small set; switching franchise stays warm).
-    for (final folder in const ['riftbound', 'pokemon', 'mtg', 'onepiece']) {
-      for (final tier in FeaturedPackTier.values) {
+    // Featured pack arts. Millennium/Divine are Yu-Gi-Oh–only tiers.
+    const standardTiers = [
+      FeaturedPackTier.common,
+      FeaturedPackTier.uncommon,
+      FeaturedPackTier.rare,
+      FeaturedPackTier.epic,
+      FeaturedPackTier.legendary,
+      FeaturedPackTier.mythic,
+    ];
+    const yugiohOnlyTiers = [
+      FeaturedPackTier.millennium,
+      FeaturedPackTier.divine,
+    ];
+    for (final folder in const [
+      'riftbound',
+      'pokemon',
+      'mtg',
+      'onepiece',
+      'yugioh',
+      'gundam',
+    ]) {
+      for (final tier in standardTiers) {
         out.add('assets/featured_packs/$folder/pack_${tier.name}.png');
+      }
+      if (folder == 'yugioh') {
+        for (final tier in yugiohOnlyTiers) {
+          out.add('assets/featured_packs/$folder/pack_${tier.name}.png');
+        }
       }
     }
 

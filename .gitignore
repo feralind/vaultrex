@@ -47,4 +47,8 @@ app.*.map.json
 # Reference / scrape tooling (local only)
 tools/**/node_modules/
 tools/feebay_ref/
+tools/raw_yugioh/
+tools/raw_onepiece/
+tools/raw_mtg/
+tools/raw_pokemon/
 ref_frames/

@@ -112,6 +112,10 @@ class _PackDetailSheetState extends ConsumerState<_PackDetailSheet> {
                           'mtg' => 'Digital Instapack · real Magic pulls',
                           'onepiece' =>
                             'Digital Instapack · real One Piece pulls',
+                          'yugioh' =>
+                            'Digital Instapack · real Yu-Gi-Oh! pulls',
+                          'gundam' =>
+                            'Digital Instapack · real Gundam pulls',
                           _ => 'Digital Instapack · real Riftbound pulls',
                         },
                   textAlign: TextAlign.center,

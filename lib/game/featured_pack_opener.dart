@@ -9,6 +9,10 @@ import '../models/models.dart';
 
 /// Weighted Featured Pack opener — fixed small count; last card is the highlight
 /// (highest EV draw from that pack’s pool).
+///
+/// Dopamine loop:
+/// - Fillers: frequent small foil / rare+ wins
+/// - Highlight: EV-weighted + soft pity, near-miss band, hard pity jackpot
 class FeaturedPackOpener {
   FeaturedPackOpener(this.catalog, {math.Random? rng})
       : _rng = rng ?? math.Random();
@@ -17,30 +21,55 @@ class FeaturedPackOpener {
   final math.Random _rng;
   final _uuid = const Uuid();
 
-  List<OwnedCard> open(FeaturedPackDef pack, {double pityBoost = 1.0}) {
+  List<OwnedCard> open(
+    FeaturedPackDef pack, {
+    double pityBoost = 1.0,
+    int dryCount = 0,
+  }) {
     final pool = pack.poolSelector(catalog.cards);
     if (pool.isEmpty) {
-      final fallback = catalog.cards
-          .where((c) => c.marketPrice > 0 && c.rarity != Rarity.token)
-          .toList();
-      if (fallback.isEmpty) return const [];
-      return List.generate(
-        pack.cardCount,
-        (_) => _instantiate(fallback[_rng.nextInt(fallback.length)]),
-      );
+      // Do not fall back to franchise-wide scrapes — keep set/theme locks honest.
+      return const [];
     }
 
     final pulls = <OwnedCard>[];
     final fillers = <CardDef>[];
+    final fillerPool = _priceScaledFillerPool(pool, pack.priceUsd);
     for (var i = 0; i < pack.cardCount - 1; i++) {
-      final def = _weightedPick(pool);
+      final def = _weightedPick(fillerPool);
       fillers.add(def);
-      pulls.add(_instantiate(def));
+      pulls.add(_instantiate(def, entryPack: pack.priceUsd <= 10));
     }
 
-    final highlight = _pickHighlight(pool, fillers, pityBoost: pityBoost);
+    final highlight = _pickHighlight(
+      pool,
+      fillers,
+      pityBoost: pityBoost,
+      dryCount: dryCount,
+      packPriceUsd: pack.priceUsd,
+    );
     pulls.add(_instantiate(highlight, forceFoil: true));
     return pulls;
+  }
+
+  /// Whale packs bias fillers upward so the whole rip feels paid-for.
+  List<({CardDef card, double weight})> _priceScaledFillerPool(
+    List<({CardDef card, double weight})> pool,
+    double packPriceUsd,
+  ) {
+    if (packPriceUsd < 80) return pool;
+    // $80 → mild, $500 → strong preference for cards near pack value.
+    final lean = (packPriceUsd / 500).clamp(0.15, 1.0);
+    return [
+      for (final e in pool)
+        (
+          card: e.card,
+          weight: e.weight *
+              (0.55 +
+                  lean *
+                      (e.card.marketPrice / packPriceUsd).clamp(0.15, 2.2)),
+        ),
+    ];
   }
 
   CardDef _weightedPick(List<({CardDef card, double weight})> pool) {
@@ -57,21 +86,77 @@ class FeaturedPackOpener {
     return pool.last.card;
   }
 
-  /// Highest-EV weighted pick: reweight by marketPrice^1.35 so expensive chases
-  /// dominate the last slot without making every rip identical.
+  /// Hit-rate / EV curve scales with pack price (entry flat → whale steep).
+  static double highlightEvExponent(double packPriceUsd) {
+    if (packPriceUsd <= 10) return 1.18;
+    if (packPriceUsd <= 50) return 1.35;
+    if (packPriceUsd <= 130) return 1.42;
+    if (packPriceUsd <= 260) return 1.52;
+    if (packPriceUsd <= 400) return 1.60;
+    return 1.72; // ~$500 Divine: apex cards dominate highlight
+  }
+
+  /// Chance a premium pack floors the highlight into a "can print" band.
+  static double premiumFloorChance(double packPriceUsd) {
+    if (packPriceUsd < 100) return 0;
+    // $130 → ~18%, $250 → ~26%, $350 → ~32%, $500 → ~40%
+    return (0.10 + (packPriceUsd / 500) * 0.30).clamp(0.10, 0.42);
+  }
+
+  /// Highest-EV weighted pick with soft pity, near-miss, hard pity,
+  /// and price-scaled hit rate.
   CardDef _pickHighlight(
     List<({CardDef card, double weight})> pool,
     List<CardDef> already, {
     double pityBoost = 1.0,
+    int dryCount = 0,
+    double packPriceUsd = 10,
   }) {
     final ranked = [...pool]
       ..sort((a, b) => b.card.marketPrice.compareTo(a.card.marketPrice));
-    final topN = ranked.take(math.min(24, ranked.length)).toList();
+    // Tighter cream on whale packs = nicer hit rate without guaranteeing.
+    final topCap = packPriceUsd >= 350
+        ? 12
+        : packPriceUsd >= 150
+            ? 16
+            : 24;
+    final topN = ranked.take(math.min(topCap, ranked.length)).toList();
+
+    // Hard pity: guaranteed top-band jackpot (top 3 by market).
+    if (dryCount >= kFeaturedHardPityDry && topN.isNotEmpty) {
+      final band = topN.take(math.min(3, topN.length)).toList();
+      return band[_rng.nextInt(band.length)].card;
+    }
+
+    // Premium floor: paid packs sometimes land a highlight worth ripping for.
+    final floorChance = premiumFloorChance(packPriceUsd);
+    if (floorChance > 0 && _rng.nextDouble() < floorChance) {
+      final minFair = packPriceUsd * 0.42; // ~breakeven-ish after exchange
+      final floorBand = topN
+          .where((e) => e.card.marketPrice >= minFair)
+          .toList();
+      final band = floorBand.isNotEmpty
+          ? floorBand
+          : topN.take(math.min(5, topN.length)).toList();
+      return band[_rng.nextInt(band.length)].card;
+    }
+
+    // Near-miss: land just under the absolute top — dopamine without clearing pity.
+    final nearChance = packPriceUsd >= 200 ? 0.28 : 0.22;
+    if (dryCount >= 5 &&
+        topN.length >= 6 &&
+        _rng.nextDouble() < nearChance) {
+      final near = topN.sublist(2, math.min(8, topN.length));
+      return near[_rng.nextInt(near.length)].card;
+    }
+
+    final exp = highlightEvExponent(packPriceUsd);
+
     final boosted = <({CardDef card, double weight})>[];
     for (final e in topN) {
       final novelty = already.any((c) => c.id == e.card.id) ? 0.55 : 1.0;
       final ev =
-          math.pow(e.card.marketPrice.clamp(0.5, 5000), 1.35).toDouble();
+          math.pow(e.card.marketPrice.clamp(0.5, 5000), exp).toDouble();
       boosted.add((
         card: e.card,
         weight: e.weight * ev * novelty * pityBoost,
@@ -79,11 +164,17 @@ class FeaturedPackOpener {
     }
     return _weightedPick(boosted);
   }
-
-  OwnedCard _instantiate(CardDef def, {bool forceFoil = false}) {
+  OwnedCard _instantiate(
+    CardDef def, {
+    bool forceFoil = false,
+    bool entryPack = false,
+  }) {
+    // Entry packs print a few more foils so rips feel juicy without jackpots.
+    final rareFoil = entryPack ? 0.68 : 0.58;
+    final baseFoil = entryPack ? 0.18 : 0.14;
     final foil = forceFoil ||
-        (def.rarity.isRarePlus && _rng.nextDouble() < 0.55) ||
-        _rng.nextDouble() < 0.12;
+        (def.rarity.isRarePlus && _rng.nextDouble() < rareFoil) ||
+        _rng.nextDouble() < baseFoil;
     final centeringLR = _gauss(50, 8).clamp(5, 95);
     final centeringTB = _gauss(50, 8).clamp(5, 95);
     final defects = <FactoryDefect>[];

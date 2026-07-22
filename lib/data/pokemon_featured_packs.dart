@@ -386,10 +386,10 @@ List<({CardDef card, double weight})> _kantoFriendsPool(List<CardDef> all) {
   });
 }
 
-/// Paldea + water-leaning mid pool.
+/// Paldea Evolved water-leaning mid pool (set-locked).
 List<({CardDef card, double weight})> _roaringWatersPool(List<CardDef> all) {
   return _weight(
-    all.where((c) => _inSets(c, const {'PAL', 'TWM', 'MEW'})),
+    all.where((c) => _inSets(c, const {'PAL', 'TWM'})),
     weightOf: (c) {
       final water = (c.cardType ?? '').toLowerCase().contains('water');
       final boost = water ? 1.35 : 1.0;
@@ -450,26 +450,30 @@ List<({CardDef card, double weight})> _mewChasePool(List<CardDef> all) {
   });
 }
 
-/// Cross-set modern SIRs — RareCandy Modern Grails shape.
+/// Cross-set modern SIRs — now locked to SV chase sets (no franchise scrape).
 List<({CardDef card, double weight})> _modernGrailsPool(List<CardDef> all) {
-  return _weight(all, weightOf: (c) {
-    if (c.rarity != Rarity.epic && c.rarity != Rarity.rare) return 0;
-    if (c.rarity == Rarity.rare && c.marketPrice >= 25) return 1.5;
-    if (c.marketPrice < 25) return 0;
-    if (c.marketPrice < 80) return 4;
-    if (c.marketPrice < 300) return 6;
-    if (c.marketPrice < 800) return 3.5;
-    return 1.8;
-  });
+  return _weight(
+    all.where((c) => _inSets(c, const {'MEW', 'TWM', 'SSP', 'PRE', 'PAL', 'OBF'})),
+    weightOf: (c) {
+      if (c.rarity != Rarity.epic && c.rarity != Rarity.rare) return 0;
+      if (c.rarity == Rarity.rare && c.marketPrice >= 25) return 1.5;
+      if (c.marketPrice < 25) return 0;
+      if (c.marketPrice < 80) return 4;
+      if (c.marketPrice < 300) return 6;
+      if (c.marketPrice < 800) return 3.5;
+      return 1.8;
+    },
+  );
 }
 
-/// Prismatic Evolutions–heavy mythic pool.
+/// Prismatic Evolutions–heavy mythic pool (named sets only).
 List<({CardDef card, double weight})> _mythicalGrailsPool(List<CardDef> all) {
   return _weight(
-    all.where((c) => _inSets(c, const {'PRE', 'MEW', 'TWM', 'SSP'})),
+    all.where((c) => _inSets(c, const {'PRE', 'MEW'})),
     weightOf: (c) {
       final preBoost = c.setCode == 'PRE' ? 1.6 : 1.0;
-      if (c.rarity != Rarity.epic && !(c.rarity == Rarity.rare && c.marketPrice >= 40)) {
+      if (c.rarity != Rarity.epic &&
+          !(c.rarity == Rarity.rare && c.marketPrice >= 40)) {
         return 0;
       }
       if (c.marketPrice < 80) return 0.8 * preBoost;

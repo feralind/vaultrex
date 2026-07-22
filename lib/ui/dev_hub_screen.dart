@@ -82,6 +82,7 @@ class _DevHubScreenState extends State<DevHubScreen>
       'assets/card_backs/pokemon_back.png',
       'assets/card_backs/mtg_back.png',
       'assets/card_backs/onepiece_back.png',
+      'assets/card_backs/yugioh_back.png',
       'assets/logos/bindora.png',
       'assets/logos/riftbound.png',
       'assets/logos/mtg.png',

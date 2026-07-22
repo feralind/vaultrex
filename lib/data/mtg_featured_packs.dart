@@ -273,28 +273,38 @@ List<({CardDef card, double weight})> _weight(
   return out;
 }
 
+bool _inSets(CardDef c, Set<String> codes) => codes.contains(c.setCode);
+
 List<({CardDef card, double weight})> _starterPool(List<CardDef> all) {
-  return _weight(all, weightOf: (c) {
-    if (c.rarity == Rarity.common) return 8;
-    if (c.rarity == Rarity.uncommon && c.marketPrice < 4) return 5;
-    if (c.rarity == Rarity.rare && c.marketPrice < 25) return 1.2;
-    if (c.rarity == Rarity.epic && c.marketPrice < 50) return 0.25;
-    return 0;
-  });
+  // Foundations + Bloomburrow (blurb).
+  return _weight(
+    all.where((c) => _inSets(c, const {'FDN', 'BLB'})),
+    weightOf: (c) {
+      if (c.rarity == Rarity.common) return 8;
+      if (c.rarity == Rarity.uncommon && c.marketPrice < 4) return 5;
+      if (c.rarity == Rarity.rare && c.marketPrice < 25) return 1.2;
+      if (c.rarity == Rarity.epic && c.marketPrice < 50) return 0.25;
+      return 0;
+    },
+  );
 }
 
 List<({CardDef card, double weight})> _frontierPool(List<CardDef> all) {
-  return _weight(all, weightOf: (c) {
-    if (c.rarity == Rarity.common) return 2;
-    if (c.rarity == Rarity.uncommon) return 6;
-    if (c.rarity == Rarity.rare) return 5;
-    if (c.rarity == Rarity.epic && c.marketPrice < 120) return 1.0;
-    return 0;
-  });
+  // Outlaws of Thunder Junction + Aetherdrift.
+  return _weight(
+    all.where((c) => _inSets(c, const {'OTJ', 'DFT'})),
+    weightOf: (c) {
+      if (c.rarity == Rarity.common) return 2;
+      if (c.rarity == Rarity.uncommon) return 6;
+      if (c.rarity == Rarity.rare) return 5;
+      if (c.rarity == Rarity.epic && c.marketPrice < 120) return 1.0;
+      return 0;
+    },
+  );
 }
 
 List<({CardDef card, double weight})> _horizonsPool(List<CardDef> all) {
-  return _weight(all, weightOf: (c) {
+  return _weight(all.where((c) => c.setCode == 'MH3'), weightOf: (c) {
     if (c.rarity == Rarity.uncommon && c.marketPrice >= 1) return 2;
     if (c.rarity == Rarity.rare) return 7;
     if (c.rarity == Rarity.epic) return 5;
@@ -304,7 +314,7 @@ List<({CardDef card, double weight})> _horizonsPool(List<CardDef> all) {
 }
 
 List<({CardDef card, double weight})> _eldraziPool(List<CardDef> all) {
-  return _weight(all, weightOf: (c) {
+  return _weight(all.where((c) => c.setCode == 'MH3'), weightOf: (c) {
     if (c.rarity == Rarity.rare && c.marketPrice >= 5) return 2;
     if (c.rarity == Rarity.epic) {
       return c.marketPrice < 300 ? 6 : 2.5;
@@ -315,23 +325,29 @@ List<({CardDef card, double weight})> _eldraziPool(List<CardDef> all) {
 }
 
 List<({CardDef card, double weight})> _serializedPool(List<CardDef> all) {
-  return _weight(all, weightOf: (c) {
-    if (c.rarity == Rarity.epic && c.marketPrice >= 25) return 3;
-    if (c.name.contains('Serial') || c.name.contains('Raised Foil')) {
-      return c.marketPrice >= 400 ? 5 : 2.5;
-    }
-    if (c.rarity == Rarity.epic) return 2;
-    return 0;
-  });
+  return _weight(
+    all.where((c) => _inSets(c, const {'MH3', 'DSK'})),
+    weightOf: (c) {
+      if (c.rarity == Rarity.epic && c.marketPrice >= 25) return 3;
+      if (c.name.contains('Serial') || c.name.contains('Raised Foil')) {
+        return c.marketPrice >= 400 ? 5 : 2.5;
+      }
+      if (c.rarity == Rarity.epic) return 2;
+      return 0;
+    },
+  );
 }
 
 List<({CardDef card, double weight})> _planarPool(List<CardDef> all) {
-  return _weight(all, weightOf: (c) {
-    if (c.name.contains('Serial')) {
-      return c.marketPrice >= 1000 ? 7 : 4;
-    }
-    if (c.rarity == Rarity.epic && c.marketPrice >= 80) return 3;
-    if (c.marketPrice >= 150) return 2;
-    return 0;
-  });
+  return _weight(
+    all.where((c) => _inSets(c, const {'DSK', 'MH3'})),
+    weightOf: (c) {
+      if (c.name.contains('Serial')) {
+        return c.marketPrice >= 1000 ? 7 : 4;
+      }
+      if (c.rarity == Rarity.epic && c.marketPrice >= 80) return 3;
+      if (c.marketPrice >= 150) return 2;
+      return 0;
+    },
+  );
 }

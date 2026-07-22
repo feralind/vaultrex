@@ -57,6 +57,8 @@ String cardBackAssetForFranchise(String franchiseId) {
     'pokemon' => 'assets/card_backs/pokemon_back.png',
     'mtg' => 'assets/card_backs/mtg_back.png',
     'onepiece' => 'assets/card_backs/onepiece_back.png',
+    'yugioh' => 'assets/card_backs/yugioh_back.png',
+    'gundam' => 'assets/card_backs/gundam_back.png',
     _ => 'assets/card_backs/riftbound_back.png',
   };
 }
@@ -155,7 +157,19 @@ Future<void> showPackTheaterV2(
   );
 
   if (context.mounted) {
-    await showOpenAnotherSheet(context, ref);
+    var hadChase = false;
+    for (final o in pulls) {
+      final def = notifier.cardById(o.cardId);
+      if (isChaseHit(
+        fair: notifier.fairFor(o),
+        foil: o.foil,
+        rarePlus: def?.rarity.isRarePlus ?? false,
+      )) {
+        hadChase = true;
+        break;
+      }
+    }
+    await showOpenAnotherSheet(context, ref, hadChase: hadChase);
   }
 }
 
@@ -194,7 +208,11 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
   int _presentGen = 0;
   bool _sessionBusy = false;
   bool _fastRip = false;
+  bool _climax = false;
+  String? _keepBanner;
+  RipPresentationTier _ripTier = RipPresentationTier.standard;
   Future<void>? _inFlightDecide;
+  double _lastTearHaptic = -1;
 
   late final AnimationController _peelOut;
   late final AnimationController _flip;
@@ -264,6 +282,31 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
     if (_phase != _RipPhase.sealed || _sessionBusy) return;
     BindoraHaptics.packOpen();
     unawaited(BindoraSounds.packOpen());
+    final notifier = ref.read(gameProvider.notifier);
+    var anyChase = false;
+    var anyRarePlus = false;
+    var maxFair = 0.0;
+    for (final o in widget.pulls) {
+      final def = notifier.cardById(o.cardId);
+      final fair = notifier.fairFor(o);
+      if (fair > maxFair) maxFair = fair;
+      if (def?.rarity.isRarePlus == true) anyRarePlus = true;
+      if (isChaseHit(
+        fair: fair,
+        foil: o.foil,
+        rarePlus: def?.rarity.isRarePlus ?? false,
+      )) {
+        anyChase = true;
+      }
+    }
+    final tier = ripTierForPulls(
+      anyChase: anyChase,
+      anyRarePlus: anyRarePlus,
+      maxFair: maxFair,
+    );
+    _ripTier = tier;
+    _peelOut.duration = peelDurationForTier(tier, fast: _fastRip);
+    _lastTearHaptic = -1;
     setState(() {
       _sessionBusy = true;
       _phase = _RipPhase.peeling;
@@ -293,8 +336,10 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
       _cardIndex = 0;
       _flipped = false;
       _deciding = false;
+      _climax = false;
       _glow = false;
       _swipeDx = 0;
+      _keepBanner = null;
       _sessionBusy = false;
     });
     if (!mounted || _phase != _RipPhase.reveal) return;
@@ -305,6 +350,10 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
     if (!mounted || _phase != _RipPhase.peeling) return;
     final t = Curves.easeInOutCubic.transform(_peelOut.value);
     setState(() => _tear = t);
+    if (t >= 0.8 && _lastTearHaptic < 0.8) {
+      _lastTearHaptic = t;
+      unawaited(BindoraHaptics.tearProgress(t));
+    }
   }
 
   Future<void> _presentCard() async {
@@ -313,33 +362,61 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
     setState(() {
       _flipped = false;
       _deciding = false;
+      _climax = false;
       _glow = false;
       _swipeDx = 0;
+      _keepBanner = null;
       _sessionBusy = true;
     });
-    final holdMs = _fastRip ? 0 : 220;
+    final owned = _current;
+    final def = ref.read(gameProvider.notifier).cardById(owned.cardId);
+    final fair = ref.read(gameProvider.notifier).fairFor(owned);
+    final chase = isChaseHit(
+      fair: fair,
+      foil: owned.foil,
+      rarePlus: def?.rarity.isRarePlus ?? false,
+    );
+    final good = _isGood(owned, def, fair);
+    final holdMs = _fastRip
+        ? 0
+        : (chase
+            ? 520
+            : good
+                ? 280
+                : (_ripTier == RipPresentationTier.quiet ? 90 : 160));
     if (holdMs > 0) {
       await Future<void>.delayed(Duration(milliseconds: holdMs));
     }
     if (!mounted || gen != _presentGen || _phase != _RipPhase.reveal) return;
     BindoraHaptics.flipStart();
     unawaited(BindoraSounds.flip());
+    if (chase && !_fastRip) {
+      _flip.duration = const Duration(milliseconds: 620);
+    } else if (!good && !_fastRip) {
+      _flip.duration = const Duration(milliseconds: 220);
+    }
     await _flip.forward(from: 0);
+    _flip.duration = Duration(milliseconds: _fastRip ? 180 : 340);
     if (!mounted || gen != _presentGen) return;
     await _finishPresent(gen);
   }
 
   Future<void> _finishPresent(int gen) async {
     if (!mounted || gen != _presentGen || _phase != _RipPhase.reveal) return;
-    if (_flipped || _deciding) return;
+    if (_flipped || _deciding || _climax) return;
     final notifier = ref.read(gameProvider.notifier);
     final owned = _current;
     final def = notifier.cardById(owned.cardId);
     final fair = notifier.fairFor(owned);
     final good = _isGood(owned, def, fair);
-    if (good) {
+    final chase = isChaseHit(
+      fair: fair,
+      foil: owned.foil,
+      rarePlus: def?.rarity.isRarePlus ?? false,
+    );
+    if (good || chase) {
       final tier = hapticTierFor(
-        isChase: good && fair >= 8,
+        isChase: chase,
         foil: owned.foil,
         rarePlus: def?.rarity.isRarePlus ?? false,
       );
@@ -350,6 +427,40 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
     } else {
       BindoraHaptics.peelTick();
     }
+
+    // Commons fast-path: brief face-up then auto-exchange.
+    if (!good && !chase) {
+      setState(() {
+        _flipped = true;
+        _sessionBusy = false;
+      });
+      await Future<void>.delayed(
+        Duration(milliseconds: _fastRip ? 80 : 320),
+      );
+      if (!mounted || gen != _presentGen || _phase != _RipPhase.reveal) return;
+      if (_deciding || _cardIndex >= widget.pulls.length) return;
+      if (_current.instanceId != owned.instanceId) return;
+      await _decide(keep: false);
+      return;
+    }
+
+    // Chase climax beat — linger with NEW stamp before decide.
+    if (chase && !_fastRip) {
+      setState(() {
+        _flipped = true;
+        _climax = true;
+        _sessionBusy = false;
+      });
+      unawaited(BindoraSounds.gemClink());
+      await Future<void>.delayed(const Duration(milliseconds: 900));
+      if (!mounted || gen != _presentGen || _phase != _RipPhase.reveal) return;
+      setState(() {
+        _climax = false;
+        _deciding = true;
+      });
+      return;
+    }
+
     setState(() {
       _flipped = true;
       _deciding = true;
@@ -383,10 +494,23 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
       if (keep) {
         unawaited(BindoraHaptics.swipeKeep());
         unawaited(BindoraSounds.swipeKeep());
-        if (mounted) setState(() => _keptCount += 1);
+        if (mounted) {
+          final msg = ref.read(gameProvider).message;
+          setState(() {
+            _keptCount += 1;
+            if (msg != null &&
+                (msg.startsWith('Dupe') ||
+                    msg.startsWith('Kept') ||
+                    msg.contains('away') ||
+                    msg.contains('complete'))) {
+              _keepBanner = msg;
+            }
+          });
+        }
       } else {
         unawaited(BindoraHaptics.swipeSell());
         unawaited(BindoraSounds.swipeSell());
+        if (mounted) setState(() => _keepBanner = null);
       }
 
       if (!mounted) return;
@@ -527,6 +651,7 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
                       glowAnim: _glowPulse,
                       swipeDx: _swipeDx,
                       deciding: _deciding,
+                      climax: _climax,
                       onTapSkip: _skipFlip,
                       onHorizontalDragUpdate: (d) {
                         if (!_deciding) return;
@@ -562,11 +687,37 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
                       },
                     ),
             ),
-            if (inReveal && _deciding)
+            if (inReveal && (_deciding || _climax))
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
                 child: Column(
                   children: [
+                    if (_keepBanner != null) ...[
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: CC.accent.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: CC.accent.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Text(
+                          _keepBanner!,
+                          textAlign: TextAlign.center,
+                          style: AppText.jakarta(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            color: CC.accent,
+                          ),
+                        ),
+                      ),
+                    ],
                     Align(
                       alignment: Alignment.centerRight,
                       child: Padding(
@@ -574,7 +725,21 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
                         child: CandyBalance(candyBal),
                       ),
                     ),
-                    Row(
+                    if (_climax)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          'CHASE HIT',
+                          style: AppText.jakarta(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                            letterSpacing: 2,
+                            color: CC.candy,
+                          ),
+                        ),
+                      )
+                    else
+                      Row(
                   children: [
                     Expanded(
                       child: SizedBox(
@@ -651,6 +816,8 @@ class _CardBack extends StatelessWidget {
   static const pokemonPath = 'assets/card_backs/pokemon_back.png';
   static const mtgPath = 'assets/card_backs/mtg_back.png';
   static const onepiecePath = 'assets/card_backs/onepiece_back.png';
+  static const yugiohPath = 'assets/card_backs/yugioh_back.png';
+  static const gundamPath = 'assets/card_backs/gundam_back.png';
 
   final double width;
   final double height;
@@ -661,10 +828,13 @@ class _CardBack extends StatelessWidget {
     final isPokemon = franchise == 'pokemon';
     final isMtg = franchise == 'mtg';
     final isOnePiece = franchise == 'onepiece';
+    final isYugioh = franchise == 'yugioh';
     final rawPath = switch (franchise) {
       'pokemon' => pokemonPath,
       'mtg' => mtgPath,
       'onepiece' => onepiecePath,
+      'yugioh' => yugiohPath,
+      'gundam' => gundamPath,
       _ => riftboundPath,
     };
 
@@ -700,6 +870,7 @@ class _CardBack extends StatelessWidget {
                         isPokemon: isPokemon,
                         isMtg: isMtg,
                         isOnePiece: isOnePiece,
+                        isYugioh: isYugioh,
                         width: width,
                       ),
                     )
@@ -712,6 +883,7 @@ class _CardBack extends StatelessWidget {
                         isPokemon: isPokemon,
                         isMtg: isMtg,
                         isOnePiece: isOnePiece,
+                        isYugioh: isYugioh,
                         width: width,
                       ),
                     ),
@@ -726,6 +898,7 @@ class _CardBack extends StatelessWidget {
     required bool isPokemon,
     required bool isMtg,
     required bool isOnePiece,
+    required bool isYugioh,
     required double width,
   }) {
     return isPokemon
@@ -748,14 +921,18 @@ class _CardBack extends StatelessWidget {
                 ? const Color(0xFF1A0A05)
                 : isOnePiece
                     ? const Color(0xFF0A1628)
-                    : const Color(0xFF0C1428),
+                    : isYugioh
+                        ? const Color(0xFF1A1028)
+                        : const Color(0xFF0C1428),
             child: Center(
               child: Image.asset(
                 isMtg
                     ? 'assets/logos/mtg.png'
                     : isOnePiece
                         ? 'assets/logos/onepiece.png'
-                        : 'assets/logos/riftbound.png',
+                        : isYugioh
+                            ? 'assets/logos/yugioh.png'
+                            : 'assets/logos/riftbound.png',
                 width: width * 0.55,
                 height: width * 0.28,
                 fit: BoxFit.contain,
@@ -802,6 +979,7 @@ class _RevealStage extends StatelessWidget {
     required this.deciding,
     required this.onHorizontalDragUpdate,
     required this.onHorizontalDragEnd,
+    this.climax = false,
     this.onTapSkip,
   });
 
@@ -815,6 +993,7 @@ class _RevealStage extends StatelessWidget {
   final Animation<double> glowAnim;
   final double swipeDx;
   final bool deciding;
+  final bool climax;
   final VoidCallback? onTapSkip;
   final void Function(DragUpdateDetails) onHorizontalDragUpdate;
   final void Function(DragEndDetails) onHorizontalDragEnd;
@@ -874,7 +1053,9 @@ class _RevealStage extends StatelessWidget {
                           radius: 1.0,
                           colors: [
                             ambient.withValues(
-                              alpha: showFront ? 0.38 + pulse * 0.2 : 0.18,
+                              alpha: showFront
+                                  ? 0.38 + pulse * 0.2 + (climax ? 0.18 : 0)
+                                  : 0.18,
                             ),
                             CC.bg.withValues(alpha: 0.25),
                             CC.bg,
@@ -884,6 +1065,39 @@ class _RevealStage extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (climax && showFront)
+                    Positioned(
+                      top: 18,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: CC.candy,
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: [
+                              BoxShadow(
+                                color: CC.candy.withValues(alpha: 0.45),
+                                blurRadius: 16,
+                              ),
+                            ],
+                          ),
+                          child: Text(
+                            'NEW',
+                            style: AppText.jakarta(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 18,
+                              letterSpacing: 3,
+                              color: Colors.black,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
                     child: Column(
@@ -994,6 +1208,16 @@ class _RevealStage extends StatelessWidget {
                                               ? CC.candy
                                               : CC.inkMuted,
                                       fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ] else if (climax) ...[
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    'Soak it in…',
+                                    style: AppText.jakarta(
+                                      color: CC.candy,
+                                      fontWeight: FontWeight.w700,
                                       fontSize: 13,
                                     ),
                                   ),

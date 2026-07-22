@@ -68,6 +68,18 @@ HapticTier hapticTierFor({
   return HapticTier.common;
 }
 
+/// Theater / SFX “nice pull” — frequent dopamine, not pity-clearing.
+/// Featured pity uses [isFeaturedPityChase] (tier-relative) instead.
+bool isChaseHit({
+  required double fair,
+  required bool foil,
+  required bool rarePlus,
+}) {
+  if (fair >= 8) return true;
+  if (rarePlus && foil) return true;
+  return false;
+}
+
 /// Rare Candy–style SFX pool (low-latency overlapping shorts).
 ///
 /// Pack / flip / flick / click cues use the imported MP3 set under [assets/sfx].

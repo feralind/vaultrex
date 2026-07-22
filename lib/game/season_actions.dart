@@ -1,11 +1,11 @@
 part of 'game_controller.dart';
 
 mixin _SeasonActions on _GameNotifierBase {
-  /// Ensure an active season exists (seed Dragon Hunt when missing/expired).
+  /// Ensure an active season exists (rotating local templates when missing/expired).
   Season ensureActiveSeason() {
     final current = state.activeSeason;
     if (current != null && current.isActive()) return current;
-    final seeded = Season.dragonHunt();
+    final seeded = Season.forNow();
     state = state.copyWith(activeSeason: seeded);
     return seeded;
   }

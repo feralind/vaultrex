@@ -66,8 +66,6 @@ const kGames = [
     color: Color(0xFFF4820A),
     // Orange swirl — franchise selection / picker only (not pack art).
     logoAsset: 'assets/logos/riftbound.png',
-    // Square icon mark — scale up to balance Pokémon / other wordmarks.
-    logoScale: 1.22,
   ),
   GameOption(
     id: 'pokemon',
@@ -82,7 +80,6 @@ const kGames = [
     enabled: true,
     color: Color(0xFFF97316),
     logoAsset: 'assets/logos/mtg.png',
-    logoScale: 1.12,
   ),
   GameOption(
     id: 'onepiece',
@@ -92,16 +89,16 @@ const kGames = [
     logoAsset: 'assets/logos/onepiece.png',
   ),
   GameOption(
-    id: 'lorcana',
-    name: 'Lorcana',
-    enabled: false,
-    color: Color(0xFFA78BFA),
-    logoAsset: 'assets/logos/lorcana.png',
+    id: 'yugioh',
+    name: 'Yu-Gi-Oh!',
+    enabled: true,
+    color: Color(0xFFFBBF24),
+    logoAsset: 'assets/logos/yugioh.png',
   ),
   GameOption(
     id: 'gundam',
     name: 'Gundam',
-    enabled: false,
+    enabled: true,
     color: Color(0xFF22D3EE),
     logoAsset: 'assets/logos/gundam.png',
   ),

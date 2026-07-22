@@ -196,13 +196,21 @@ mixin _EngagementActions on _GameNotifierBase {
 
   int featuredPityDry(String packId) => _eng.featuredPity[packId] ?? 0;
 
-  /// Ensure timed featured drop clock exists (~4h cycle).
+  /// Ensure timed featured drop clock exists (~4h cycle). Restock rotates order.
   Future<void> ensureFeaturedDropClock() async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final end = _eng.featuredDropEndsAtMs;
     if (end != null && end > now) return;
     final nextEnd = now + const Duration(hours: 4).inMilliseconds;
-    _setEngagement(_eng.copyWith(featuredDropEndsAtMs: nextEnd));
+    final restocked = end != null; // expired → bump rotation
+    _setEngagement(
+      _eng.copyWith(
+        featuredDropEndsAtMs: nextEnd,
+        featuredRotationSeed: restocked
+            ? _eng.featuredRotationSeed + 1
+            : _eng.featuredRotationSeed,
+      ),
+    );
     await _persist();
   }
 
@@ -352,6 +360,11 @@ mixin _EngagementActions on _GameNotifierBase {
       lastRipPackImageUrl: draftArt,
       message: 'Sealed draft — decide keep/exchange.',
     );
+    final poolEv = pulls.fold<double>(0, (s, o) => s + fairFor(o));
+    final score = (poolEv * 100).round();
+    if (score > _eng.draftBestScore) {
+      _setEngagement(_eng.copyWith(draftBestScore: score));
+    }
     _recordPulls(pulls, packLabel: 'Draft $setCode');
     _bumpDailyGoal('rip_2', packCount);
     _bumpSeasonQuest('rip', packCount);
@@ -399,6 +412,11 @@ mixin _EngagementActions on _GameNotifierBase {
       lastRipPackImageUrl: null,
       message: 'Weekly seed #$week — same odds for everyone this week.',
     );
+    final poolEv = pulls.fold<double>(0, (s, o) => s + fairFor(o));
+    final score = (poolEv * 100).round();
+    if (score > _eng.weeklyBestScore) {
+      _setEngagement(_eng.copyWith(weeklyBestScore: score));
+    }
     _recordPulls(pulls, packLabel: 'Weekly #$week');
     _bumpDailyGoal('rip_2');
     _bumpSeasonQuest('rip');

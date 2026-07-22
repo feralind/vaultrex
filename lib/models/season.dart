@@ -154,11 +154,27 @@ class Season {
             .toList(),
       );
 
-  /// Default seeded season when save has none.
-  factory Season.dragonHunt([DateTime? now]) {
+  /// Default seeded season when save has none — rotates by fortnight.
+  factory Season.dragonHunt([DateTime? now]) => Season.forNow(now);
+
+  /// Local liveops: pick a season template from the current 14-day bucket.
+  factory Season.forNow([DateTime? now]) {
     final start = now ?? DateTime.now();
+    final epoch = DateTime.utc(2024, 1, 1);
+    final fortnight = start.toUtc().difference(epoch).inDays ~/ 14;
+    switch (fortnight % 3) {
+      case 1:
+        return Season._binderRush(start);
+      case 2:
+        return Season._slabSeason(start);
+      default:
+        return Season._dragonHuntBody(start);
+    }
+  }
+
+  factory Season._dragonHuntBody(DateTime start) {
     return Season(
-      id: 'dragon_hunt',
+      id: 'dragon_hunt_$start',
       name: 'The Dragon Hunt',
       startMs: start.millisecondsSinceEpoch,
       endMs: start.add(const Duration(days: 14)).millisecondsSinceEpoch,
@@ -206,6 +222,100 @@ class Season {
           trackId: 'list',
           target: 8,
           rewardType: RewardType.cash,
+          rewardAmount: 40,
+        ),
+      ],
+    );
+  }
+
+  factory Season._binderRush(DateTime start) {
+    return Season(
+      id: 'binder_rush_$start',
+      name: 'Binder Rush',
+      startMs: start.millisecondsSinceEpoch,
+      endMs: start.add(const Duration(days: 14)).millisecondsSinceEpoch,
+      quests: const [
+        SeasonQuest(
+          id: 'br_rip_8',
+          title: 'Fill the pages',
+          description: 'Rip eight packs this season.',
+          trackId: 'rip',
+          target: 8,
+          rewardType: RewardType.candy,
+          rewardAmount: 1000,
+        ),
+        SeasonQuest(
+          id: 'br_list_5',
+          title: 'Move the dupes',
+          description: 'List five cards online.',
+          trackId: 'list',
+          target: 5,
+          rewardType: RewardType.candy,
+          rewardAmount: 600,
+        ),
+        SeasonQuest(
+          id: 'br_grade_1',
+          title: 'First slab of the rush',
+          description: 'Send one card to PSA.',
+          trackId: 'grade',
+          target: 1,
+          rewardType: RewardType.xp,
+          rewardAmount: 20,
+        ),
+        SeasonQuest(
+          id: 'br_rip_15',
+          title: 'Album grind',
+          description: 'Rip fifteen packs before the season ends.',
+          trackId: 'rip',
+          target: 15,
+          rewardType: RewardType.candy,
+          rewardAmount: 1800,
+        ),
+      ],
+    );
+  }
+
+  factory Season._slabSeason(DateTime start) {
+    return Season(
+      id: 'slab_season_$start',
+      name: 'Slab Season',
+      startMs: start.millisecondsSinceEpoch,
+      endMs: start.add(const Duration(days: 14)).millisecondsSinceEpoch,
+      quests: const [
+        SeasonQuest(
+          id: 'ss_grade_3',
+          title: 'Queue three',
+          description: 'Send three cards to PSA grading.',
+          trackId: 'grade',
+          target: 3,
+          rewardType: RewardType.candy,
+          rewardAmount: 900,
+        ),
+        SeasonQuest(
+          id: 'ss_rip_6',
+          title: 'Raw for the slab',
+          description: 'Rip six packs for candidates.',
+          trackId: 'rip',
+          target: 6,
+          rewardType: RewardType.candy,
+          rewardAmount: 700,
+        ),
+        SeasonQuest(
+          id: 'ss_list_4',
+          title: 'Fund the fees',
+          description: 'List four cards online.',
+          trackId: 'list',
+          target: 4,
+          rewardType: RewardType.cash,
+          rewardAmount: 35,
+        ),
+        SeasonQuest(
+          id: 'ss_grade_5',
+          title: 'Grading house',
+          description: 'Send five cards to PSA this season.',
+          trackId: 'grade',
+          target: 5,
+          rewardType: RewardType.xp,
           rewardAmount: 40,
         ),
       ],

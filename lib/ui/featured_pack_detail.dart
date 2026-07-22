@@ -635,40 +635,72 @@ class _HeroStage extends StatelessWidget {
               },
             ),
           if (showcase)
-            Align(
-              alignment: const Alignment(0.92, 0.1),
+            // Rare Candy–style: pack + chase fan as one tight cluster (not
+            // screen-edge Aligns — those blow out a huge mid gap on web/wide).
+            Center(
               child: SizedBox(
-                width: 168,
-                height: 240,
+                width: 292,
+                height: 248,
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    for (var i = 0; i < hoverHits.length; i++)
-                      _HoverChaseCard(
-                        card: hoverHits[i],
-                        index: i,
-                        bob: bob,
+                    Positioned(
+                      left: 108,
+                      top: 4,
+                      child: SizedBox(
+                        width: 176,
+                        height: 240,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            for (var i = 0; i < hoverHits.length; i++)
+                              _HoverChaseCard(
+                                card: hoverHits[i],
+                                index: i,
+                                bob: bob,
+                              ),
+                          ],
+                        ),
                       ),
+                    ),
+                    Positioned(
+                      left: 0,
+                      top: 18,
+                      child: KnockoutProductImage(
+                        url: pack.assetPath,
+                        width: 148 * 0.825,
+                        height: 210 * 0.825,
+                        fit: BoxFit.contain,
+                        error: PackVisual(
+                          title: pack.tier.label,
+                          colors: pack.tier.bloomColors,
+                          width: 124 * 0.825,
+                          height: 176 * 0.825,
+                          franchiseId: franchiseId,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
-            ),
-          Align(
-            alignment: showcase ? const Alignment(-0.72, 0) : Alignment.center,
-            child: KnockoutProductImage(
-              url: pack.assetPath,
-              width: (showcase ? 148 : 168) * 0.825,
-              height: (showcase ? 210 : 236) * 0.825,
-              fit: BoxFit.contain,
-              error: PackVisual(
-                title: pack.tier.label,
-                colors: pack.tier.bloomColors,
-                width: (showcase ? 124 : 140) * 0.825,
-                height: (showcase ? 176 : 200) * 0.825,
-                franchiseId: franchiseId,
+            )
+          else
+            Align(
+              alignment: Alignment.center,
+              child: KnockoutProductImage(
+                url: pack.assetPath,
+                width: 168 * 0.825,
+                height: 236 * 0.825,
+                fit: BoxFit.contain,
+                error: PackVisual(
+                  title: pack.tier.label,
+                  colors: pack.tier.bloomColors,
+                  width: 140 * 0.825,
+                  height: 200 * 0.825,
+                  franchiseId: franchiseId,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -693,10 +725,11 @@ class _HoverChaseCard extends StatelessWidget {
     final phase = index * 0.37;
     final amp = 7.0 + index * 2.5;
     final speed = 0.55 + index * 0.22;
-    final left = 8.0 + index * 28.0;
-    final topBase = 18.0 + index * 22.0;
-    final rot = -0.08 + index * 0.11;
-    final width = 92.0 - index * 4.0;
+    // Tighter fan — sit on the pack's right shoulder, not stretched out.
+    final left = 4.0 + index * 18.0;
+    final topBase = 22.0 + index * 16.0;
+    final rot = -0.06 + index * 0.09;
+    final width = 86.0 - index * 3.0;
     final height = width * (3.5 / 2.5);
 
     return AnimatedBuilder(
