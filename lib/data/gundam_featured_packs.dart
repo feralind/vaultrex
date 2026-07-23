@@ -188,26 +188,32 @@ List<({CardDef card, double weight})> _midPool(List<CardDef> all) => [
 
 List<({CardDef card, double weight})> _hotPool(List<CardDef> all) => [
       for (final c in all)
-        if (c.marketPrice >= 5)
+        if (c.marketPrice > 0)
           (
             card: c,
-            weight: c.marketPrice < 40
-                ? 4.0
-                : c.marketPrice < 120
-                    ? 2.0
-                    : 0.8,
+            weight: c.marketPrice < 5
+                ? 6.0
+                : c.marketPrice < 40
+                    ? 3.5
+                    : c.marketPrice < 120
+                        ? 1.4
+                        : 0.45,
           ),
     ];
 
 List<({CardDef card, double weight})> _chasePool(List<CardDef> all) => [
       for (final c in all)
-        if (c.marketPrice >= 15)
+        if (c.marketPrice > 0)
           (
             card: c,
-            weight: c.marketPrice < 80
-                ? 3.0
-                : c.marketPrice < 250
-                    ? 2.0
-                    : 1.2,
+            weight: c.marketPrice < 5
+                ? 8.0
+                : c.marketPrice < 15
+                    ? 5.0
+                    : c.marketPrice < 80
+                        ? 2.2
+                        : c.marketPrice < 250
+                            ? 0.7
+                            : 0.25,
           ),
     ];

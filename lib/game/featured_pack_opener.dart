@@ -52,24 +52,28 @@ class FeaturedPackOpener {
     return pulls;
   }
 
-  /// Whale packs bias fillers upward so the whole rip feels paid-for.
+  /// Whale packs bias fillers CHEAPER so the rip isn't 6 chase cards.
   List<({CardDef card, double weight})> _priceScaledFillerPool(
     List<({CardDef card, double weight})> pool,
     double packPriceUsd,
   ) {
-    if (packPriceUsd < 80) return pool;
-    // $80 → mild, $500 → strong preference for cards near pack value.
-    final lean = (packPriceUsd / 500).clamp(0.15, 1.0);
+    if (packPriceUsd < 40) return pool;
     return [
       for (final e in pool)
         (
           card: e.card,
-          weight: e.weight *
-              (0.55 +
-                  lean *
-                      (e.card.marketPrice / packPriceUsd).clamp(0.15, 2.2)),
+          weight: e.weight * _fillerBias(e.card.marketPrice, packPriceUsd),
         ),
     ];
+  }
+
+  static double _fillerBias(double fair, double packPriceUsd) {
+    final ratio = fair / packPriceUsd;
+    if (ratio < 0.08) return 2.4;
+    if (ratio < 0.18) return 1.5;
+    if (ratio < 0.35) return 0.75;
+    if (ratio < 0.60) return 0.35;
+    return 0.12;
   }
 
   CardDef _weightedPick(List<({CardDef card, double weight})> pool) {
@@ -86,32 +90,38 @@ class FeaturedPackOpener {
     return pool.last.card;
   }
 
-  /// Hit-rate / EV curve scales with pack price (entry flat → whale steep).
+  /// Hit-rate / EV curve — mild price tilt; pool weights do most of the work.
   static double highlightEvExponent(double packPriceUsd) {
-    if (packPriceUsd <= 10) return 1.18;
-    if (packPriceUsd <= 50) return 1.22; // softer mid — leave room for heat
-    if (packPriceUsd <= 130) return 1.38;
-    if (packPriceUsd <= 260) return 1.48;
-    if (packPriceUsd <= 400) return 1.58;
-    return 1.70;
+    if (packPriceUsd <= 10) return 0.55;
+    if (packPriceUsd <= 50) return 0.62;
+    if (packPriceUsd <= 130) return 0.70;
+    if (packPriceUsd <= 260) return 0.78;
+    if (packPriceUsd <= 400) return 0.85;
+    return 0.92;
   }
 
-  /// Chance a premium pack floors the highlight into a "can print" band.
+  /// Cap used for normal EV rolls so \$3k serials don't dominate every highlight.
+  /// True grails still land via soft/hard pity.
+  static double highlightEvFairCap(double packPriceUsd) {
+    return math.max(40.0, packPriceUsd * 1.15);
+  }
+
+  /// Chance a premium pack floors the highlight into a strong-but-not-free band.
   static double premiumFloorChance(double packPriceUsd) {
     if (packPriceUsd < 100) return 0;
-    // $130 → ~25%, $250 → ~34%, $500 → ~50%
-    return (0.16 + (packPriceUsd / 500) * 0.34).clamp(0.16, 0.50);
+    // $130 → ~8%, $250 → ~11%, $500 → ~16%
+    return (0.04 + (packPriceUsd / 500) * 0.12).clamp(0.04, 0.16);
   }
 
-  /// Near-miss odds — climb starts earlier so whales feel tension.
+  /// Near-miss odds — tension without wiping heat every other rip.
   static double nearMissChance(double packPriceUsd) {
-    if (packPriceUsd >= 100) return 0.40;
-    if (packPriceUsd >= 20) return 0.32;
-    return 0.24;
+    if (packPriceUsd >= 100) return 0.14;
+    if (packPriceUsd >= 20) return 0.10;
+    return 0.08;
   }
 
-  /// Highest-EV weighted pick with soft pity, near-miss, hard pity,
-  /// and price-scaled hit rate.
+  /// Weighted highlight pick. Pity/floor/near-miss use the expensive cream;
+  /// normal rolls use the **full pool** (was top-16-only — felt like cheating).
   CardDef _pickHighlight(
     List<({CardDef card, double weight})> pool,
     List<CardDef> already, {
@@ -121,13 +131,13 @@ class FeaturedPackOpener {
   }) {
     final ranked = [...pool]
       ..sort((a, b) => b.card.marketPrice.compareTo(a.card.marketPrice));
-    // Tighter cream on whale packs = nicer hit rate without guaranteeing.
     final topCap = packPriceUsd >= 350
         ? 12
         : packPriceUsd >= 150
             ? 16
             : 24;
     final topN = ranked.take(math.min(topCap, ranked.length)).toList();
+    final clearBar = featuredChaseFairThreshold(packPriceUsd);
 
     // Hard pity: guaranteed top-band jackpot (top 3 by market).
     if (dryCount >= kFeaturedHardPityDry && topN.isNotEmpty) {
@@ -135,12 +145,11 @@ class FeaturedPackOpener {
       return band[_rng.nextInt(band.length)].card;
     }
 
-    // Soft pity jackpot: occasional true clear before hard pity (fair crack, not brick).
+    // Soft pity jackpot: occasional true clear before hard pity.
     if (dryCount >= 7 &&
         dryCount < kFeaturedHardPityDry &&
         topN.isNotEmpty &&
         _rng.nextDouble() < softPityJackpotChance(packPriceUsd)) {
-      final clearBar = featuredChaseFairThreshold(packPriceUsd);
       final jackpot = topN
           .where((e) => e.card.marketPrice >= clearBar)
           .toList();
@@ -150,61 +159,42 @@ class FeaturedPackOpener {
       return band[_rng.nextInt(band.length)].card;
     }
 
-    // Premium floor: paid packs land a strong-but-under-clear highlight.
+    // Premium floor: mid-strong highlight from the full pool (not only cream).
     final floorChance = premiumFloorChance(packPriceUsd);
     if (floorChance > 0 && _rng.nextDouble() < floorChance) {
-      final clearBar = featuredChaseFairThreshold(packPriceUsd);
-      final minFair = packPriceUsd * 0.75;
-      final floorBand = topN
+      final minFair = packPriceUsd * 0.45;
+      final maxFair = clearBar;
+      final floorBand = pool
           .where((e) =>
               e.card.marketPrice >= minFair &&
-              e.card.marketPrice < clearBar)
+              e.card.marketPrice < maxFair)
           .toList();
-      final band = floorBand.isNotEmpty
-          ? floorBand
-          : topN
-              .where((e) => e.card.marketPrice < clearBar)
-              .take(math.min(5, topN.length))
-              .toList();
-      final use = band.isNotEmpty
-          ? band
-          : topN.take(math.min(5, topN.length)).toList();
-      return use[_rng.nextInt(use.length)].card;
+      if (floorBand.isNotEmpty) {
+        return _weightedPick(floorBand);
+      }
     }
 
     // Near-miss: just under chase clear — dopamine without wiping heat.
     final nearChance = nearMissChance(packPriceUsd);
-    final clearBar = featuredChaseFairThreshold(packPriceUsd);
-    if (dryCount >= 3 &&
-        topN.length >= 4 &&
-        _rng.nextDouble() < nearChance) {
-      final under = topN
-          .where((e) => e.card.marketPrice < clearBar)
+    if (dryCount >= 3 && _rng.nextDouble() < nearChance) {
+      final under = pool
+          .where((e) =>
+              e.card.marketPrice >= clearBar * 0.35 &&
+              e.card.marketPrice < clearBar)
           .toList();
       if (under.length >= 2) {
-        final band = under.take(math.min(6, under.length)).toList();
-        return band[_rng.nextInt(band.length)].card;
-      }
-      // Fallback: ranks just under the absolute top, still under clear if possible.
-      final near = topN.sublist(
-        math.min(2, topN.length - 1),
-        math.min(8, topN.length),
-      );
-      final nearUnder =
-          near.where((e) => e.card.marketPrice < clearBar).toList();
-      final band = nearUnder.isNotEmpty ? nearUnder : near;
-      if (band.isNotEmpty) {
-        return band[_rng.nextInt(band.length)].card;
+        return _weightedPick(under);
       }
     }
 
+    // Normal path: full pool + capped EV so fillers actually win most rips.
     final exp = highlightEvExponent(packPriceUsd);
-
+    final fairCap = highlightEvFairCap(packPriceUsd);
     final boosted = <({CardDef card, double weight})>[];
-    for (final e in topN) {
+    for (final e in pool) {
       final novelty = already.any((c) => c.id == e.card.id) ? 0.55 : 1.0;
-      final ev =
-          math.pow(e.card.marketPrice.clamp(0.5, 5000), exp).toDouble();
+      final fairForEv = e.card.marketPrice.clamp(0.5, fairCap);
+      final ev = math.pow(fairForEv, exp).toDouble();
       boosted.add((
         card: e.card,
         weight: e.weight * ev * novelty * pityBoost,

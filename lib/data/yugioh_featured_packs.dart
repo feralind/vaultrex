@@ -134,25 +134,30 @@ List<FeaturedPackDef> get kYugiohFeaturedPacks => [
         tier: FeaturedPackTier.mythic,
         name: 'Millennium Grails',
         blurb:
-            'The most expensive standard-tier rip in Bindora. Mythic-or-'
-            'better in every slot — hit rate scales with the price.',
+            'High-ticket Millennium rip with real bulk density. Big \$\$\$ '
+            'hits are uncommon — pity is the unlock.',
         priceUsd: 249.99,
         cardCount: kYugiohFeaturedPackCardCount,
         pullRates: const [
           FeaturedPullRateRow(
+            tierLabel: 'Bulk / mid',
+            priceRangeLabel: 'under \$60',
+            percent: 58,
+          ),
+          FeaturedPullRateRow(
             tierLabel: 'Mythic',
-            priceRangeLabel: '\$150 – \$300',
-            percent: 40,
+            priceRangeLabel: '\$60 – \$300',
+            percent: 28,
           ),
           FeaturedPullRateRow(
             tierLabel: 'Millennium',
             priceRangeLabel: '\$300 – \$500',
-            percent: 38,
+            percent: 10,
           ),
           FeaturedPullRateRow(
             tierLabel: 'Divine',
             priceRangeLabel: '\$500+',
-            percent: 22,
+            percent: 4,
           ),
         ],
         topHitIds: const [
@@ -170,20 +175,30 @@ List<FeaturedPackDef> get kYugiohFeaturedPacks => [
         tier: FeaturedPackTier.millennium,
         name: 'Millennium Puzzle',
         blurb:
-            'Above Mythic. Paid-up odds — grail highlights land often enough '
-            'to chase.',
+            'Above Mythic. Paid pack with filler density — grails stay rare '
+            'outside soft/hard pity.',
         priceUsd: 349.99,
         cardCount: kYugiohFeaturedPackCardCount,
         pullRates: const [
           FeaturedPullRateRow(
+            tierLabel: 'Bulk / mid',
+            priceRangeLabel: 'under \$80',
+            percent: 60,
+          ),
+          FeaturedPullRateRow(
             tierLabel: 'Millennium',
+            priceRangeLabel: '\$80 – \$300',
+            percent: 26,
+          ),
+          FeaturedPullRateRow(
+            tierLabel: 'High',
             priceRangeLabel: '\$300 – \$500',
-            percent: 48,
+            percent: 10,
           ),
           FeaturedPullRateRow(
             tierLabel: 'Divine',
             priceRangeLabel: '\$500+',
-            percent: 52,
+            percent: 4,
           ),
         ],
         topHitIds: const [
@@ -201,15 +216,30 @@ List<FeaturedPackDef> get kYugiohFeaturedPacks => [
         tier: FeaturedPackTier.divine,
         name: 'Divine Ascension',
         blurb:
-            '\$500 apex. Catalog grails only — hit rate is tuned so a run '
-            'can print, without printing every rip.',
+            '\$500 apex with full catalog shape. Grails can print on a run — '
+            'not every rip.',
         priceUsd: 499.99,
         cardCount: kYugiohFeaturedPackCardCount,
         pullRates: const [
           FeaturedPullRateRow(
+            tierLabel: 'Bulk / mid',
+            priceRangeLabel: 'under \$100',
+            percent: 62,
+          ),
+          FeaturedPullRateRow(
+            tierLabel: 'High',
+            priceRangeLabel: '\$100 – \$350',
+            percent: 24,
+          ),
+          FeaturedPullRateRow(
+            tierLabel: 'Millennium',
+            priceRangeLabel: '\$350 – \$500',
+            percent: 10,
+          ),
+          FeaturedPullRateRow(
             tierLabel: 'Divine',
             priceRangeLabel: '\$500+',
-            percent: 100,
+            percent: 4,
           ),
         ],
         topHitIds: const [
@@ -267,11 +297,12 @@ List<({CardDef card, double weight})> _pharaohsCourtPool(List<CardDef> all) {
   return _weight(
     all,
     weightOf: (c) {
-      if (c.marketPrice < 25) return 0;
-      if (c.marketPrice >= 30 && c.marketPrice < 70) return 5.5;
-      if (c.marketPrice >= 70 && c.marketPrice < 150) return 5.5;
-      if (c.marketPrice >= 150 && c.marketPrice < 300) return 2.4;
-      if (c.marketPrice >= 300 || _isStarlight(c)) return 0.85;
+      if (c.marketPrice > 0 && c.marketPrice < 10) return 8;
+      if (c.marketPrice >= 10 && c.marketPrice < 25) return 5;
+      if (c.marketPrice >= 25 && c.marketPrice < 70) return 2.2;
+      if (c.marketPrice >= 70 && c.marketPrice < 150) return 0.9;
+      if (c.marketPrice >= 150 && c.marketPrice < 300) return 0.35;
+      if (c.marketPrice >= 300 || _isStarlight(c)) return 0.12;
       return 0;
     },
   );
@@ -281,11 +312,13 @@ List<({CardDef card, double weight})> _godCardsPool(List<CardDef> all) {
   return _weight(
     all,
     weightOf: (c) {
-      if (c.marketPrice < 60) return 0;
-      if (c.marketPrice >= 70 && c.marketPrice < 150) return 5;
-      if (c.marketPrice >= 150 && c.marketPrice < 300) return 4.8;
-      if (c.marketPrice >= 300 && c.marketPrice < 500) return 2.2;
-      if (c.marketPrice >= 500 || _isStarlight(c)) return 1.2;
+      if (c.marketPrice > 0 && c.marketPrice < 15) return 9;
+      if (c.marketPrice >= 15 && c.marketPrice < 40) return 5;
+      if (c.marketPrice >= 40 && c.marketPrice < 70) return 2.5;
+      if (c.marketPrice >= 70 && c.marketPrice < 150) return 1.0;
+      if (c.marketPrice >= 150 && c.marketPrice < 300) return 0.45;
+      if (c.marketPrice >= 300 && c.marketPrice < 500) return 0.2;
+      if (c.marketPrice >= 500 || _isStarlight(c)) return 0.1;
       return 0;
     },
   );
@@ -295,11 +328,13 @@ List<({CardDef card, double weight})> _millenniumGrailsPool(List<CardDef> all) {
   return _weight(
     all,
     weightOf: (c) {
-      if (c.marketPrice < 120) return 0;
-      if (c.marketPrice >= 150 && c.marketPrice < 300) return 4.5;
-      if (c.marketPrice >= 300 && c.marketPrice < 500) return 5.5;
-      if (c.marketPrice >= 500) return 4.0;
-      if (_isStarlight(c) && c.marketPrice >= 150) return 3.5;
+      if (c.marketPrice > 0 && c.marketPrice < 20) return 10;
+      if (c.marketPrice >= 20 && c.marketPrice < 60) return 5;
+      if (c.marketPrice >= 60 && c.marketPrice < 120) return 2.2;
+      if (c.marketPrice >= 120 && c.marketPrice < 300) return 0.7;
+      if (c.marketPrice >= 300 && c.marketPrice < 500) return 0.28;
+      if (c.marketPrice >= 500) return 0.12;
+      if (_isStarlight(c) && c.marketPrice >= 150) return 0.18;
       return 0;
     },
   );
@@ -309,12 +344,14 @@ List<({CardDef card, double weight})> _millenniumPuzzlePool(List<CardDef> all) {
   return _weight(
     all,
     weightOf: (c) {
-      // Paid-up odds: divine band dominates without being every rip.
-      if (c.marketPrice >= 500) return 12;
-      if (c.marketPrice >= 300) return 7;
-      if (c.marketPrice >= 220) return 4;
-      if (_isStarlight(c) && c.marketPrice >= 150) return 5;
-      if (c.marketPrice >= 150) return 1.2;
+      if (c.marketPrice > 0 && c.marketPrice < 25) return 11;
+      if (c.marketPrice >= 25 && c.marketPrice < 80) return 5;
+      if (c.marketPrice >= 80 && c.marketPrice < 150) return 2;
+      if (c.marketPrice >= 150 && c.marketPrice < 220) return 0.55;
+      if (c.marketPrice >= 220 && c.marketPrice < 300) return 0.3;
+      if (c.marketPrice >= 300 && c.marketPrice < 500) return 0.18;
+      if (c.marketPrice >= 500) return 0.1;
+      if (_isStarlight(c) && c.marketPrice >= 150) return 0.15;
       return 0;
     },
   );
@@ -324,12 +361,14 @@ List<({CardDef card, double weight})> _divineAscensionPool(List<CardDef> all) {
   return _weight(
     all,
     weightOf: (c) {
-      // \$500 pack — apex pool, heavy on true grails so EV can print.
-      if (c.marketPrice >= 800) return 16;
-      if (c.marketPrice >= 500) return 12;
-      if (c.marketPrice >= 350) return 5;
-      if (c.marketPrice >= 220) return 2.5;
-      if (_isStarlight(c) && c.marketPrice >= 180) return 4;
+      if (c.marketPrice > 0 && c.marketPrice < 30) return 12;
+      if (c.marketPrice >= 30 && c.marketPrice < 100) return 5;
+      if (c.marketPrice >= 100 && c.marketPrice < 220) return 1.6;
+      if (c.marketPrice >= 220 && c.marketPrice < 350) return 0.45;
+      if (c.marketPrice >= 350 && c.marketPrice < 500) return 0.22;
+      if (c.marketPrice >= 500 && c.marketPrice < 800) return 0.12;
+      if (c.marketPrice >= 800) return 0.08;
+      if (_isStarlight(c) && c.marketPrice >= 180) return 0.12;
       return 0;
     },
   );

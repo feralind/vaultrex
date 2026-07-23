@@ -86,7 +86,9 @@ mixin _EngagementActions on _GameNotifierBase {
     final today = engagementDayKey();
     var e = _eng;
     if (e.dailyClaimDate == today) {
-      state = state.copyWith(message: 'Already claimed today.');
+      state = state.copyWith(
+        message: 'Daily candy already claimed today (real-life day).',
+      );
       return;
     }
     final yesterday = engagementDayKey(DateTime.now().subtract(const Duration(days: 1)));
@@ -110,7 +112,7 @@ mixin _EngagementActions on _GameNotifierBase {
     state = state.copyWith(
       player: player,
       engagement: e,
-      message: 'Day $streak streak — +$candy candy$bonusBit.',
+      message: 'Day $streak streak — +$candy candy$bonusBit. Next claim tomorrow.',
     );
     _checkAchievements();
     await _persist();

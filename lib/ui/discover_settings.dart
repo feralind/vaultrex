@@ -296,8 +296,8 @@ class _TodayStrip extends ConsumerWidget {
                   children: [
                     Text(
                       claimed
-                          ? 'Daily claimed · streak $streak'
-                          : 'Daily reward ready',
+                          ? 'Claimed today (real-life day) · streak $streak'
+                          : 'Daily reward ready · once per real-life day',
                       style: AppText.jakarta(
                         fontWeight: FontWeight.w800,
                         fontSize: 14,
@@ -307,7 +307,7 @@ class _TodayStrip extends ConsumerWidget {
                     Text(
                       claimed
                           ? 'Open Collector Hub for goals & upgrades'
-                          : 'Tap to claim candy and keep your streak',
+                          : 'Tap to claim candy — resets at midnight local',
                       style: AppText.jakarta(
                         color: CC.inkMuted,
                         fontSize: 11,

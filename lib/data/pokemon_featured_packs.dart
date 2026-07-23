@@ -273,30 +273,30 @@ List<FeaturedPackDef> get kPokemonFeaturedPacks => [
         tier: FeaturedPackTier.legendary,
         name: 'Modern Grails',
         blurb:
-            'RareCandy Modern Grails–tier rip across SV chases. High EV '
-            'highlight aimed at \$80–\$500 SIRs. 6 cards; last is the chase.',
+            'RareCandy Modern–tier rip across SV sets. Bulk through SIRs — '
+            'big hits are uncommon; heat/pity is the chase unlock.',
         priceUsd: 99.99,
         cardCount: kPokemonFeaturedPackCardCount,
         pullRates: const [
           FeaturedPullRateRow(
+            tierLabel: 'Bulk / rare',
+            priceRangeLabel: 'under \$25',
+            percent: 55,
+          ),
+          FeaturedPullRateRow(
             tierLabel: 'IR+',
             priceRangeLabel: '\$25 – \$80',
-            percent: 22,
+            percent: 25,
           ),
           FeaturedPullRateRow(
             tierLabel: 'SIR',
             priceRangeLabel: '\$80 – \$300',
-            percent: 48,
+            percent: 15,
           ),
           FeaturedPullRateRow(
-            tierLabel: 'Big SIR',
-            priceRangeLabel: '\$300 – \$800',
-            percent: 22,
-          ),
-          FeaturedPullRateRow(
-            tierLabel: 'Grail',
-            priceRangeLabel: '\$800+',
-            percent: 8,
+            tierLabel: 'Big / grail',
+            priceRangeLabel: '\$300+',
+            percent: 5,
           ),
         ],
         topHitIds: const [
@@ -314,30 +314,30 @@ List<FeaturedPackDef> get kPokemonFeaturedPacks => [
         tier: FeaturedPackTier.mythic,
         name: 'Mythical Grails',
         blurb:
-            'Prismatic Evolutions–weighted mythic rip. Umbreon / Sylveon SIRs '
-            'and Eeveelution grails. Highest EV Featured Pack. Highlight last.',
+            'Prismatic Evolutions–weighted rip. Bulk through SIRs; Umbreon-'
+            'class grails are rare outside pity.',
         priceUsd: 179.99,
         cardCount: kPokemonFeaturedPackCardCount,
         pullRates: const [
           FeaturedPullRateRow(
+            tierLabel: 'Bulk / rare',
+            priceRangeLabel: 'under \$40',
+            percent: 58,
+          ),
+          FeaturedPullRateRow(
             tierLabel: 'SIR',
-            priceRangeLabel: '\$80 – \$300',
+            priceRangeLabel: '\$40 – \$300',
             percent: 28,
           ),
           FeaturedPullRateRow(
             tierLabel: 'Big SIR',
             priceRangeLabel: '\$300 – \$800',
-            percent: 36,
+            percent: 10,
           ),
           FeaturedPullRateRow(
             tierLabel: 'Grail',
-            priceRangeLabel: '\$800 – \$2000',
-            percent: 26,
-          ),
-          FeaturedPullRateRow(
-            tierLabel: 'Mythic',
-            priceRangeLabel: '\$2000+',
-            percent: 10,
+            priceRangeLabel: '\$800+',
+            percent: 4,
           ),
         ],
         topHitIds: const [
@@ -411,10 +411,12 @@ List<({CardDef card, double weight})> _rollingThunderPool(List<CardDef> all) {
       final electric = (c.cardType ?? '').toLowerCase().contains('lightning') ||
           (c.cardType ?? '').toLowerCase().contains('electric');
       final boost = electric || c.setCode == 'SSP' ? 1.4 : 1.0;
+      if (c.rarity == Rarity.common) return 7 * boost;
+      if (c.rarity == Rarity.uncommon) return 5 * boost;
       if (c.rarity == Rarity.rare && c.marketPrice >= 1) return 3 * boost;
-      if (c.rarity == Rarity.epic && c.marketPrice < 40) return 7 * boost;
-      if (c.rarity == Rarity.epic && c.marketPrice < 150) return 3.5 * boost;
-      if (c.rarity == Rarity.epic) return 1.2 * boost;
+      if (c.rarity == Rarity.epic && c.marketPrice < 40) return 1.6 * boost;
+      if (c.rarity == Rarity.epic && c.marketPrice < 150) return 0.7 * boost;
+      if (c.rarity == Rarity.epic) return 0.28 * boost;
       return 0;
     },
   );
@@ -442,45 +444,51 @@ List<({CardDef card, double weight})> _paldeaPool(List<CardDef> all) {
 
 List<({CardDef card, double weight})> _mewChasePool(List<CardDef> all) {
   return _weight(all.where((c) => c.setCode == 'MEW'), weightOf: (c) {
-    if (c.rarity == Rarity.rare && c.marketPrice >= 3) return 2;
-    if (c.rarity == Rarity.epic && c.marketPrice < 80) return 6;
-    if (c.rarity == Rarity.epic && c.marketPrice < 250) return 4;
-    if (c.rarity == Rarity.epic) return 2.5;
+    if (c.rarity == Rarity.common) return 8;
+    if (c.rarity == Rarity.uncommon) return 6;
+    if (c.rarity == Rarity.rare && c.marketPrice < 15) return 3.5;
+    if (c.rarity == Rarity.rare) return 1.4;
+    if (c.rarity == Rarity.epic && c.marketPrice < 80) return 1.2;
+    if (c.rarity == Rarity.epic && c.marketPrice < 250) return 0.55;
+    if (c.rarity == Rarity.epic) return 0.25;
     return 0;
   });
 }
 
-/// Cross-set modern SIRs — now locked to SV chase sets (no franchise scrape).
+/// Cross-set modern SIRs — fillers + rare chase (was chase-only = every rip prints).
 List<({CardDef card, double weight})> _modernGrailsPool(List<CardDef> all) {
   return _weight(
     all.where((c) => _inSets(c, const {'MEW', 'TWM', 'SSP', 'PRE', 'PAL', 'OBF'})),
     weightOf: (c) {
-      if (c.rarity != Rarity.epic && c.rarity != Rarity.rare) return 0;
-      if (c.rarity == Rarity.rare && c.marketPrice >= 25) return 1.5;
-      if (c.marketPrice < 25) return 0;
-      if (c.marketPrice < 80) return 4;
-      if (c.marketPrice < 300) return 6;
-      if (c.marketPrice < 800) return 3.5;
-      return 1.8;
+      if (c.rarity == Rarity.common) return 9;
+      if (c.rarity == Rarity.uncommon) return 7;
+      if (c.rarity == Rarity.rare && c.marketPrice < 25) return 4;
+      if (c.rarity == Rarity.rare && c.marketPrice >= 25) return 1.2;
+      if (c.rarity != Rarity.epic) return 0;
+      if (c.marketPrice < 80) return 1.5;
+      if (c.marketPrice < 300) return 0.7;
+      if (c.marketPrice < 800) return 0.35;
+      return 0.18;
     },
   );
 }
 
-/// Prismatic Evolutions–heavy mythic pool (named sets only).
+/// Prismatic Evolutions–heavy mythic pool with real filler density.
 List<({CardDef card, double weight})> _mythicalGrailsPool(List<CardDef> all) {
   return _weight(
     all.where((c) => _inSets(c, const {'PRE', 'MEW'})),
     weightOf: (c) {
-      final preBoost = c.setCode == 'PRE' ? 1.6 : 1.0;
-      if (c.rarity != Rarity.epic &&
-          !(c.rarity == Rarity.rare && c.marketPrice >= 40)) {
-        return 0;
-      }
-      if (c.marketPrice < 80) return 0.8 * preBoost;
-      if (c.marketPrice < 300) return 4 * preBoost;
-      if (c.marketPrice < 800) return 6 * preBoost;
-      if (c.marketPrice < 2000) return 5 * preBoost;
-      return 3.5 * preBoost;
+      final preBoost = c.setCode == 'PRE' ? 1.25 : 1.0;
+      if (c.rarity == Rarity.common) return 8 * preBoost;
+      if (c.rarity == Rarity.uncommon) return 6 * preBoost;
+      if (c.rarity == Rarity.rare && c.marketPrice < 40) return 3.5 * preBoost;
+      if (c.rarity == Rarity.rare && c.marketPrice >= 40) return 1.2 * preBoost;
+      if (c.rarity != Rarity.epic) return 0;
+      if (c.marketPrice < 80) return 1.4 * preBoost;
+      if (c.marketPrice < 300) return 0.65 * preBoost;
+      if (c.marketPrice < 800) return 0.35 * preBoost;
+      if (c.marketPrice < 2000) return 0.22 * preBoost;
+      return 0.12 * preBoost;
     },
   );
 }

@@ -254,8 +254,8 @@ class EngagementHubScreen extends ConsumerWidget {
             context,
             title: 'Daily claim & goals',
             body: claimedToday
-                ? 'Streak day ${eng.dailyStreak} — claimed today'
-                : 'Claim free candy · streak day ${eng.dailyStreak}',
+                ? 'Streak day ${eng.dailyStreak} — claimed (real-life day)'
+                : 'Claim free candy · once per real-life day',
             color: CC.candy,
             chip: claimedToday ? 'claimed' : 'ready',
             chipSelected: !claimedToday,
@@ -478,8 +478,8 @@ class DailyHubScreen extends ConsumerWidget {
                 const SizedBox(height: AppSpace.s8),
                 Text(
                   claimed
-                      ? 'Already claimed today. Streak holds at ${eng.dailyStreak}.'
-                      : '+$candyPreview candy waiting · claim today to continue your streak.',
+                      ? 'Already claimed today (real-life day). Streak holds at ${eng.dailyStreak}.'
+                      : '+$candyPreview candy waiting · once per real-life day (not the 2h game day).',
                   style: AppText.bodySm(),
                 ),
                 const SizedBox(height: AppSpace.s16),

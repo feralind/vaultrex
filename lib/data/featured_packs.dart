@@ -326,30 +326,30 @@ List<FeaturedPackDef> get kFeaturedPacks => [
         tier: FeaturedPackTier.legendary,
         name: 'Legendary Hits',
         blurb:
-            'Deep-red legendary rip aimed at expensive Showcases & Overnumbered alts. '
-            'High EV highlight slot. Exchange ≥50% candy if you dump the rip.',
+            'Deep-red legendary rip with bulk through Showcase. Signature '
+            'grails stay rare outside pity. Exchange ≥50% candy if you dump.',
         priceUsd: 89.99,
         cardCount: kFeaturedPackCardCount,
         pullRates: const [
           FeaturedPullRateRow(
+            tierLabel: 'Bulk / rare',
+            priceRangeLabel: 'under \$25',
+            percent: 52,
+          ),
+          FeaturedPullRateRow(
             tierLabel: 'Epic',
             priceRangeLabel: '\$25 – \$80',
-            percent: 20,
+            percent: 28,
           ),
           FeaturedPullRateRow(
             tierLabel: 'Showcase',
             priceRangeLabel: '\$80 – \$500',
-            percent: 52,
+            percent: 15,
           ),
           FeaturedPullRateRow(
-            tierLabel: 'Overnumbered',
-            priceRangeLabel: '\$200 – \$600',
-            percent: 18,
-          ),
-          FeaturedPullRateRow(
-            tierLabel: 'Signature',
+            tierLabel: 'Signature+',
             priceRangeLabel: '\$500+',
-            percent: 10,
+            percent: 5,
           ),
         ],
         topHitIds: const [
@@ -367,30 +367,30 @@ List<FeaturedPackDef> get kFeaturedPacks => [
         tier: FeaturedPackTier.mythic,
         name: 'Mythic Chase',
         blurb:
-            'Prismatic chase pack — Signature Showcases and Ultimate grails. '
-            'Highest EV highlight of any Featured Pack. 6 cards; last is always the chase.',
+            'Full UNL pack shape — bulk through Signature Showcases. Highest '
+            'ticket Riftbound Featured Pack; grails are rare without pity.',
         priceUsd: 179.99,
         cardCount: kFeaturedPackCardCount,
         pullRates: const [
           FeaturedPullRateRow(
-            tierLabel: 'Showcase',
-            priceRangeLabel: '\$100 – \$500',
-            percent: 28,
+            tierLabel: 'Bulk / rare',
+            priceRangeLabel: 'under \$40',
+            percent: 58,
           ),
           FeaturedPullRateRow(
-            tierLabel: 'Overnumbered',
-            priceRangeLabel: '\$200 – \$600',
-            percent: 22,
+            tierLabel: 'Epic / showcase',
+            priceRangeLabel: '\$40 – \$200',
+            percent: 26,
           ),
           FeaturedPullRateRow(
             tierLabel: 'Signature',
-            priceRangeLabel: '\$500 – \$2000',
-            percent: 38,
+            priceRangeLabel: '\$200 – \$1000',
+            percent: 12,
           ),
           FeaturedPullRateRow(
             tierLabel: 'Grail',
-            priceRangeLabel: '\$2000+',
-            percent: 12,
+            priceRangeLabel: '\$1000+',
+            percent: 4,
           ),
         ],
         topHitIds: const [
@@ -558,14 +558,18 @@ List<({CardDef card, double weight})> _legendaryPool(List<CardDef> all) {
   return _weightByPrice(
     all.where((c) => _inSets(c, const {'UNL', 'SFD'})),
     weightOf: (c) {
-      if (c.rarity == Rarity.epic && c.marketPrice >= 25) return 3;
+      if (c.rarity == Rarity.common) return 7;
+      if (c.rarity == Rarity.uncommon) return 5;
+      if (c.rarity == Rarity.rare) return 3.5;
+      if (c.rarity == Rarity.epic && c.marketPrice < 25) return 1.6;
+      if (c.rarity == Rarity.epic && c.marketPrice >= 25) return 0.9;
       if (c.rarity == Rarity.showcase) {
         if (c.name.contains('Signature')) {
-          return c.marketPrice >= 500 ? 2.5 : 1.2;
+          return c.marketPrice >= 500 ? 0.35 : 0.55;
         }
-        if (c.name.contains('Overnumbered')) return 3.5;
-        if (c.name.contains('Ultimate')) return 1.5;
-        return c.marketPrice >= 80 ? 4 : 1;
+        if (c.name.contains('Overnumbered')) return 0.5;
+        if (c.name.contains('Ultimate')) return 0.4;
+        return c.marketPrice >= 80 ? 0.7 : 1.0;
       }
       return 0;
     },
@@ -574,14 +578,18 @@ List<({CardDef card, double weight})> _legendaryPool(List<CardDef> all) {
 
 List<({CardDef card, double weight})> _mythicPool(List<CardDef> all) {
   return _weightByPrice(all.where((c) => c.setCode == 'UNL'), weightOf: (c) {
-    if (c.rarity != Rarity.showcase && c.rarity != Rarity.epic) return 0;
+    if (c.rarity == Rarity.common) return 9;
+    if (c.rarity == Rarity.uncommon) return 7;
+    if (c.rarity == Rarity.rare) return 4;
+    if (c.rarity == Rarity.epic && c.marketPrice < 40) return 1.5;
+    if (c.rarity == Rarity.epic && c.marketPrice >= 40) return 0.7;
+    if (c.rarity != Rarity.showcase) return 0;
     if (c.name.contains('Signature')) {
-      return c.marketPrice >= 1000 ? 6 : 3.5;
+      return c.marketPrice >= 1000 ? 0.25 : 0.45;
     }
-    if (c.name.contains('Ultimate')) return 5;
-    if (c.name.contains('Overnumbered')) return 2.5;
-    if (c.rarity == Rarity.showcase && c.marketPrice >= 100) return 2;
-    if (c.rarity == Rarity.epic && c.marketPrice >= 40) return 0.8;
-    return 0;
+    if (c.name.contains('Ultimate')) return 0.4;
+    if (c.name.contains('Overnumbered')) return 0.5;
+    if (c.marketPrice >= 100) return 0.55;
+    return 0.9;
   });
 }

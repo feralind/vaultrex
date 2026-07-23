@@ -1,7 +1,11 @@
 /// Wall-clock ↔ in-game day mapping.
 ///
-/// One Bindora day ≈ [dayLength] of real phone/system time (default 2 hours).
-/// Used by daily leaderboards and catch-up day ticks.
+/// **Game day:** [dayLength] of real phone time (2 hours) → auctions, rivals,
+/// catch-up ticks, leaderboard board day.
+///
+/// **Real-life calendar day:** daily candy claim + daily goals use
+/// [engagementDayKey] / [realLifeDayKey] (once per local calendar day) — NOT
+/// this 2h clock.
 abstract final class GameClock {
   static const Duration dayLength = Duration(hours: 2);
   static const int dayLengthMs = 2 * 60 * 60 * 1000;

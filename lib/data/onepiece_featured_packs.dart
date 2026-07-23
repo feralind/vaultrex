@@ -175,30 +175,30 @@ List<FeaturedPackDef> get kOnePieceFeaturedPacks => [
         tier: FeaturedPackTier.legendary,
         name: 'Secret Rare Vault',
         blurb:
-            'Deep-red legendary rip aimed at SEC / Manga / Super Alt. '
-            'High EV highlight slot. Exchange ≥50% candy if you dump the rip.',
+            'OP13/PRB01 legendary rip with bulk through SEC/Manga. Big hits '
+            'are uncommon; pity unlocks the chase. Dump for ≥50% candy.',
         priceUsd: 99.99,
         cardCount: kOnePieceFeaturedPackCardCount,
         pullRates: const [
           FeaturedPullRateRow(
+            tierLabel: 'Bulk / rare',
+            priceRangeLabel: 'under \$25',
+            percent: 55,
+          ),
+          FeaturedPullRateRow(
             tierLabel: 'SR',
             priceRangeLabel: '\$25 – \$100',
-            percent: 28,
+            percent: 26,
           ),
           FeaturedPullRateRow(
             tierLabel: 'SEC / SP',
             priceRangeLabel: '\$100 – \$400',
-            percent: 42,
+            percent: 14,
           ),
           FeaturedPullRateRow(
-            tierLabel: 'Manga',
-            priceRangeLabel: '\$400 – \$1500',
-            percent: 22,
-          ),
-          FeaturedPullRateRow(
-            tierLabel: 'Grail',
-            priceRangeLabel: '\$1500+',
-            percent: 8,
+            tierLabel: 'Manga / grail',
+            priceRangeLabel: '\$400+',
+            percent: 5,
           ),
         ],
         topHitIds: const [
@@ -216,30 +216,30 @@ List<FeaturedPackDef> get kOnePieceFeaturedPacks => [
         tier: FeaturedPackTier.mythic,
         name: "Emperor's Treasure",
         blurb:
-            'Prismatic chase pack — Manga Luffy / Shanks / Ace serials. '
-            'Highest EV highlight of any One Piece Featured Pack.',
+            'Full OP13/PRB01 pack shape — commons through Manga serials. '
+            'Grails stay rare; pity unlocks the true chase.',
         priceUsd: 179.99,
         cardCount: kOnePieceFeaturedPackCardCount,
         pullRates: const [
           FeaturedPullRateRow(
-            tierLabel: 'SEC / SP',
-            priceRangeLabel: '\$100 – \$500',
-            percent: 30,
+            tierLabel: 'Bulk / rare',
+            priceRangeLabel: 'under \$40',
+            percent: 60,
           ),
           FeaturedPullRateRow(
-            tierLabel: 'Manga',
-            priceRangeLabel: '\$500 – \$2000',
-            percent: 40,
+            tierLabel: 'SR / SEC',
+            priceRangeLabel: '\$40 – \$150',
+            percent: 24,
+          ),
+          FeaturedPullRateRow(
+            tierLabel: 'SP / Manga',
+            priceRangeLabel: '\$150 – \$500',
+            percent: 12,
           ),
           FeaturedPullRateRow(
             tierLabel: 'Grail',
-            priceRangeLabel: '\$2000+',
-            percent: 20,
-          ),
-          FeaturedPullRateRow(
-            tierLabel: 'SR',
-            priceRangeLabel: '\$40 – \$100',
-            percent: 10,
+            priceRangeLabel: '\$500+',
+            percent: 4,
           ),
         ],
         topHitIds: const [
@@ -320,11 +320,13 @@ List<({CardDef card, double weight})> _yonkoPool(List<CardDef> all) {
   return _weight(
     all.where((c) => _inSets(c, const {'OP09', 'OP13'})),
     weightOf: (c) {
-      if (c.rarity == Rarity.rare && c.marketPrice >= 5) return 2;
+      if (c.rarity == Rarity.common) return 6;
+      if (c.rarity == Rarity.uncommon) return 5;
+      if (c.rarity == Rarity.rare && c.marketPrice >= 5) return 2.5;
       if (c.rarity == Rarity.epic) {
-        return c.marketPrice < 300 ? 6 : 2.5;
+        return c.marketPrice < 300 ? 1.2 : 0.4;
       }
-      if (c.rarity == Rarity.showcase || c.marketPrice >= 200) return 1.2;
+      if (c.rarity == Rarity.showcase || c.marketPrice >= 200) return 0.35;
       return 0;
     },
   );
@@ -334,13 +336,17 @@ List<({CardDef card, double weight})> _secretVaultPool(List<CardDef> all) {
   return _weight(
     all.where((c) => _inSets(c, const {'OP13', 'PRB01'})),
     weightOf: (c) {
-      if (c.rarity == Rarity.epic && c.marketPrice >= 25) return 3;
+      if (c.rarity == Rarity.common) return 8;
+      if (c.rarity == Rarity.uncommon) return 6;
+      if (c.rarity == Rarity.rare) return 3.5;
+      if (c.rarity == Rarity.epic && c.marketPrice < 25) return 1.4;
+      if (c.rarity == Rarity.epic && c.marketPrice >= 25) return 0.7;
       if (c.rarity == Rarity.showcase ||
           c.name.toLowerCase().contains('manga') ||
           c.name.toLowerCase().contains('(sp)')) {
-        return c.marketPrice >= 400 ? 5 : 2.5;
+        return c.marketPrice >= 400 ? 0.25 : 0.45;
       }
-      if (c.rarity == Rarity.epic) return 2;
+      if (c.rarity == Rarity.epic) return 0.9;
       return 0;
     },
   );
@@ -350,12 +356,16 @@ List<({CardDef card, double weight})> _emperorsPool(List<CardDef> all) {
   return _weight(
     all.where((c) => _inSets(c, const {'OP13', 'PRB01'})),
     weightOf: (c) {
+      if (c.rarity == Rarity.common) return 9;
+      if (c.rarity == Rarity.uncommon) return 7;
+      if (c.rarity == Rarity.rare) return 4;
       if (c.name.toLowerCase().contains('manga') ||
           c.rarity == Rarity.showcase) {
-        return c.marketPrice >= 1000 ? 7 : 4;
+        return c.marketPrice >= 1000 ? 0.2 : 0.4;
       }
-      if (c.rarity == Rarity.epic && c.marketPrice >= 80) return 3;
-      if (c.marketPrice >= 150) return 2;
+      if (c.rarity == Rarity.epic && c.marketPrice < 80) return 1.5;
+      if (c.rarity == Rarity.epic && c.marketPrice >= 80) return 0.55;
+      if (c.marketPrice >= 150) return 0.35;
       return 0;
     },
   );

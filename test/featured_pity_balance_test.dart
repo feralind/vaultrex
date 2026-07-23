@@ -74,38 +74,43 @@ void main() {
     });
 
     test('soft pity jackpot rises on whale packs', () {
-      expect(softPityJackpotChance(25), 0.08);
-      expect(softPityJackpotChance(130), 0.14);
-      expect(softPityJackpotChance(250), 0.20);
+      expect(softPityJackpotChance(25), 0.04);
+      expect(softPityJackpotChance(130), 0.06);
+      expect(softPityJackpotChance(250), 0.09);
     });
   });
 
   group('price-scaled hit rate', () {
-    test('EV exponent steepens with pack price', () {
-      expect(FeaturedPackOpener.highlightEvExponent(5), 1.18);
-      expect(FeaturedPackOpener.highlightEvExponent(50), 1.22);
-      expect(FeaturedPackOpener.highlightEvExponent(130), 1.38);
-      expect(FeaturedPackOpener.highlightEvExponent(250), 1.48);
-      expect(FeaturedPackOpener.highlightEvExponent(350), 1.58);
-      expect(FeaturedPackOpener.highlightEvExponent(500), 1.70);
+    test('EV exponent stays mild with pack price', () {
+      expect(FeaturedPackOpener.highlightEvExponent(5), 0.55);
+      expect(FeaturedPackOpener.highlightEvExponent(50), 0.62);
+      expect(FeaturedPackOpener.highlightEvExponent(130), 0.70);
+      expect(FeaturedPackOpener.highlightEvExponent(250), 0.78);
+      expect(FeaturedPackOpener.highlightEvExponent(350), 0.85);
+      expect(FeaturedPackOpener.highlightEvExponent(500), 0.92);
+    });
+
+    test('EV fair cap stops serials dominating normal rolls', () {
+      expect(FeaturedPackOpener.highlightEvFairCap(10), 40);
+      expect(FeaturedPackOpener.highlightEvFairCap(180), closeTo(207, 0.1));
     });
 
     test('premium floor chance scales toward whale packs', () {
       expect(FeaturedPackOpener.premiumFloorChance(50), 0);
       expect(
         FeaturedPackOpener.premiumFloorChance(130),
-        closeTo(0.2484, 0.01),
+        closeTo(0.0712, 0.01),
       );
       expect(
         FeaturedPackOpener.premiumFloorChance(500),
-        closeTo(0.50, 0.01),
+        closeTo(0.16, 0.01),
       );
     });
 
-    test('near-miss chance rises with pack price', () {
-      expect(FeaturedPackOpener.nearMissChance(5), 0.24);
-      expect(FeaturedPackOpener.nearMissChance(25), 0.32);
-      expect(FeaturedPackOpener.nearMissChance(130), 0.40);
+    test('near-miss chance rises mildly with pack price', () {
+      expect(FeaturedPackOpener.nearMissChance(5), 0.08);
+      expect(FeaturedPackOpener.nearMissChance(25), 0.10);
+      expect(FeaturedPackOpener.nearMissChance(130), 0.14);
     });
   });
 }

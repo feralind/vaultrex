@@ -201,13 +201,19 @@ class EngagementState {
   }
 }
 
-/// Calendar day key in local time.
+/// Real-life local calendar day key (`yyyy-MM-dd`).
+///
+/// Used for daily candy claim + daily goals — once per phone calendar day.
+/// Independent of [GameClock] (2h = 1 in-game day for auctions/rivals).
 String engagementDayKey([DateTime? now]) {
   final d = now ?? DateTime.now();
   final m = d.month.toString().padLeft(2, '0');
   final day = d.day.toString().padLeft(2, '0');
   return '${d.year}-$m-$day';
 }
+
+/// Alias — daily rewards are once per real-life day.
+String realLifeDayKey([DateTime? now]) => engagementDayKey(now);
 
 int dailyClaimCandyForStreak(int streak) {
   final s = streak.clamp(1, 7);
@@ -312,9 +318,9 @@ const int kDailyOneAwayBonusCandy = 150;
 
 /// Soft pity jackpot chance before hard pity (dry 7–11).
 double softPityJackpotChance(double packPriceUsd) {
-  if (packPriceUsd >= 200) return 0.20;
-  if (packPriceUsd >= 100) return 0.14;
-  return 0.08;
+  if (packPriceUsd >= 200) return 0.09;
+  if (packPriceUsd >= 100) return 0.06;
+  return 0.04;
 }
 
 class GhostRankEntry {

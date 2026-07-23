@@ -216,30 +216,30 @@ List<FeaturedPackDef> get kMtgFeaturedPacks => [
         tier: FeaturedPackTier.mythic,
         name: 'Planar Grails',
         blurb:
-            'Prismatic chase pack — serial Eldrazi and mana-foil legends. '
-            'Highest EV highlight of any MTG Featured Pack.',
+            'Full MH3/DSK pack shape — commons through serial Eldrazi. '
+            'Grails are rare; pity is what unlocks the true chase.',
         priceUsd: 179.99,
         cardCount: kMtgFeaturedPackCardCount,
         pullRates: const [
           FeaturedPullRateRow(
-            tierLabel: 'Showcase',
-            priceRangeLabel: '\$100 – \$500',
-            percent: 30,
-          ),
-          FeaturedPullRateRow(
-            tierLabel: 'Serial',
-            priceRangeLabel: '\$500 – \$2000',
-            percent: 40,
-          ),
-          FeaturedPullRateRow(
-            tierLabel: 'Grail',
-            priceRangeLabel: '\$2000+',
-            percent: 20,
+            tierLabel: 'Bulk / rare',
+            priceRangeLabel: 'under \$40',
+            percent: 62,
           ),
           FeaturedPullRateRow(
             tierLabel: 'Mythic',
-            priceRangeLabel: '\$40 – \$100',
-            percent: 10,
+            priceRangeLabel: '\$40 – \$150',
+            percent: 22,
+          ),
+          FeaturedPullRateRow(
+            tierLabel: 'Showcase',
+            priceRangeLabel: '\$150 – \$500',
+            percent: 12,
+          ),
+          FeaturedPullRateRow(
+            tierLabel: 'Serial / grail',
+            priceRangeLabel: '\$500+',
+            percent: 4,
           ),
         ],
         topHitIds: const [
@@ -315,11 +315,13 @@ List<({CardDef card, double weight})> _horizonsPool(List<CardDef> all) {
 
 List<({CardDef card, double weight})> _eldraziPool(List<CardDef> all) {
   return _weight(all.where((c) => c.setCode == 'MH3'), weightOf: (c) {
-    if (c.rarity == Rarity.rare && c.marketPrice >= 5) return 2;
+    if (c.rarity == Rarity.common) return 6;
+    if (c.rarity == Rarity.uncommon) return 5;
+    if (c.rarity == Rarity.rare && c.marketPrice >= 5) return 3;
     if (c.rarity == Rarity.epic) {
-      return c.marketPrice < 300 ? 6 : 2.5;
+      return c.marketPrice < 300 ? 1.4 : 0.45;
     }
-    if (c.name.contains('Serial') || c.marketPrice >= 200) return 1.2;
+    if (c.name.contains('Serial') || c.marketPrice >= 200) return 0.35;
     return 0;
   });
 }
@@ -328,25 +330,34 @@ List<({CardDef card, double weight})> _serializedPool(List<CardDef> all) {
   return _weight(
     all.where((c) => _inSets(c, const {'MH3', 'DSK'})),
     weightOf: (c) {
-      if (c.rarity == Rarity.epic && c.marketPrice >= 25) return 3;
+      if (c.rarity == Rarity.common) return 7;
+      if (c.rarity == Rarity.uncommon) return 6;
+      if (c.rarity == Rarity.rare) return 4;
       if (c.name.contains('Serial') || c.name.contains('Raised Foil')) {
-        return c.marketPrice >= 400 ? 5 : 2.5;
+        return c.marketPrice >= 400 ? 0.4 : 0.7;
       }
-      if (c.rarity == Rarity.epic) return 2;
+      if (c.rarity == Rarity.epic && c.marketPrice >= 25) return 1.1;
+      if (c.rarity == Rarity.epic) return 1.4;
       return 0;
     },
   );
 }
 
+/// Full MH3/DSK pack shape — was 3 serial Eldrazi only (broken).
 List<({CardDef card, double weight})> _planarPool(List<CardDef> all) {
   return _weight(
     all.where((c) => _inSets(c, const {'DSK', 'MH3'})),
     weightOf: (c) {
       if (c.name.contains('Serial')) {
-        return c.marketPrice >= 1000 ? 7 : 4;
+        return c.marketPrice >= 1000 ? 0.22 : 0.4;
       }
-      if (c.rarity == Rarity.epic && c.marketPrice >= 80) return 3;
-      if (c.marketPrice >= 150) return 2;
+      if (c.rarity == Rarity.common) return 10;
+      if (c.rarity == Rarity.uncommon) return 8;
+      if (c.rarity == Rarity.rare) return 4.5;
+      if (c.rarity == Rarity.epic && c.marketPrice < 80) return 1.6;
+      if (c.rarity == Rarity.epic && c.marketPrice < 300) return 0.7;
+      if (c.rarity == Rarity.epic) return 0.35;
+      if (c.marketPrice >= 150) return 0.45;
       return 0;
     },
   );
