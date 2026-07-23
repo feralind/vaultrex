@@ -178,6 +178,7 @@ mixin _RipSession on _GameNotifierBase {
           }
         }
         if (card == null) return;
+        final owned = card;
         // Already kept into collection — just drop from rip if still there.
         if (state.collection.any((c) => c.instanceId == instanceId)) {
           state = state.copyWith(
@@ -186,20 +187,20 @@ mixin _RipSession on _GameNotifierBase {
           await _persist();
           return;
         }
-        final fair = fairFor(card);
+        final fair = fairFor(owned);
         final alreadyOwned =
-            state.collection.any((c) => c.cardId == card.cardId);
-        final def = _catalog.byId[card.cardId];
+            state.collection.any((c) => c.cardId == owned.cardId);
+        final def = _catalog.byId[owned.cardId];
         var fillsHole = false;
         if (!alreadyOwned && def != null) {
           final setCards = _catalog.bySet[def.setCode] ?? [];
           if (setCards.length >= 2) {
-            final owned = state.collection
+            final ownedCount = state.collection
                 .map((c) => c.cardId)
                 .where((id) => _catalog.byId[id]?.setCode == def.setCode)
                 .toSet()
                 .length;
-            fillsHole = owned < setCards.length;
+            fillsHole = ownedCount < setCards.length;
           }
         }
         final candyGain =
