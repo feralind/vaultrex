@@ -136,7 +136,7 @@ mixin _RipSession on _GameNotifierBase {
         String msg = 'Kept for collection.';
         if (alreadyOwned) {
           final fair = fairFor(card);
-          final candyWorth = (fair * 0.70 * 100).round().clamp(1, 999999);
+          final candyWorth = exchangeCandyForFair(fair);
           msg = 'Dupe kept — also ~$candyWorth candy if exchanged.';
         } else if (def != null) {
           final setCards = _catalog.bySet[def.setCode] ?? [];
@@ -187,8 +187,23 @@ mixin _RipSession on _GameNotifierBase {
           return;
         }
         final fair = fairFor(card);
-        // Buylist-style exchange (~70% of fair) — keep full fair in collection.
-        final candyGain = (fair * 0.70 * 100).round().clamp(1, 999999);
+        final alreadyOwned =
+            state.collection.any((c) => c.cardId == card.cardId);
+        final def = _catalog.byId[card.cardId];
+        var fillsHole = false;
+        if (!alreadyOwned && def != null) {
+          final setCards = _catalog.bySet[def.setCode] ?? [];
+          if (setCards.length >= 2) {
+            final owned = state.collection
+                .map((c) => c.cardId)
+                .where((id) => _catalog.byId[id]?.setCode == def.setCode)
+                .toSet()
+                .length;
+            fillsHole = owned < setCards.length;
+          }
+        }
+        final candyGain =
+            exchangeCandyForFair(fair, fillsSetHole: fillsHole);
         final player = state.player.copyWith(
           candy: state.player.candy + candyGain,
           cardsSold: state.player.cardsSold + 1,

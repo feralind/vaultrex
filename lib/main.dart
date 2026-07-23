@@ -316,7 +316,8 @@ class _HomeShellState extends ConsumerState<HomeShell>
 
       final resume = next.engagement.pendingResumeMessage;
       if (resume != null &&
-          resume != prev?.engagement.pendingResumeMessage) {
+          resume != prev?.engagement.pendingResumeMessage &&
+          !resume.startsWith('Near miss')) {
         final toCollection = resume.contains('PSA') ||
             resume.contains('slab') ||
             resume.contains('Collection');

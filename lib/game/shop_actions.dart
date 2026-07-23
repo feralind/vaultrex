@@ -136,22 +136,35 @@ mixin _ShopActions on _GameNotifierBase {
         maxFair: maxFair,
         packPriceUsd: pack.priceUsd,
       );
+      String? nearMissHint;
+      if (!hitChase) {
+        final bar = featuredChaseFairThreshold(pack.priceUsd);
+        final gap = bar - maxFair;
+        if (dry >= 3 && gap > 0 && gap <= bar * 0.40) {
+          nearMissHint =
+              'Near miss — \$${gap.toStringAsFixed(0)} under chase clear. Heat rising.';
+        }
+      }
       player = player.copyWith(
         packsOpened: player.packsOpened + 1,
         xp: player.xp + 3,
         gemsPulled: hitChase ? player.gemsPulled + 1 : player.gemsPulled,
         businessLevel: businessLevelFromXp(player.xp + 3),
       );
+      var nextEng = _afterFeaturedRipHook(
+        packId: pack.id,
+        hitChase: hitChase,
+      );
+      if (nearMissHint != null) {
+        nextEng = nextEng.copyWith(pendingResumeMessage: nearMissHint);
+      }
       state = state.copyWith(
         player: player,
         lastRip: pulls,
         lastRipPaid: total,
         lastRipPackImageUrl: pack.assetPath,
-        engagement: _afterFeaturedRipHook(
-          packId: pack.id,
-          hitChase: hitChase,
-        ),
-        message: 'Ripping ${pack.name}…',
+        engagement: nextEng,
+        message: nearMissHint ?? 'Ripping ${pack.name}…',
       );
       _recordPullHistory(pulls, packLabel: pack.name);
       _onEngagementPackOpened();

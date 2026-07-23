@@ -91,14 +91,26 @@ mixin _EngagementActions on _GameNotifierBase {
     }
     final yesterday = engagementDayKey(DateTime.now().subtract(const Duration(days: 1)));
     final streak = e.dailyClaimDate == yesterday ? e.dailyStreak + 1 : 1;
-    final candy = dailyClaimCandyForStreak(streak);
+    var candy = dailyClaimCandyForStreak(streak);
+    final bonuses = <String>[];
+    final maxDry = e.featuredPity.values.fold<int>(0, (a, b) => a > b ? a : b);
+    if (pityHeatPercent(maxDry) >= 40) {
+      candy += kDailyHeatedBonusCandy;
+      bonuses.add('heated +$kDailyHeatedBonusCandy');
+    }
+    if (oneAwaySets().isNotEmpty) {
+      candy += kDailyOneAwayBonusCandy;
+      bonuses.add('1-away +$kDailyOneAwayBonusCandy');
+    }
     e = e.copyWith(dailyClaimDate: today, dailyStreak: streak);
     var player = state.player.copyWith(candy: state.player.candy + candy);
     player = _syncBusinessLevel(player);
+    final bonusBit =
+        bonuses.isEmpty ? '' : ' (${bonuses.join(', ')})';
     state = state.copyWith(
       player: player,
       engagement: e,
-      message: 'Day $streak streak — +$candy candy.',
+      message: 'Day $streak streak — +$candy candy$bonusBit.',
     );
     _checkAchievements();
     await _persist();
@@ -285,7 +297,7 @@ mixin _EngagementActions on _GameNotifierBase {
   }
 
   Future<void> buyBinderPage() async {
-    const cost = 1500;
+    const cost = 1800;
     final maxPages = binderPagesForLevel(state.player.businessLevel) + 2;
     final current = _eng.binderPagesUnlocked;
     if (current >= maxPages) {

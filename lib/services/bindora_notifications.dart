@@ -80,7 +80,9 @@ class BindoraNotifications {
   }
 
   Future<bool> requestPermission() async {
-    if (!_ready || kIsWeb) return false;
+    if (kIsWeb) return false;
+    if (!_ready) await init();
+    if (!_ready) return false;
     if (Platform.isAndroid) {
       final android = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();

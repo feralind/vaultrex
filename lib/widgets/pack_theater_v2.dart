@@ -210,6 +210,8 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
   bool _fastRip = false;
   bool _climax = false;
   String? _keepBanner;
+  String? _heatBanner;
+  bool _urgeKeep = false;
   RipPresentationTier _ripTier = RipPresentationTier.standard;
   Future<void>? _inFlightDecide;
   double _lastTearHaptic = -1;
@@ -246,6 +248,18 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
         _peelOut.duration = Duration(milliseconds: v ? 280 : 720);
       });
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _absorbNearMissBanner();
+    });
+  }
+
+  void _absorbNearMissBanner() {
+    final eng = ref.read(gameProvider).engagement;
+    final msg = eng.pendingResumeMessage;
+    if (msg == null || !msg.startsWith('Near miss')) return;
+    setState(() => _heatBanner = msg);
+    unawaited(ref.read(gameProvider.notifier).clearResumeMessage());
   }
 
   @override
@@ -265,6 +279,40 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
     if (def.rarity.isRarePlus) return true;
     if (fair >= 8) return true;
     return false;
+  }
+
+  bool _fillsSetHole(OwnedCard owned, CardDef? def) {
+    if (def == null) return false;
+    return ref.read(gameProvider.notifier).wouldFillSetHole(owned.cardId);
+  }
+
+  ({bool urge, String? copy, bool pityCleared}) _keepUrgeFor(
+    OwnedCard owned,
+    CardDef? def,
+    double fair,
+  ) {
+    final packPrice = ref.read(gameProvider).lastRipPaid;
+    final pityCleared = packPrice != null &&
+        packPrice > 0 &&
+        isFeaturedPityChase(maxFair: fair, packPriceUsd: packPrice);
+    final hole = _fillsSetHole(owned, def);
+    final urge = shouldUrgeKeep(
+      fair: fair,
+      packPriceUsd: packPrice,
+      fillsSetHole: hole,
+      pityCleared: pityCleared,
+    );
+    if (!urge) return (urge: false, copy: null, pityCleared: pityCleared);
+    return (
+      urge: true,
+      copy: keepUrgeCopy(
+        fair: fair,
+        packPriceUsd: packPrice,
+        fillsSetHole: hole,
+        pityCleared: pityCleared,
+      ),
+      pityCleared: pityCleared,
+    );
   }
 
   Future<void> _toggleFastRip() async {
@@ -340,6 +388,7 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
       _glow = false;
       _swipeDx = 0;
       _keepBanner = null;
+      _urgeKeep = false;
       _sessionBusy = false;
     });
     if (!mounted || _phase != _RipPhase.reveal) return;
@@ -366,6 +415,7 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
       _glow = false;
       _swipeDx = 0;
       _keepBanner = null;
+      _urgeKeep = false;
       _sessionBusy = true;
     });
     final owned = _current;
@@ -433,6 +483,7 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
       setState(() {
         _flipped = true;
         _sessionBusy = false;
+        _urgeKeep = false;
       });
       await Future<void>.delayed(
         Duration(milliseconds: _fastRip ? 80 : 320),
@@ -444,12 +495,16 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
       return;
     }
 
+    final urge = _keepUrgeFor(owned, def, fair);
+
     // Chase climax beat — linger with NEW stamp before decide.
     if (chase && !_fastRip) {
       setState(() {
         _flipped = true;
         _climax = true;
         _sessionBusy = false;
+        _urgeKeep = urge.urge;
+        _keepBanner = urge.copy;
       });
       unawaited(BindoraSounds.gemClink());
       await Future<void>.delayed(const Duration(milliseconds: 900));
@@ -457,6 +512,8 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
       setState(() {
         _climax = false;
         _deciding = true;
+        _urgeKeep = urge.urge;
+        _keepBanner = urge.copy;
       });
       return;
     }
@@ -465,6 +522,8 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
       _flipped = true;
       _deciding = true;
       _sessionBusy = false;
+      _urgeKeep = urge.urge;
+      _keepBanner = urge.copy;
     });
   }
 
@@ -484,6 +543,7 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
     setState(() {
       _deciding = false;
       _sessionBusy = true;
+      if (_heatBanner != null) _heatBanner = null;
     });
 
     final notifier = ref.read(gameProvider.notifier);
@@ -638,6 +698,45 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
                 ),
               ),
             ),
+            if (_heatBanner != null &&
+                (_phase == _RipPhase.sealed ||
+                    _phase == _RipPhase.peeling ||
+                    inReveal))
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Material(
+                  color: CC.candy.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.local_fire_department_rounded,
+                            size: 18, color: CC.candy),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _heatBanner!,
+                            style: AppText.jakarta(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                              color: CC.candy,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => setState(() => _heatBanner = null),
+                          icon: const Icon(Icons.close, size: 16, color: CC.inkMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             Expanded(
               child: inReveal
                   ? _RevealStage(
@@ -664,6 +763,11 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
                         if (_swipeDx > 80 || v > 600) {
                           _decide(keep: true);
                         } else if (_swipeDx < -80 || v < -600) {
+                          // Stronger swipe needed to dump urged keeps.
+                          if (_urgeKeep && _swipeDx > -130 && v > -950) {
+                            setState(() => _swipeDx = 0);
+                            return;
+                          }
                           _decide(keep: false);
                         } else {
                           setState(() => _swipeDx = 0);
@@ -701,19 +805,21 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: CC.accent.withValues(alpha: 0.14),
+                          color: (_urgeKeep ? CC.candy : CC.accent)
+                              .withValues(alpha: 0.14),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: CC.accent.withValues(alpha: 0.35),
+                            color: (_urgeKeep ? CC.candy : CC.accent)
+                                .withValues(alpha: 0.4),
                           ),
                         ),
                         child: Text(
                           _keepBanner!,
                           textAlign: TextAlign.center,
                           style: AppText.jakarta(
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w800,
                             fontSize: 12,
-                            color: CC.accent,
+                            color: _urgeKeep ? CC.candy : CC.accent,
                           ),
                         ),
                       ),
@@ -729,7 +835,7 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Text(
-                          'CHASE HIT',
+                          _urgeKeep ? 'KEEP THIS HIT' : 'CHASE HIT',
                           style: AppText.jakarta(
                             fontWeight: FontWeight.w900,
                             fontSize: 16,
@@ -742,15 +848,19 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
                       Row(
                   children: [
                     Expanded(
+                      flex: _urgeKeep ? 3 : 5,
                       child: SizedBox(
                         height: 52,
                         child: OutlinedButton(
                           onPressed: () => _decide(keep: false),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: CC.ink,
+                            foregroundColor:
+                                _urgeKeep ? CC.inkMuted : CC.ink,
                             backgroundColor: CC.bgElevated,
                             side: BorderSide(
-                              color: CC.line.withValues(alpha: 0.9),
+                              color: CC.line.withValues(
+                                alpha: _urgeKeep ? 0.45 : 0.9,
+                              ),
                             ),
                             padding: EdgeInsets.zero,
                             alignment: Alignment.center,
@@ -762,7 +872,7 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
                             '← Exchange',
                             style: AppText.jakarta(
                               fontWeight: FontWeight.w800,
-                              fontSize: 15,
+                              fontSize: _urgeKeep ? 13 : 15,
                               height: 1,
                             ),
                           ),
@@ -771,12 +881,16 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
                     ),
                     const SizedBox(width: 12),
                     Expanded(
+                      flex: _urgeKeep ? 7 : 5,
                       child: SizedBox(
                         height: 52,
                         child: FilledButton(
                           onPressed: () => _decide(keep: true),
                           style: FilledButton.styleFrom(
-                            backgroundColor: CC.accent,
+                            backgroundColor:
+                                _urgeKeep ? CC.candy : CC.accent,
+                            foregroundColor:
+                                _urgeKeep ? Colors.black : Colors.white,
                             padding: EdgeInsets.zero,
                             alignment: Alignment.center,
                             shape: RoundedRectangleBorder(
@@ -784,11 +898,12 @@ class _PackRipTheaterV2State extends ConsumerState<PackRipTheaterV2>
                             ),
                           ),
                           child: Text(
-                            'Keep →',
+                            _urgeKeep ? 'KEEP →' : 'Keep →',
                             style: AppText.jakarta(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 15,
+                              fontWeight: FontWeight.w900,
+                              fontSize: _urgeKeep ? 16 : 15,
                               height: 1,
+                              color: _urgeKeep ? Colors.black : null,
                             ),
                           ),
                         ),

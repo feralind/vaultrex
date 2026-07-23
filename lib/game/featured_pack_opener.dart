@@ -89,18 +89,25 @@ class FeaturedPackOpener {
   /// Hit-rate / EV curve scales with pack price (entry flat → whale steep).
   static double highlightEvExponent(double packPriceUsd) {
     if (packPriceUsd <= 10) return 1.18;
-    if (packPriceUsd <= 50) return 1.35;
-    if (packPriceUsd <= 130) return 1.42;
-    if (packPriceUsd <= 260) return 1.52;
-    if (packPriceUsd <= 400) return 1.60;
-    return 1.72; // ~$500 Divine: apex cards dominate highlight
+    if (packPriceUsd <= 50) return 1.22; // softer mid — leave room for heat
+    if (packPriceUsd <= 130) return 1.38;
+    if (packPriceUsd <= 260) return 1.48;
+    if (packPriceUsd <= 400) return 1.58;
+    return 1.70;
   }
 
   /// Chance a premium pack floors the highlight into a "can print" band.
   static double premiumFloorChance(double packPriceUsd) {
     if (packPriceUsd < 100) return 0;
-    // $130 → ~18%, $250 → ~26%, $350 → ~32%, $500 → ~40%
-    return (0.10 + (packPriceUsd / 500) * 0.30).clamp(0.10, 0.42);
+    // $130 → ~25%, $250 → ~34%, $500 → ~50%
+    return (0.16 + (packPriceUsd / 500) * 0.34).clamp(0.16, 0.50);
+  }
+
+  /// Near-miss odds — climb starts earlier so whales feel tension.
+  static double nearMissChance(double packPriceUsd) {
+    if (packPriceUsd >= 100) return 0.40;
+    if (packPriceUsd >= 20) return 0.32;
+    return 0.24;
   }
 
   /// Highest-EV weighted pick with soft pity, near-miss, hard pity,
@@ -128,26 +135,67 @@ class FeaturedPackOpener {
       return band[_rng.nextInt(band.length)].card;
     }
 
-    // Premium floor: paid packs sometimes land a highlight worth ripping for.
-    final floorChance = premiumFloorChance(packPriceUsd);
-    if (floorChance > 0 && _rng.nextDouble() < floorChance) {
-      final minFair = packPriceUsd * 0.42; // ~breakeven-ish after exchange
-      final floorBand = topN
-          .where((e) => e.card.marketPrice >= minFair)
+    // Soft pity jackpot: occasional true clear before hard pity (fair crack, not brick).
+    if (dryCount >= 7 &&
+        dryCount < kFeaturedHardPityDry &&
+        topN.isNotEmpty &&
+        _rng.nextDouble() < softPityJackpotChance(packPriceUsd)) {
+      final clearBar = featuredChaseFairThreshold(packPriceUsd);
+      final jackpot = topN
+          .where((e) => e.card.marketPrice >= clearBar)
           .toList();
-      final band = floorBand.isNotEmpty
-          ? floorBand
-          : topN.take(math.min(5, topN.length)).toList();
+      final band = jackpot.isNotEmpty
+          ? jackpot.take(math.min(4, jackpot.length)).toList()
+          : topN.take(math.min(3, topN.length)).toList();
       return band[_rng.nextInt(band.length)].card;
     }
 
-    // Near-miss: land just under the absolute top — dopamine without clearing pity.
-    final nearChance = packPriceUsd >= 200 ? 0.28 : 0.22;
-    if (dryCount >= 5 &&
-        topN.length >= 6 &&
+    // Premium floor: paid packs land a strong-but-under-clear highlight.
+    final floorChance = premiumFloorChance(packPriceUsd);
+    if (floorChance > 0 && _rng.nextDouble() < floorChance) {
+      final clearBar = featuredChaseFairThreshold(packPriceUsd);
+      final minFair = packPriceUsd * 0.75;
+      final floorBand = topN
+          .where((e) =>
+              e.card.marketPrice >= minFair &&
+              e.card.marketPrice < clearBar)
+          .toList();
+      final band = floorBand.isNotEmpty
+          ? floorBand
+          : topN
+              .where((e) => e.card.marketPrice < clearBar)
+              .take(math.min(5, topN.length))
+              .toList();
+      final use = band.isNotEmpty
+          ? band
+          : topN.take(math.min(5, topN.length)).toList();
+      return use[_rng.nextInt(use.length)].card;
+    }
+
+    // Near-miss: just under chase clear — dopamine without wiping heat.
+    final nearChance = nearMissChance(packPriceUsd);
+    final clearBar = featuredChaseFairThreshold(packPriceUsd);
+    if (dryCount >= 3 &&
+        topN.length >= 4 &&
         _rng.nextDouble() < nearChance) {
-      final near = topN.sublist(2, math.min(8, topN.length));
-      return near[_rng.nextInt(near.length)].card;
+      final under = topN
+          .where((e) => e.card.marketPrice < clearBar)
+          .toList();
+      if (under.length >= 2) {
+        final band = under.take(math.min(6, under.length)).toList();
+        return band[_rng.nextInt(band.length)].card;
+      }
+      // Fallback: ranks just under the absolute top, still under clear if possible.
+      final near = topN.sublist(
+        math.min(2, topN.length - 1),
+        math.min(8, topN.length),
+      );
+      final nearUnder =
+          near.where((e) => e.card.marketPrice < clearBar).toList();
+      final band = nearUnder.isNotEmpty ? nearUnder : near;
+      if (band.isNotEmpty) {
+        return band[_rng.nextInt(band.length)].card;
+      }
     }
 
     final exp = highlightEvExponent(packPriceUsd);

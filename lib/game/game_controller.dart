@@ -2052,4 +2052,19 @@ class GameNotifier extends _GameNotifierBase
   }
 
   CardDef? cardById(String id) => _catalog.byId[id];
+
+  /// True when keeping [cardId] adds a new unique toward an incomplete set.
+  bool wouldFillSetHole(String cardId) {
+    final def = _catalog.byId[cardId];
+    if (def == null) return false;
+    if (state.collection.any((c) => c.cardId == cardId)) return false;
+    final all = _catalog.bySet[def.setCode] ?? const <CardDef>[];
+    if (all.length < 2) return false;
+    final owned = state.collection
+        .map((c) => c.cardId)
+        .where((id) => _catalog.byId[id]?.setCode == def.setCode)
+        .toSet()
+        .length;
+    return owned < all.length;
+  }
 }

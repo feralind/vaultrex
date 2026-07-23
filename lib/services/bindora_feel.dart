@@ -90,6 +90,8 @@ class BindoraSounds {
   static final List<AudioPlayer> _pool = [];
   static int _cursor = 0;
   static const _poolSize = 6;
+  static Future<void>? _initFuture;
+  static int _initBodyRuns = 0;
 
   // User pack / interaction set (mp3).
   static const peelTickAsset = 'sfx/flick.mp3';
@@ -108,8 +110,26 @@ class BindoraSounds {
   static const revealRareAsset = 'sfx/reveal_rare.wav';
   static const revealChaseAsset = 'sfx/reveal_chase.wav';
 
+  @visibleForTesting
+  static int get initBodyRunsForTest => _initBodyRuns;
+
+  @visibleForTesting
+  static void resetForTest() {
+    _ready = false;
+    _muted = false;
+    _pool.clear();
+    _cursor = 0;
+    _initFuture = null;
+    _initBodyRuns = 0;
+  }
+
   static Future<void> init() async {
     if (_ready) return;
+    return _initFuture ??= _initBody();
+  }
+
+  static Future<void> _initBody() async {
+    _initBodyRuns++;
     try {
       // AssetSource paths are relative to the Flutter assets/ folder.
       for (var i = 0; i < _poolSize; i++) {
@@ -123,6 +143,7 @@ class BindoraSounds {
     } catch (e) {
       debugPrint('BindoraSounds.init failed: $e');
       _ready = false;
+      _initFuture = null; // allow a later retry
     }
   }
 

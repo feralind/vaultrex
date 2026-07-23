@@ -230,9 +230,10 @@ double pityWeightBoost(int dryCount) {
 }
 
 /// Fair-$ threshold that clears featured pity for this pack price.
-/// Flat $8 was wiping heat on mid/high packs every rip.
+/// ~95% of pack price — EV-weighted highlights were clearing ×0.48–0.72 too often,
+/// so heat never climbed on mid/whale packs.
 double featuredChaseFairThreshold(double packPriceUsd) {
-  final scaled = packPriceUsd * 0.48;
+  final scaled = packPriceUsd * 0.95;
   return math.max(12.0, scaled);
 }
 
@@ -242,6 +243,78 @@ bool isFeaturedPityChase({
   required double packPriceUsd,
 }) {
   return maxFair >= featuredChaseFairThreshold(packPriceUsd);
+}
+
+/// Buylist exchange rate by fair value — junk pays less, chase stays juicy.
+/// [fillsSetHole] nudges keepers toward collection instead of pure recycle.
+double exchangeRateForFair(double fair, {bool fillsSetHole = false}) {
+  double rate;
+    if (fair < 2) {
+    rate = 0.45;
+  } else if (fair < 15) {
+    rate = 0.58;
+  } else {
+    rate = 0.74;
+  }
+  if (fillsSetHole) {
+    // Dumping a set-progress card pays worse — nudge KEEP.
+    rate = math.max(0.38, rate - 0.10);
+  }
+  return rate;
+}
+
+int exchangeCandyForFair(double fair, {bool fillsSetHole = false}) {
+  return (fair * exchangeRateForFair(fair, fillsSetHole: fillsSetHole) * 100)
+      .round()
+      .clamp(1, 999999);
+}
+
+/// Urge KEEP when pity cleared, set hole, or fair is a real rip vs pack price.
+bool shouldUrgeKeep({
+  required double fair,
+  double? packPriceUsd,
+  bool fillsSetHole = false,
+  bool pityCleared = false,
+}) {
+  if (fillsSetHole || pityCleared) return true;
+  final pack = packPriceUsd;
+  if (pack != null && pack > 0) {
+    if (fair >= featuredChaseFairThreshold(pack) * 0.85) return true;
+    if (fair >= pack * 0.55) return true;
+  }
+  return fair >= 25;
+}
+
+/// Short decide-panel copy — keep vs exchange candy.
+String keepUrgeCopy({
+  required double fair,
+  double? packPriceUsd,
+  bool fillsSetHole = false,
+  bool pityCleared = false,
+}) {
+  final candy = exchangeCandyForFair(fair, fillsSetHole: fillsSetHole);
+  if (pityCleared) {
+    return 'PITY CLEAR — Keep it. Exchange is only ~$candy candy.';
+  }
+  if (fillsSetHole) {
+    return 'SET HOLE — Keep for the set. Dumping pays worse (~$candy candy).';
+  }
+  if (packPriceUsd != null &&
+      fair >= featuredChaseFairThreshold(packPriceUsd) * 0.85) {
+    return 'Near chase — Keep (~\$${fair.toStringAsFixed(0)}). Exchange ~$candy candy.';
+  }
+  return 'Strong hit — Keep (~\$${fair.toStringAsFixed(0)}). Exchange ~$candy candy.';
+}
+
+/// Extra daily login candy when the player has heated pity or a 1-away set.
+const int kDailyHeatedBonusCandy = 200;
+const int kDailyOneAwayBonusCandy = 150;
+
+/// Soft pity jackpot chance before hard pity (dry 7–11).
+double softPityJackpotChance(double packPriceUsd) {
+  if (packPriceUsd >= 200) return 0.20;
+  if (packPriceUsd >= 100) return 0.14;
+  return 0.08;
 }
 
 class GhostRankEntry {
